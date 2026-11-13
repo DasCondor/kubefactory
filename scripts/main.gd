@@ -578,6 +578,17 @@ func _run_toolshots(dir: String) -> void:
 		await _shot(dir, "tool%d" % (i + 1))
 	_charge_test = 0.8
 	await _shot(dir, "tool6_charging")
+	_charge_test = 0.0
+	# and the signs, to check their text sits inside its panel
+	_set_mode(0)
+	var pf = world.platforms.values()[0].position
+	var dp = world._depots.values()[0].position
+	var views = [["sign_hub", Vector3(4, 0.4, 14), Vector3(9, 2.6, 0)], ["sign_hub_front", Vector3(0, 0.4, 11), Vector3(0, 4.4, 0)],
+		["sign_dock", Vector3(12.5, 0.4, 17), Vector3(13, 2.4, 8)], ["sign_logs", Vector3(18, 0.4, 9.5), Vector3(18, 2.3, 1.5)],
+		["sign_node", pf + Vector3(0, 0.4, 20), pf + Vector3(0, 8.0, 1.2)], ["sign_depot", dp + Vector3(0, 0.4, 5.5), dp + Vector3(0, 1.9, 1.5)]]
+	for v in views:
+		player.teleport(v[1], v[2])
+		await _shot(dir, v[0])
 	get_tree().quit()
 
 func _run_shots(dir: String) -> void:
