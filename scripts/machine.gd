@@ -193,7 +193,6 @@ func setup(p: Dictionary) -> void:
 	_warn.outline_size = 14
 	_warn.modulate = Color(1.0, 0.3, 0.22)
 	_warn.position = Vector3(0, 8.3, 0)
-	_warn.no_depth_test = true
 	_warn.visibility_range_end = 220.0
 	_alarm.add_child(_warn)
 

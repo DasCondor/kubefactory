@@ -10,6 +10,17 @@ static func health_of(status: String, ready: bool) -> String:
 		return "warn"
 	return "bad"
 
+# Size a sign's Label3D so its text fits a w x h metre panel: `pixel` is the
+# normal text scale, and the label only ever shrinks from it. Call after every
+# text change, since cluster names and alert lines can be any length.
+static func fit_label(l: Label3D, w: float, h: float, pixel: float = 0.01) -> void:
+	var f = l.font if l.font != null else ThemeDB.fallback_font
+	var sz = f.get_multiline_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, l.font_size)
+	sz.y += l.line_spacing * l.text.count("\n")
+	if sz.x <= 0.0 or sz.y <= 0.0:
+		return
+	l.pixel_size = minf(pixel, minf(w / sz.x, h / sz.y))
+
 static func health_color(h: String) -> Color:
 	match h:
 		"ok":

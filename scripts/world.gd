@@ -302,6 +302,7 @@ func _build_hub() -> void:
 	title.pixel_size = 0.01
 	title.modulate = Tex.ORANGE
 	title.position = Vector3(0, 6.5, 0.27)
+	K.fit_label(title, 8.5, 0.85)
 	add_child(title)
 	_hub_label = Label3D.new()
 	_hub_label.font_size = 40
@@ -344,14 +345,16 @@ func _build_npc() -> void:
 		_box(Vector3(2.0, 1.0, 1.0), Tex.body(c[1]), base + c[0])
 		_box(Vector3(2.04, 0.08, 1.04), dark, base + c[0] + Vector3(0, 0.5, 0))
 	_solid(Vector3(4.6, 2.4, 2.6), base + Vector3(3.1, 1.2, -0.6), null)
-	_box(Vector3(0.14, 3.4, 0.14), steel, base + Vector3(-1.6, 1.7, -1.4))
-	_box(Vector3(3.2, 0.9, 0.1), Tex.shared("board"), base + Vector3(-0.1, 3.0, -1.4))
+	# the sign stands over the container stack, clear of Porter and his name tag
+	for sx in [1.2, 5.0]:
+		_box(Vector3(0.14, 3.9, 0.14), steel, base + Vector3(sx, 1.95, -1.95))
+	_box(Vector3(4.2, 1.0, 0.1), Tex.shared("board"), base + Vector3(3.1, 3.4, -1.95))
 	var dock_sign = Label3D.new()
 	dock_sign.text = "PORTAINER DOCK"
 	dock_sign.font_size = 44
-	dock_sign.pixel_size = 0.01
 	dock_sign.modulate = Color(0.075, 0.745, 0.976)
-	dock_sign.position = base + Vector3(-0.1, 3.0, -1.34)
+	dock_sign.position = base + Vector3(3.1, 3.4, -1.89)
+	K.fit_label(dock_sign, 3.8, 0.75)
 	add_child(dock_sign)
 	# the robot
 	_npc = Node3D.new()
@@ -389,13 +392,13 @@ func _build_npc() -> void:
 	_box(Vector3(0.03, 0.6, 0.03), dark, Vector3(0, -0.3, 0), _npc_hook)
 	_box(Vector3(0.34, 0.22, 0.22), Tex.body(Color(0.95, 0.45, 0.2)), Vector3(0, -0.7, 0), _npc_hook)
 	var tag = Label3D.new()
-	tag.text = "PORTER\nPortainer dock  ·  [E] talk"
+	tag.text = "PORTER\n[E] talk"
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	tag.font_size = 40
-	tag.pixel_size = 0.0075
+	tag.pixel_size = 0.0055
 	tag.outline_size = 10
 	tag.modulate = Color(0.6, 0.92, 1.0)
-	tag.position = Vector3(0, 3.9, 0)
+	tag.position = Vector3(0, 3.75, 0)
 	tag.visibility_range_end = 60.0
 	_npc.add_child(tag)
 
@@ -463,6 +466,7 @@ func _build_log_station() -> void:
 	title.pixel_size = 0.01
 	title.modulate = Tex.ORANGE
 	title.position = c + Vector3(0, 3.4, 2.12)
+	K.fit_label(title, 6.0, 0.6)
 	add_child(title)
 	# the station's wireless uplink: a light column from the dish, green when
 	# the selected log provider answers and red when there is no signal
@@ -484,6 +488,7 @@ func _build_log_station() -> void:
 	_uplink_label.position = c + Vector3(0, 0.95, 2.12)
 	_uplink_label.text = "UPLINK  Kubernetes API  ·  STANDBY"
 	_uplink_label.modulate = Color(0.7, 0.75, 0.8)
+	K.fit_label(_uplink_label, 6.0, 0.28)
 	add_child(_uplink_label)
 	_log_label = Label3D.new()
 	_log_label.font_size = 24
@@ -495,6 +500,7 @@ func _build_log_station() -> void:
 func set_uplink(provider_name: String, ok: bool) -> void:
 	_uplink_label.text = "UPLINK  %s  ·  %s" % [provider_name, "LINKED" if ok else "NO SIGNAL"]
 	_uplink_label.modulate = K.health_color("ok" if ok else "bad")
+	K.fit_label(_uplink_label, 6.0, 0.28)
 	_uplink_mat.albedo_color = Color(0.3, 1.0, 0.5, 0.25) if ok else Color(1.0, 0.2, 0.15, 0.3)
 
 # One pylon per reachable cluster (kubeconfig contexts, Docker, simulations).
@@ -713,6 +719,8 @@ func _update_hub(st: Dictionary) -> void:
 	_hub_label.text = "%s  ·  %s\n\nNODES  %d / %d ready\nPODS   %d running  ·  %d pending  ·  %d failing\nWORKLOADS  %d   ·   SERVICES  %d\n\n[E]  open the cluster codex" % [
 		str(st.get("provider", st["source"])).to_upper() if str(st.get("provider", "")) != "" else str(st["source"]).to_upper(), st["context"], ready, st["nodes"].size(),
 		c["ok"], c["warn"], c["bad"], st["workloads"].size(), st["services"].size()]
+	K.fit_label(_hub_label, 8.4, 3.5)
+	K.fit_label(_log_label, 6.0, 1.7)
 
 func _update_services(st: Dictionary, pods: Array) -> void:
 	var svcs = []
@@ -745,6 +753,7 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 			l.pixel_size = 0.008
 			l.line_spacing = -4
 			l.position = Vector3(0, 1.8, 1.59)
+			K.fit_label(l, 2.2, 1.12, 0.008)
 			d.add_child(l)
 			var tag = Label3D.new()
 			tag.text = s["ns"] + " / " + s["name"]

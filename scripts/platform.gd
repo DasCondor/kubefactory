@@ -67,7 +67,8 @@ func setup(nm: String) -> void:
 	_trim = _mesh(Vector3(19.4, 0.3, 0.5), Tex.shared("orange"), Vector3(0, 11.15, 1.2))
 	_mesh(Vector3(19.4, 0.3, 0.5), Tex.shared("orange"), Vector3(0, 5.65, 1.2))
 	_solid(Vector3(19.0, 5.2, 0.4), Vector3(0, 8.4, 1.2), meta)
-	_title = _text(nm, 120 if nm.length() <= 22 else int(120 * 22.0 / nm.length()), Vector3(0, 10.0, 1.42), Tex.ORANGE)
+	_title = _text(nm, 120, Vector3(0, 10.0, 1.42), Tex.ORANGE)
+	K.fit_label(_title, 18.0, 1.3)
 	_sub = _text("", 56, Vector3(0, 8.95, 1.42), Color(0.75, 0.78, 0.8))
 	_status = _text("", 64, Vector3(0, 8.2, 1.42))
 	var y = 7.3
@@ -137,6 +138,7 @@ func update(n) -> void:
 		_title.text = "UNSCHEDULED"
 		_sub.text = "pods waiting for a node"
 		_status.text = "PENDING YARD"
+		K.fit_label(_title, 18.0, 1.3)
 		_status.modulate = K.health_color("warn")
 		for key in _bars:
 			_bars[key][0].visible = false
@@ -147,7 +149,7 @@ func update(n) -> void:
 		if str(n.get(k, "")) != "":
 			bits.append(str(n[k]))
 	_sub.text = "   ·   ".join(PackedStringArray(bits))
-	_sub.font_size = 56 if _sub.text.length() < 52 else 42
+	K.fit_label(_sub, 18.0, 0.7)
 	var h = "ok"
 	var txt = "READY"
 	if not n["ready"]:
@@ -158,6 +160,7 @@ func update(n) -> void:
 		txt = "CORDONED  ·  scheduling disabled"
 	_status.text = txt
 	_status.modulate = K.health_color(h)
+	K.fit_label(_status, 18.0, 0.8)
 	_trim.material_override = Tex.shared("orange") if h == "ok" else Tex.status_glow(h)
 	_set_bar("CPU", n["cpu_req"], n["cpu"], "%.1f / %.0f cores" % [n["cpu_req"], n["cpu"]])
 	_set_bar("MEM", n["mem_req"], n["mem"], "%s / %s" % [K.fmt_mem(n["mem_req"]), K.fmt_mem(n["mem"])])
@@ -170,3 +173,4 @@ func _set_bar(key: String, used: float, total: float, txt: String) -> void:
 	fill.position.x = -0.6 - 5.0 + 5.0 * f
 	fill.material_override = Tex.status_glow("ok" if f < 0.75 else ("warn" if f < 0.92 else "bad"))
 	_bars[key][1].text = txt
+	K.fit_label(_bars[key][1], 3.9, 0.5)   # the gap between the bar's end and the sign's edge
