@@ -17,6 +17,32 @@ const Hud = preload("res://scripts/hud.gd")
 const Sfx = preload("res://scripts/sfx.gd")
 const VERSION = "1.0.1"
 
+const SKY_SHADER = """
+shader_type sky;
+uniform vec3 top_color : source_color = vec3(0.2, 0.4, 0.78);
+uniform vec3 horizon_color : source_color = vec3(0.72, 0.8, 0.88);
+uniform vec3 ground_color : source_color = vec3(0.25, 0.3, 0.22);
+uniform sampler2D clouds : repeat_enable, filter_linear;
+
+void sky() {
+	float h = EYEDIR.y;
+	vec3 col = mix(horizon_color, top_color, pow(clamp(h, 0.0, 1.0), 0.5));
+	col = mix(col, ground_color, clamp(-h * 6.0, 0.0, 1.0));
+	if (LIGHT0_ENABLED) {
+		float c = max(dot(EYEDIR, LIGHT0_DIRECTION), 0.0);
+		col += LIGHT0_COLOR * (pow(c, 24.0) * 0.08 + pow(c, 200.0) * 0.4 + smoothstep(0.9993, 0.9997, c) * 5.0);
+	}
+	if (h > 0.0) {
+		vec2 uv = EYEDIR.xz / (h + 0.12);
+		float n = texture(clouds, uv * 0.05).r * 0.62 + texture(clouds, uv * 0.14 + vec2(0.37, 0.11)).r * 0.38;
+		float cover = smoothstep(0.6, 0.74, n) * smoothstep(0.02, 0.2, h);
+		vec3 lit = mix(vec3(0.85), vec3(0.4, 0.46, 0.58), smoothstep(0.66, 0.9, n));
+		col = mix(col, lit, cover * 0.9);
+	}
+	COLOR = col;
+}
+"""
+
 var cluster
 var world
 var player
@@ -31,6 +57,7 @@ var _prob_i = 0
 var settings = {}
 var world_sun: DirectionalLight3D
 var _shots_running = false
+var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
 
 func _ready() -> void:
 	_setup_input()
@@ -114,6 +141,9 @@ func _ready() -> void:
 			shots = a.trim_prefix("--shots=")
 		elif a == "--flyby":
 			flyby = true
+		elif a.begins_with("--toolshots="):
+			shots = "-"
+			_run_toolshots(a.trim_prefix("--toolshots="))
 		elif a.begins_with("--mptest="):
 			mptest = a.trim_prefix("--mptest=")
 		elif a.begins_with("--flythrough="):
@@ -190,12 +220,24 @@ func _setup_input() -> void:
 		InputMap.action_add_event(pair[0], ev)
 
 func _setup_environment() -> void:
-	var sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.22, 0.42, 0.78)
-	sky_mat.sky_horizon_color = Color(0.72, 0.8, 0.88)
-	sky_mat.ground_bottom_color = Color(0.25, 0.3, 0.22)
-	sky_mat.ground_horizon_color = Color(0.72, 0.8, 0.88)
-	sky_mat.sun_angle_max = 12.0
+	# Gradient sky with a sun halo and a layer of drifting-looking (static) clouds
+	var cn = FastNoiseLite.new()
+	cn.seed = 8
+	cn.frequency = 0.007
+	cn.fractal_octaves = 5
+	var ct = NoiseTexture2D.new()
+	ct.noise = cn
+	ct.seamless = true
+	ct.width = 512
+	ct.height = 512
+	var ssh = Shader.new()
+	ssh.code = SKY_SHADER
+	var sky_mat = ShaderMaterial.new()
+	sky_mat.shader = ssh
+	sky_mat.set_shader_parameter("clouds", ct)
+	sky_mat.set_shader_parameter("top_color", Color(0.2, 0.4, 0.78))
+	sky_mat.set_shader_parameter("horizon_color", Color(0.72, 0.8, 0.88))
+	sky_mat.set_shader_parameter("ground_color", Color(0.25, 0.3, 0.22))
 	var sky = Sky.new()
 	sky.sky_material = sky_mat
 	var env = Environment.new()
@@ -305,6 +347,7 @@ func _process(delta: float) -> void:
 		hud.set_target("")
 		hud.set_progress(0.0)
 		sfx.charge(0.0)
+		player.tool_charge(0.0)
 		return
 	var h = player.hit
 	var meta = h.get("meta", {})
@@ -322,6 +365,7 @@ func _process(delta: float) -> void:
 		if _dis >= 1.0:
 			_dis = 0.0
 			_dis_lock = true
+			player.tool_kick(1.0)
 			if K.tier_of(hold["act"], cluster.state) >= cluster.confirm_tier():
 				# the most destructive tier also asks you to type the target's name
 				hud.guarded_act(hold["act"], hold["label"] + "?", str(hold["act"].get("name", hold["act"].get("node", ""))))
@@ -334,6 +378,7 @@ func _process(delta: float) -> void:
 			_dis_lock = false
 	hud.set_progress(_dis)
 	sfx.charge(_dis)
+	player.tool_charge(_charge_test if _charge_test > 0.0 else _dis)
 
 func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 	var tool = hud.TOOLS[mode]
@@ -424,6 +469,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		_sample()
 	elif ev.is_action_pressed("fire"):
 		var meta = player.hit.get("meta", {})
+		if mode <= 2:
+			player.tool_kick(0.55)
 		if mode == 0:
 			_interact()
 		elif mode == 1:
@@ -519,6 +566,19 @@ func _shot(dir: String, name_: String) -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(dir.path_join(name_ + ".png"))
 	print("shot ", name_)
+
+# One shot of each handheld tool at rest, plus one mid wind-up, then quit.
+func _run_toolshots(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	await get_tree().create_timer(6.0).timeout
+	player.teleport(Vector3(6, 0.4, -24), Vector3(-10, 3, -52))
+	for i in 6:
+		_set_mode(i)
+		await _shot(dir, "tool%d" % (i + 1))
+	_charge_test = 0.8
+	await _shot(dir, "tool6_charging")
+	get_tree().quit()
 
 func _run_shots(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)

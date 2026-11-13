@@ -14,6 +14,43 @@ const YARD_Z = -22.0
 const GAP = 14.0
 const PER_ROW = 6
 
+const GROUND_SHADER = """
+shader_type spatial;
+uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
+uniform sampler2D bump_tex : hint_normal, repeat_enable, filter_linear_mipmap;
+// set from script: the engine's colour conversion is right on both renderers,
+// a hand-rolled gamma decode here is not (it double-darkens on OpenGL)
+uniform vec3 grass_dark : source_color;
+uniform vec3 grass_light : source_color;
+uniform vec3 dirt_dark : source_color;
+uniform vec3 dirt_light : source_color;
+varying vec2 wp;
+
+void vertex() {
+	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
+}
+
+void fragment() {
+	float broad = texture(noise_tex, wp * 0.0037).r;
+	float mid = texture(noise_tex, wp * 0.031).r;
+	float fine = texture(noise_tex, wp * 0.23).r;
+	float grain = texture(noise_tex, wp * 1.9).r;
+	// the yard: a rounded box around the build area, its edge broken up by noise
+	vec2 d = abs(wp - vec2(0.0, -150.0)) - vec2(235.0, 185.0);
+	float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+	sd += (mid - 0.5) * 44.0 + (fine - 0.5) * 12.0;
+	float yard = 1.0 - smoothstep(-7.0, 7.0, sd);
+	vec3 grass = mix(grass_dark, grass_light, broad * 0.55 + mid * 0.45);
+	grass *= 0.75 + 0.5 * fine + 0.4 * (grain - 0.5);
+	vec3 dirt = mix(dirt_dark, dirt_light, broad * 0.35 + mid * 0.35 + fine * 0.3);
+	dirt *= 0.7 + 0.6 * grain;
+	ALBEDO = mix(grass, dirt, yard);
+	ROUGHNESS = 0.95;
+	NORMAL_MAP = texture(bump_tex, wp * 0.45).rgb;
+	NORMAL_MAP_DEPTH = mix(0.5, 0.9, yard);
+}
+"""
+
 var ns_filter = ""
 var show_belts = true
 
@@ -88,81 +125,107 @@ func _build_ground() -> void:
 	cs.shape = WorldBoundaryShape3D.new()
 	ground.add_child(cs)
 	add_child(ground)
+	# One ground plane: grass that wears down into the packed-gravel factory yard
+	# under the build area, with a ragged noise-broken edge instead of a hard seam.
 	var noise = FastNoiseLite.new()
 	noise.frequency = 0.02
-	var nt = NoiseTexture2D.new()
-	nt.noise = noise
-	nt.seamless = true
-	nt.width = 256
-	nt.height = 256
-	var grad = Gradient.new()
-	grad.set_color(0, Color(0.20, 0.36, 0.14))
-	grad.set_color(1, Color(0.42, 0.55, 0.22))
-	nt.color_ramp = grad
-	var gm = Tex.mat(Color.WHITE, 0.95, 0.0, nt, 0.02)
+	noise.fractal_octaves = 4
+	var ni = noise.get_seamless_image(256, 256)
+	ni.convert(Image.FORMAT_RGBA8)
+	ni.generate_mipmaps()
+	var nt = ImageTexture.create_from_image(ni)
+	var bump = FastNoiseLite.new()
+	bump.seed = 3
+	bump.frequency = 0.06
+	bump.fractal_octaves = 4
+	var bt = Tex.normal_from(bump.get_seamless_image(256, 256), 5.0)
+	var gsh = Shader.new()
+	gsh.code = GROUND_SHADER
+	var gm = ShaderMaterial.new()
+	gm.shader = gsh
+	gm.set_shader_parameter("noise_tex", nt)
+	gm.set_shader_parameter("bump_tex", bt)
+	gm.set_shader_parameter("grass_dark", Color(0.17, 0.31, 0.11))
+	gm.set_shader_parameter("grass_light", Color(0.41, 0.54, 0.21))
+	gm.set_shader_parameter("dirt_dark", Color(0.27, 0.245, 0.21))
+	gm.set_shader_parameter("dirt_light", Color(0.47, 0.43, 0.36))
 	var mi = MeshInstance3D.new()
 	var pm = PlaneMesh.new()
 	pm.size = Vector2(6000, 6000)
 	mi.mesh = pm
 	mi.material_override = gm
 	add_child(mi)
-	# Factory yard: a compacted dirt apron under the whole build area
-	var apron = MeshInstance3D.new()
-	var am = PlaneMesh.new()
-	am.size = Vector2(520, 420)
-	apron.mesh = am
-	var an = FastNoiseLite.new()
-	an.frequency = 0.035
-	an.fractal_octaves = 4
-	var at = NoiseTexture2D.new()
-	at.noise = an
-	at.seamless = true
-	at.width = 512
-	at.height = 512
-	var ag = Gradient.new()
-	ag.set_color(0, Color(0.27, 0.25, 0.22))
-	ag.set_color(1, Color(0.47, 0.43, 0.36))
-	at.color_ramp = ag
-	apron.material_override = Tex.mat(Color.WHITE, 0.95, 0.0, at, 0.03)
-	apron.position = Vector3(0, 0.02, -150)
-	add_child(apron)
-	# Scenery: trees, rocks and distant hills
+	# Scenery: a mixed wood of conifers and broadleaf trees, boulders, distant hills
 	var rng = RandomNumberGenerator.new()
 	rng.seed = 77
-	var trunk = CylinderMesh.new()
-	trunk.top_radius = 0.25
-	trunk.bottom_radius = 0.4
-	trunk.height = 5.0
-	trunk.material = Tex.mat(Color(0.3, 0.2, 0.12), 0.9)
-	var crown = SphereMesh.new()
-	crown.radius = 2.6
-	crown.height = 5.5
-	crown.radial_segments = 8
-	crown.rings = 5
-	crown.material = Tex.mat(Color(0.16, 0.38, 0.16), 0.9)
-	var rock = SphereMesh.new()
-	rock.radius = 1.0
-	rock.height = 1.4
-	rock.radial_segments = 6
-	rock.rings = 3
-	rock.material = Tex.mat(Color(0.42, 0.42, 0.44), 0.95)
 	var spots = []
 	while spots.size() < 420:
 		var p = Vector3(rng.randf_range(-700, 700), 0, rng.randf_range(-800, 420))
 		if absf(p.x) < 270 and p.z > -370 and p.z < 70:
 			continue
 		spots.append(p)
-	for pair in [[trunk, 2.5, 0], [crown, 6.2, 0], [rock, 0.3, 1]]:
+	var trunk = CylinderMesh.new()   # unit meshes, sized per instance
+	trunk.top_radius = 0.25
+	trunk.bottom_radius = 0.42
+	trunk.height = 1.0
+	trunk.radial_segments = 7
+	trunk.rings = 1
+	trunk.material = _tint_mat(0.9)
+	var cone = CylinderMesh.new()
+	cone.top_radius = 0.0
+	cone.bottom_radius = 1.0
+	cone.height = 1.0
+	cone.radial_segments = 7
+	cone.rings = 1
+	cone.material = _tint_mat(0.9)
+	var blob = SphereMesh.new()
+	blob.radius = 1.0
+	blob.height = 2.0
+	blob.radial_segments = 8
+	blob.rings = 5
+	blob.material = _tint_mat(0.9)
+	var rock = SphereMesh.new()
+	rock.radius = 1.0
+	rock.height = 2.0
+	rock.radial_segments = 6
+	rock.rings = 3
+	rock.material = _tint_mat(0.95)
+	var sets = {"trunk": [trunk, [], []], "cone": [cone, [], []], "blob": [blob, [], []], "rock": [rock, [], []]}
+	for i in 300:
+		var p = spots[i]
+		var s = rng.randf_range(0.7, 1.7)
+		var rot = Basis(Vector3.UP, rng.randf() * TAU)
+		var bark = Color(0.3, 0.2, 0.12).lerp(Color(0.42, 0.33, 0.24), rng.randf())
+		if rng.randf() < 0.55:
+			var green = Color(0.09, 0.25, 0.13).lerp(Color(0.2, 0.4, 0.19), rng.randf())
+			_place(sets["trunk"], rot, Vector3(s, 2.6 * s, s), p + Vector3(0, 1.3 * s, 0), bark)
+			var tiers = [[2.5, 3.4, 1.7], [1.95, 3.0, 3.5], [1.35, 2.8, 5.2]]   # radius, height, base
+			for k in 3:
+				var t = tiers[k]
+				_place(sets["cone"], rot, Vector3(t[0], t[1], t[0]) * s, p + Vector3(0, (t[2] + t[1] / 2.0) * s, 0), green.lightened(0.07 * k))
+		else:
+			var green = Color(0.16, 0.36, 0.13).lerp(Color(0.36, 0.5, 0.17), rng.randf())
+			_place(sets["trunk"], rot, Vector3(s * 1.2, 4.4 * s, s * 1.2), p + Vector3(0, 2.2 * s, 0), bark)
+			_place(sets["blob"], rot, Vector3(2.7, 2.3, 2.7) * s, p + Vector3(0, 6.0 * s, 0), green)
+			for k in 2:
+				var a = rng.randf() * TAU
+				var r = rng.randf_range(1.5, 2.0)
+				var off = Vector3(cos(a) * 1.6, rng.randf_range(-1.0, 1.3), sin(a) * 1.6)
+				_place(sets["blob"], rot, Vector3(r, r * 0.85, r) * s, p + (Vector3(0, 6.0, 0) + off) * s, green.lightened(0.1 * k - 0.04))
+	for i in 120:
+		var s = rng.randf_range(1.2, 3.4)
+		var rot = Basis.from_euler(Vector3(rng.randf_range(-0.3, 0.3), rng.randf() * TAU, rng.randf_range(-0.3, 0.3)))
+		var size = Vector3(s, s * rng.randf_range(0.45, 0.8), s * rng.randf_range(0.7, 1.2))
+		_place(sets["rock"], rot, size, spots[300 + i] + Vector3(0, size.y * 0.25, 0), Color(0.36, 0.36, 0.38).lerp(Color(0.52, 0.5, 0.47), rng.randf()))
+	for st in sets.values():
 		var mm = MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = pair[0]
-		var n = 300 if pair[2] == 0 else 120
-		mm.instance_count = n
-		for i in n:
-			var p = spots[i] if pair[2] == 0 else spots[300 + i]
-			var s = 0.7 + float((i * 37) % 10) / 10.0
-			var xf = Transform3D(Basis.from_scale(Vector3(s, s, s) * (1.0 if pair[2] == 0 else 2.2)), p + Vector3(0, pair[1] * s, 0))
-			mm.set_instance_transform(i, xf)
+		mm.use_colors = true
+		mm.mesh = st[0]
+		mm.instance_count = st[1].size()
+		for i in st[1].size():
+			mm.set_instance_transform(i, st[1][i])
+			mm.set_instance_color(i, st[2][i])
 		var mmi = MultiMeshInstance3D.new()
 		mmi.multimesh = mm
 		add_child(mmi)
@@ -175,9 +238,18 @@ func _build_ground() -> void:
 		sm.radial_segments = 14
 		sm.rings = 6
 		hill.mesh = sm
-		hill.material_override = Tex.mat(Color(0.2, 0.33, 0.2), 1.0)
+		hill.material_override = Tex.mat(Color(0.17, 0.3, 0.19).lerp(Color(0.27, 0.38, 0.2), rng.randf()), 1.0)
 		hill.position = Vector3(cos(a), 0, sin(a)) * rng.randf_range(1300, 1700) + Vector3(0, -30, -150)
 		add_child(hill)
+
+func _tint_mat(rough: float) -> StandardMaterial3D:
+	var m = Tex.mat(Color.WHITE, rough)
+	m.vertex_color_use_as_albedo = true
+	return m
+
+func _place(st: Array, rot: Basis, size: Vector3, pos: Vector3, col: Color) -> void:
+	st[1].append(Transform3D(rot * Basis.from_scale(size), pos))
+	st[2].append(col)
 
 func _box(size: Vector3, material: Material, pos: Vector3, parent: Node3D = self) -> MeshInstance3D:
 	var mi = MeshInstance3D.new()
