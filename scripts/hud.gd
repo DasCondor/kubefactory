@@ -1,0 +1,1780 @@
+extends CanvasLayer
+# Heads-up display plus every menu (pod / node / service panels, cluster
+# codex, build menu, pause menu). All built in code, Helmsman-orange on dark.
+
+signal blueprint_chosen(bp)
+signal target_requested(target)
+
+const K = preload("res://scripts/kutil.gd")
+const Apps = preload("res://scripts/apps.gd")
+const ORANGE = Color(0.98, 0.584, 0.286)
+const BG = Color(0.075, 0.085, 0.095, 0.95)
+const BG2 = Color(0.15, 0.16, 0.18, 1.0)
+const TXT = Color(0.92, 0.93, 0.94)
+const DIM = Color(0.6, 0.63, 0.67)
+const RED = Color(0.95, 0.3, 0.25)
+
+# The tool belt. Higher Mk = more destructive = hotter colour and longer hold.
+const TOOLS = [
+	{"name": "SCANNER", "mk": 1, "hint": "click anything to inspect it"},
+	{"name": "DATAPAD", "mk": 1, "hint": "click a machine to read its log ledger"},
+	{"name": "BUILD GUN", "mk": 2, "hint": "place replicas and new deployments"},
+	{"name": "WRENCH", "mk": 3, "hint": "hold on a machine: rolling restart   ·   hold on a node sign: cordon / uncordon"},
+	{"name": "DISMANTLER", "mk": 4, "hint": "hold on a machine: delete that pod"},
+	{"name": "DEMOLISHER", "mk": 5, "hint": "hold on a machine: delete its whole workload   ·   hold on a node sign: drain the node"},
+]
+
+const RECIPES = [["nginx", "nginx:1.27"], ["httpd", "httpd:2.4"], ["redis", "redis:7.4"],
+	["memcached", "memcached:1.6"], ["whoami", "traefik/whoami:v1.10"], ["busybox", "busybox:1.36"]]
+
+var cluster
+var world
+var player
+var sfx = null
+var settings = {}
+var version = ""
+
+var _root: Control
+var _src: Label
+var _stats: Label
+var _err: Label
+var _target: Label
+var _bp: Label
+var _prog: ColorRect
+var _prog_bg: ColorRect
+var _slots = []
+var _notes: VBoxContainer
+var _mono: SystemFont
+var _who: Label
+var _mode = 0
+var _bp_cur = null
+var _lock_tier = 5
+var _prob_panel: PanelContainer
+var _prob_box: VBoxContainer
+var _prob_sig = "-"
+var problems = []
+
+var _modal: Control = null
+var _modal_kind = ""
+var _modal_arg = null
+var _dyn: VBoxContainer = null
+var _dyn_sig = ""
+var _logs: TextEdit = null
+var _log_pick: OptionButton = null
+var _log_key = ""
+var _ls = {"tab": "pods", "ns": "", "pod": "", "container": "", "tail": 200, "previous": false,
+	"follow": false, "warnings": true, "ens": "", "filter": "", "provider": "kube"}
+var _ls_raw = ""
+var _ls_timer = 0.0
+var _talk = {"screen": "main", "app": "web", "tpl": {}, "search": "", "cat": {}}
+var _lists = {}          # list url -> {source, templates, skipped}, or an error string
+var _tpl_key = ""
+var _tpl_url = ""
+var _ls_count: Label = null
+var _ls_shown = ""
+var _ledger: RichTextLabel = null
+var _link_lbl: Label = null
+var _link_bars = []
+
+# ---------------------------------------------------------------- helpers
+
+func _sb(bg: Color, border: Color = Color(0, 0, 0, 0), bw: int = 0, pad: int = 10) -> StyleBoxFlat:
+	var s = StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border
+	s.set_border_width_all(bw)
+	s.set_corner_radius_all(3)
+	s.set_content_margin_all(pad)
+	return s
+
+func _lbl(text: String, size: int = 15, color: Color = TXT) -> Label:
+	var l = Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	return l
+
+func _btn(text: String, cb: Callable, kind: String = "normal", enabled: bool = true) -> Button:
+	var b = Button.new()
+	b.text = text
+	b.disabled = not enabled
+	b.focus_mode = Control.FOCUS_NONE
+	var base = BG2
+	var edge = Color(0.32, 0.34, 0.37)
+	var fc = TXT
+	if kind == "primary":
+		base = ORANGE.darkened(0.1)
+		edge = ORANGE
+		fc = Color(0.08, 0.08, 0.08)
+	elif kind == "danger":
+		base = Color(0.4, 0.1, 0.09)
+		edge = RED
+	elif kind.begins_with("mk"):
+		# action tiers: the stronger the action, the hotter the colour
+		var mk = int(kind.trim_prefix("mk"))
+		edge = K.tier_color(mk)
+		base = edge.darkened(0.72)
+		fc = edge.lightened(0.55)
+		if text.strip_edges().length() > 3:
+			b.text = "MK.%d  %s" % [mk, text]
+	b.add_theme_stylebox_override("normal", _sb(base, edge, 1, 7))
+	b.add_theme_stylebox_override("hover", _sb(base.lightened(0.15), ORANGE, 1, 7))
+	b.add_theme_stylebox_override("pressed", _sb(base.darkened(0.2), ORANGE, 1, 7))
+	b.add_theme_stylebox_override("disabled", _sb(Color(0.12, 0.12, 0.13), Color(0.2, 0.2, 0.2), 1, 7))
+	b.add_theme_color_override("font_color", fc)
+	b.add_theme_color_override("font_hover_color", fc)
+	b.add_theme_color_override("font_pressed_color", fc)
+	b.add_theme_font_size_override("font_size", 14)
+	b.pressed.connect(cb)
+	return b
+
+func _tier_legend() -> HBoxContainer:
+	var r = _row(14)
+	r.add_child(_lbl("ACTION TIERS", 11, DIM))
+	for mk in range(1, 6):
+		r.add_child(_lbl("MK.%d %s" % [mk, K.TIERS[mk]], 11, K.tier_color(mk)))
+	return r
+
+func _row(sep: int = 8) -> HBoxContainer:
+	var h = HBoxContainer.new()
+	h.add_theme_constant_override("separation", sep)
+	return h
+
+func _col(sep: int = 8) -> VBoxContainer:
+	var v = VBoxContainer.new()
+	v.add_theme_constant_override("separation", sep)
+	return v
+
+func _spacer() -> Control:
+	var c = Control.new()
+	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return c
+
+func _fixed(l: Control, w: float) -> Control:
+	l.custom_minimum_size.x = w
+	if l is Label:
+		l.clip_text = true
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	return l
+
+func _clear(c: Node) -> void:
+	for ch in c.get_children():
+		c.remove_child(ch)
+		ch.queue_free()
+
+func _ignore_mouse(c: Node) -> void:
+	if c is Control:
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for ch in c.get_children():
+		_ignore_mouse(ch)
+
+# ---------------------------------------------------------------- HUD
+
+func _ready() -> void:
+	_mono = SystemFont.new()
+	_mono.font_names = PackedStringArray(["Consolas", "Cascadia Mono", "Courier New", "monospace"])
+	_root = Control.new()
+	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_root)
+
+	var status = PanelContainer.new()
+	var ssb = _sb(BG, ORANGE, 0, 12)
+	ssb.border_width_left = 4
+	status.add_theme_stylebox_override("panel", ssb)
+	status.position = Vector2(16, 16)
+	var sv = _col(2)
+	sv.add_child(_lbl("KUBEFACTORY", 20, ORANGE))
+	_src = _lbl("connecting...", 14, TXT)
+	_stats = _lbl("", 14, DIM)
+	_who = _lbl("", 13, Color(0.6, 0.92, 1.0))
+	_err = _lbl("", 13, RED)
+	_err.visible = false
+	sv.add_child(_src)
+	sv.add_child(_stats)
+	sv.add_child(_who)
+	sv.add_child(_err)
+	status.add_child(sv)
+	_root.add_child(status)
+
+	_prob_panel = PanelContainer.new()
+	var psb = _sb(BG, RED, 0, 12)
+	psb.border_width_left = 4
+	_prob_panel.add_theme_stylebox_override("panel", psb)
+	_prob_panel.position = Vector2(16, 146)
+	_prob_box = _col(2)
+	_prob_panel.add_child(_prob_box)
+	_prob_panel.visible = false
+	_root.add_child(_prob_panel)
+
+	for r in [Rect2(-2, -2, 4, 4), Rect2(-14, -1, 8, 2), Rect2(6, -1, 8, 2), Rect2(-1, -14, 2, 8), Rect2(-1, 6, 2, 8)]:
+		var c = ColorRect.new()
+		c.color = Color(1, 1, 1, 0.85)
+		c.set_anchors_preset(Control.PRESET_CENTER)
+		c.offset_left = r.position.x
+		c.offset_top = r.position.y
+		c.offset_right = r.position.x + r.size.x
+		c.offset_bottom = r.position.y + r.size.y
+		_root.add_child(c)
+
+	_target = _lbl("", 17)
+	_target.anchor_left = 0.0
+	_target.anchor_right = 1.0
+	_target.anchor_top = 0.5
+	_target.anchor_bottom = 0.5
+	_target.offset_top = 40
+	_target.offset_bottom = 150
+	_target.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_target.add_theme_constant_override("outline_size", 6)
+	_target.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_root.add_child(_target)
+
+	_prog_bg = ColorRect.new()
+	_prog_bg.color = Color(0, 0, 0, 0.6)
+	_prog_bg.set_anchors_preset(Control.PRESET_CENTER)
+	_prog_bg.offset_left = -90
+	_prog_bg.offset_right = 90
+	_prog_bg.offset_top = 22
+	_prog_bg.offset_bottom = 32
+	_prog = ColorRect.new()
+	_prog.color = RED
+	_prog.position = Vector2(2, 2)
+	_prog.size = Vector2(0, 6)
+	_prog_bg.add_child(_prog)
+	_prog_bg.visible = false
+	_root.add_child(_prog_bg)
+
+	var bar = _row(10)
+	bar.anchor_left = 0.0
+	bar.anchor_right = 1.0
+	bar.anchor_top = 1.0
+	bar.anchor_bottom = 1.0
+	bar.offset_top = -92
+	bar.offset_bottom = -34
+	bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	for i in TOOLS.size():
+		var tool = TOOLS[i]
+		var tc = K.tier_color(tool["mk"])
+		var pc = PanelContainer.new()
+		pc.custom_minimum_size = Vector2(158, 54)
+		var v = _col(0)
+		var h = _row(8)
+		h.alignment = BoxContainer.ALIGNMENT_CENTER
+		h.add_child(_lbl(str(i + 1), 17, tc))
+		h.add_child(_lbl(tool["name"], 15))
+		v.add_child(h)
+		var tier = _lbl("MK.%d  ·  %s" % [tool["mk"], K.TIERS[tool["mk"]]], 10, tc)
+		tier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(tier)
+		pc.add_child(v)
+		bar.add_child(pc)
+		_slots.append(pc)
+	_root.add_child(bar)
+
+	_bp = _lbl("", 14, ORANGE)
+	_bp.anchor_left = 0.0
+	_bp.anchor_right = 1.0
+	_bp.anchor_top = 1.0
+	_bp.anchor_bottom = 1.0
+	_bp.offset_top = -122
+	_bp.offset_bottom = -98
+	_bp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_bp.add_theme_constant_override("outline_size", 5)
+	_bp.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_root.add_child(_bp)
+
+	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · B belts · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
+	help.anchor_left = 0.0
+	help.anchor_right = 1.0
+	help.anchor_top = 1.0
+	help.anchor_bottom = 1.0
+	help.offset_top = -26
+	help.offset_bottom = -6
+	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	help.add_theme_constant_override("outline_size", 4)
+	help.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	_root.add_child(help)
+
+	_notes = _col(6)
+	_notes.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_notes.offset_left = -436
+	_notes.offset_right = -16
+	_notes.offset_top = 16
+	_root.add_child(_notes)
+
+	_ignore_mouse(_root)
+	set_mode(0, null)
+
+func set_mode(mode: int, bp) -> void:
+	_mode = mode
+	_bp_cur = bp
+	_lock_tier = cluster.max_tier() if cluster != null else 5
+	for i in _slots.size():
+		var on = i == mode
+		var tc = K.tier_color(TOOLS[i]["mk"])
+		var locked = TOOLS[i]["mk"] > _lock_tier
+		_slots[i].add_theme_stylebox_override("panel", _sb(BG if not on else tc.darkened(0.8), tc if on else Color(0.3, 0.3, 0.32), 3 if on else 1, 5))
+		_slots[i].modulate = Color(1, 1, 1, 0.35) if locked else Color.WHITE
+	var tool = TOOLS[mode]
+	var txt = "%s  ·  MK.%d %s  ·  %s" % [tool["name"], tool["mk"], K.TIERS[tool["mk"]], tool["hint"]]
+	if tool["mk"] > _lock_tier:
+		txt = "%s  ·  LOCKED: your limit on this cluster is MK.%d %s" % [tool["name"], _lock_tier, K.TIERS[_lock_tier]]
+	if mode == 2:
+		txt = "BUILD GUN  ·  BLUEPRINT:  " + bp_text(bp) if bp != null else "BUILD GUN  ·  NO BLUEPRINT  -  press Q for the build menu, or middle-click a machine to copy it"
+	_bp.text = txt
+	_bp.add_theme_color_override("font_color", K.tier_color(tool["mk"]))
+	_prog.color = K.tier_color(tool["mk"])
+
+func bp_text(bp) -> String:
+	if bp == null:
+		return ""
+	if bp["type"] == "replica":
+		return "+1 replica of %s / %s" % [bp["ns"], bp["name"]]
+	return "new deployment %s / %s  (%s x%d)" % [bp["ns"], bp["name"], bp["image"], bp["replicas"]]
+
+# "who am I here" line: identity, tool limit, visibility scope, who else is online
+func refresh_who() -> void:
+	var st = cluster.state
+	var txt = "YOU  %s  ·  tools up to MK.%d" % [cluster.user_name(), cluster.max_tier()]
+	if str(st.get("scoped_ns", "")) != "":
+		txt += "  ·  namespace %s only" % st["scoped_ns"]
+	if st.get("multiuser", false):
+		if cluster.peers.is_empty():
+			txt += "\nONLINE  just you"
+		else:
+			var names = []
+			for p in cluster.peers:
+				names.append("%s (%s)" % [p["user"], TOOLS[clampi(p["tool"], 0, TOOLS.size() - 1)]["name"].capitalize()])
+			txt += "\nONLINE  %d other%s:  %s" % [names.size(), "" if names.size() == 1 else "s", ",  ".join(PackedStringArray(names))]
+	_who.text = txt
+
+func set_target(text: String) -> void:
+	_target.text = text
+
+func set_progress(f: float) -> void:
+	_prog_bg.visible = f > 0.0
+	_prog.size.x = 176.0 * clampf(f, 0.0, 1.0)
+
+func notify(msg: String, kind: String = "info") -> void:
+	if msg.strip_edges() == "":
+		return
+	var col = {"ok": K.health_color("ok"), "warn": K.health_color("warn"), "bad": RED}.get(kind, ORANGE)
+	var pc = PanelContainer.new()
+	var s = _sb(BG, col, 0, 9)
+	s.border_width_left = 4
+	pc.add_theme_stylebox_override("panel", s)
+	var l = _lbl(msg, 13)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size.x = 390
+	pc.add_child(l)
+	_ignore_mouse(pc)
+	_notes.add_child(pc)
+	while _notes.get_child_count() > 8:
+		var old = _notes.get_child(0)
+		_notes.remove_child(old)
+		old.queue_free()
+	var tw = pc.create_tween()
+	tw.tween_interval(5.5)
+	tw.tween_property(pc, "modulate:a", 0.0, 0.8)
+	tw.tween_callback(pc.queue_free)
+
+func on_state(st: Dictionary) -> void:
+	var src = str(st["source"]).to_upper()
+	if str(st.get("provider", "")) != "":
+		src = str(st["provider"]).to_upper() + ("" if st["source"] != "simulation" else "  (SIMULATED)")
+	_src.text = "%s  ·  %s%s" % [src, st["context"], "    [READ-ONLY]" if cluster.read_only else ""]
+	var ready = 0
+	for n in st["nodes"]:
+		if n["ready"]:
+			ready += 1
+	var c = {"ok": 0, "warn": 0, "bad": 0, "done": 0}
+	for p in st["pods"]:
+		c[p["health"]] += 1
+	_stats.text = "NODES %d/%d   PODS %d running · %d pending · %d failing   WORKLOADS %d" % [
+		ready, st["nodes"].size(), c["ok"], c["warn"], c["bad"], st["workloads"].size()]
+	_err.text = str(st["error"])
+	_err.visible = st["error"] != ""
+	refresh_who()
+	if cluster.max_tier() != _lock_tier:
+		set_mode(_mode, _bp_cur)
+	# Problems list: failing pods, unschedulable pods and unhealthy nodes
+	problems = []
+	var lines = []
+	for n in st["nodes"]:
+		if not n["ready"]:
+			lines.append(["node " + n["name"], "NotReady", RED])
+	for p in st["pods"]:
+		if p["health"] == "bad":
+			problems.append(p["uid"])
+			lines.append([p["name"], p["status"], RED])
+		elif p["node"] == "":
+			problems.append(p["uid"])
+			lines.append([p["name"], "Unschedulable", K.health_color("warn")])
+	var sig = JSON.stringify(lines)
+	if sig != _prob_sig:
+		_prob_sig = sig
+		_clear(_prob_box)
+		_prob_panel.visible = lines.size() > 0
+		_prob_box.add_child(_lbl("PROBLEMS  (%d)        [G] jump to next" % lines.size(), 14, RED))
+		for l in lines.slice(0, 7):
+			var r = _row(10)
+			r.add_child(_fixed(_lbl("■ " + l[0], 13), 300))
+			r.add_child(_fixed(_lbl(l[1], 13, l[2]), 150))
+			_prob_box.add_child(r)
+		if lines.size() > 7:
+			_prob_box.add_child(_lbl("+ %d more" % (lines.size() - 7), 12, DIM))
+		_ignore_mouse(_prob_panel)
+	_refresh_modal()
+
+# ---------------------------------------------------------------- modals
+
+func modal_open() -> bool:
+	return _modal != null
+
+func close_modal(recapture: bool = true) -> void:
+	if _modal != null:
+		_modal.queue_free()
+		_modal = null
+	_modal_kind = ""
+	_dyn = null
+	_dyn_sig = ""
+	_logs = null
+	_log_pick = null
+	if recapture:
+		player.enabled = true
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = false) -> VBoxContainer:
+	var was_pad = _modal_kind == "logs"
+	close_modal(false)
+	_modal_kind = kind
+	_modal_arg = arg
+	_modal = Control.new()
+	_modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.45)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_modal.add_child(dim)
+	var center = CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_modal.add_child(center)
+	var panel = PanelContainer.new()
+	panel.custom_minimum_size = size
+	var psb = _sb(BG, ORANGE, 0, 18)
+	psb.border_width_top = 4
+	if pad:
+		# a handheld datapad: chunky rubberised bezel around a dark screen
+		psb = _sb(Color(0.035, 0.05, 0.055, 0.985), Color(0.2, 0.21, 0.23), 14, 20)
+		psb.set_corner_radius_all(30)
+		psb.border_width_bottom = 30
+		psb.shadow_color = Color(0, 0, 0, 0.6)
+		psb.shadow_size = 24
+		if not was_pad:
+			# slide up into view like something pulled off your belt
+			_modal.position.y = 700
+			_modal.modulate.a = 0.0
+			var tw = _modal.create_tween().set_parallel(true)
+			tw.tween_property(_modal, "position:y", 0.0, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			tw.tween_property(_modal, "modulate:a", 1.0, 0.18)
+	panel.add_theme_stylebox_override("panel", psb)
+	center.add_child(panel)
+	var vb = _col(10)
+	panel.add_child(vb)
+	var head = _row()
+	head.add_child(_lbl(title, 22, ORANGE))
+	head.add_child(_spacer())
+	head.add_child(_btn("  X  ", close_modal))
+	vb.add_child(head)
+	var body = _col(10)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vb.add_child(body)
+	add_child(_modal)
+	if sfx != null and not (pad and was_pad):
+		sfx.play("pad" if pad else "click", -12.0)
+	player.enabled = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	return body
+
+func _refresh_modal() -> void:
+	match _modal_kind:
+		"pod":
+			_fill_pod()
+		"codex":
+			_fill_codex()
+		"node":
+			_fill_node()
+		"service":
+			_fill_service()
+
+func _kv(grid: GridContainer, k: String, v: String, color: Color = TXT) -> void:
+	grid.add_child(_fixed(_lbl(k, 13, DIM), 110))
+	grid.add_child(_fixed(_lbl(v, 15, color), 290))
+
+# must_type: for the most destructive actions the player has to type the
+# target's name before the Confirm button unlocks.
+func _confirm(text: String, cb: Callable, must_type: String = "") -> void:
+	var body = _open_modal("confirm", null, "CONFIRM" if must_type == "" else "CONFIRM  //  MK.5 CRITICAL", Vector2(600, 220))
+	var l = _lbl(text, 16)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size.x = 560
+	body.add_child(l)
+	body.add_child(_lbl("Target: %s (%s)   ·   You: %s" % [cluster.state["context"], cluster.state["source"], cluster.user_name()], 13, DIM))
+	var ok = _btn("Confirm", func():
+		close_modal()
+		cb.call(), "mk5" if must_type != "" else "danger", must_type == "")
+	if must_type != "":
+		body.add_child(_lbl("Type  %s  to confirm:" % must_type, 14, K.tier_color(5)))
+		var e = LineEdit.new()
+		e.placeholder_text = must_type
+		e.text_changed.connect(func(v): ok.disabled = v.strip_edges() != must_type)
+		body.add_child(e)
+		e.grab_focus.call_deferred()
+	var r = _row()
+	r.add_child(_spacer())
+	r.add_child(_btn("Cancel", close_modal))
+	r.add_child(ok)
+	body.add_child(r)
+
+# Run an action, asking for a typed confirmation first if its tier calls for it.
+func guarded_act(a: Dictionary, what: String, target_name: String) -> void:
+	if K.tier_of(a, cluster.state) >= cluster.confirm_tier():
+		_confirm(what, func(): cluster.act(a), target_name)
+	else:
+		cluster.act(a)
+
+# ----- pod
+
+func open_pod(uid: String) -> void:
+	var body = _open_modal("pod", uid, "MACHINE  //  POD", Vector2(900, 680))
+	_dyn = _col(8)
+	body.add_child(_dyn)
+	var lh = _row()
+	lh.add_child(_lbl("LOGS / EVENTS", 15, ORANGE))
+	_log_pick = OptionButton.new()
+	_log_pick.focus_mode = Control.FOCUS_NONE
+	var p = K.find_pod(cluster.state, uid)
+	if p != null:
+		for c in p["containers"]:
+			_log_pick.add_item(c["name"])
+	_log_pick.add_item("(events)")
+	if p != null and p["health"] != "ok" and p["health"] != "done":
+		_log_pick.select(_log_pick.item_count - 1)
+	_log_pick.item_selected.connect(func(_i): _request_logs())
+	lh.add_child(_log_pick)
+	lh.add_child(_btn("Refresh", _request_logs))
+	lh.add_child(_spacer())
+	lh.add_child(_btn("Open in logging station", func(): open_logs(uid)))
+	body.add_child(lh)
+	_logs = TextEdit.new()
+	_logs.editable = false
+	_logs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_logs.custom_minimum_size = Vector2(0, 250)
+	_logs.add_theme_font_override("font", _mono)
+	_logs.add_theme_font_size_override("font_size", 13)
+	_logs.add_theme_stylebox_override("normal", _sb(Color(0.03, 0.035, 0.04), Color(0.25, 0.26, 0.28), 1, 8))
+	_logs.add_theme_stylebox_override("read_only", _sb(Color(0.03, 0.035, 0.04), Color(0.25, 0.26, 0.28), 1, 8))
+	_logs.add_theme_color_override("font_readonly_color", Color(0.78, 0.86, 0.8))
+	body.add_child(_logs)
+	_fill_pod()
+	_request_logs()
+
+func _request_logs() -> void:
+	var p = K.find_pod(cluster.state, _modal_arg)
+	if p == null or _logs == null:
+		return
+	var cname = _log_pick.get_item_text(_log_pick.selected)
+	_log_key = p["uid"] + "/" + cname
+	_logs.text = "fetching..."
+	if cname == "(events)":
+		cluster.act({"op": "events", "ns": p["ns"], "name": p["name"], "key": _log_key})
+	else:
+		cluster.act({"op": "logs", "ns": p["ns"], "name": p["name"], "container": cname, "key": _log_key})
+
+func on_logs(key: String, text: String) -> void:
+	if key == _tpl_key and key != "":
+		_tpl_key = ""
+		var d = JSON.parse_string(text)
+		if typeof(d) == TYPE_DICTIONARY and d.has("templates"):
+			_lists[_tpl_url] = d
+		else:
+			_lists[_tpl_url] = text if text != "" else "No answer."
+		if _modal_kind == "talk" and _talk["screen"] == "catalogue":
+			open_talk("catalogue")
+		return
+	if _modal_kind == "logs":
+		if key == _log_key:
+			_ls_raw = text
+			_ls_apply()
+			_set_link("ok" if cluster.last_link.get("ok", false) else "down", int(cluster.last_link.get("ms", 0)))
+		return
+	if _logs != null and key == _log_key:
+		_logs.text = text
+		_logs.scroll_vertical = _logs.get_line_count()
+
+func _fill_pod() -> void:
+	var st = cluster.state
+	var p = K.find_pod(st, _modal_arg)
+	var sig = JSON.stringify(p) + str(cluster.read_only)
+	var w = null
+	if p != null:
+		w = K.find_workload(st, p["ns"], p["wkind"], p["wname"])
+		sig += JSON.stringify(w)
+	if sig == _dyn_sig:
+		return
+	_dyn_sig = sig
+	_clear(_dyn)
+	if p == null:
+		_dyn.add_child(_lbl("This machine has been dismantled - the pod no longer exists.", 16, K.health_color("warn")))
+		return
+	_dyn.add_child(_lbl(p["name"], 19))
+	var g = GridContainer.new()
+	g.columns = 4
+	g.add_theme_constant_override("h_separation", 10)
+	g.add_theme_constant_override("v_separation", 4)
+	_kv(g, "STATUS", p["status"], K.health_color(p["health"]))
+	_kv(g, "NAMESPACE", p["ns"])
+	_kv(g, "NODE", p["node"] if p["node"] != "" else "(unscheduled)")
+	_kv(g, "POD IP", p["ip"] if p["ip"] != "" else "-")
+	_kv(g, "RESTARTS", str(p["restarts"]), RED if p["restarts"] > 0 else TXT)
+	_kv(g, "AGE", K.fmt_age(p["created"]))
+	_kv(g, "WORKLOAD", "%s / %s" % [p["wkind"], p["wname"]] if p["wname"] != "" else "bare pod")
+	_kv(g, "REPLICAS", "%d ready of %d" % [w["ready"], w["replicas"]] if w != null else "-")
+	_dyn.add_child(g)
+	_dyn.add_child(_lbl("CONTAINERS", 13, DIM))
+	for c in p["containers"]:
+		var r = _row(12)
+		var cc = K.health_color("ok" if c["state"] == "running" and c["ready"] else ("warn" if c["state"] != "terminated" else "bad"))
+		r.add_child(_fixed(_lbl("■ " + c["name"], 14, cc), 190))
+		r.add_child(_fixed(_lbl(c["image"], 14), 440))
+		r.add_child(_fixed(_lbl(c["state"] + ("  (" + c["reason"] + ")" if c["reason"] != "" else ""), 14, DIM), 220))
+		_dyn.add_child(r)
+	var b = _row()
+	if w != null and w["kind"] != "DaemonSet" and cluster.cap("scale"):
+		b.add_child(_lbl("SCALE", 13, DIM))
+		b.add_child(_btn("  -  ", func(): _scale(w, -1), "mk3", w["replicas"] > 0))
+		b.add_child(_lbl(str(w["replicas"]), 17, ORANGE))
+		b.add_child(_btn("  +  ", func(): _scale(w, 1), "mk2"))
+	if cluster.backend != null and cluster.backend.label == "docker":
+		b.add_child(_btn("Restart container", func(): cluster.act({"op": "restart", "ns": p["ns"], "kind": p["wkind"], "name": p["wname"], "pod": p["name"]}), "mk3"))
+	elif w != null and cluster.cap("restart"):
+		b.add_child(_btn("Rolling restart", func(): cluster.act({"op": "restart", "ns": w["ns"], "kind": w["kind"], "name": w["name"]}), "mk3"))
+	b.add_child(_spacer())
+	if w != null and cluster.cap("delete_workload"):
+		b.add_child(_btn("Delete workload", func(): _ask_delete_workload(w), "mk5"))
+	b.add_child(_btn("Dismantle pod", func(): cluster.act({"op": "delete_pod", "ns": p["ns"], "name": p["name"]}), "mk4"))
+	_dyn.add_child(b)
+	_dyn.add_child(_tier_legend())
+
+func _scale(w: Dictionary, d: int) -> void:
+	cluster.act({"op": "scale_by", "ns": w["ns"], "kind": w["kind"], "name": w["name"], "delta": d})
+
+func _ask_delete_workload(w: Dictionary) -> void:
+	_confirm("Delete %s %s / %s and all %d of its pods?" % [w["kind"], w["ns"], w["name"], w["replicas"]],
+		func(): cluster.act({"op": "delete_workload", "ns": w["ns"], "kind": w["kind"], "name": w["name"]}), w["name"])
+
+# ----- node
+
+func open_node(nm: String) -> void:
+	var body = _open_modal("node", nm, "NODE TERMINAL", Vector2(640, 380))
+	_dyn = _col(10)
+	body.add_child(_dyn)
+	_fill_node()
+
+func _fill_node() -> void:
+	var n = null
+	for x in cluster.state["nodes"]:
+		if x["name"] == _modal_arg:
+			n = x
+	var count = 0
+	for p in cluster.state["pods"]:
+		if p["node"] == _modal_arg:
+			count += 1
+	var sig = JSON.stringify(n) + str(count)
+	if sig == _dyn_sig:
+		return
+	_dyn_sig = sig
+	_clear(_dyn)
+	if n == null:
+		_dyn.add_child(_lbl("Pods parked here have not been scheduled onto any node yet\n(no node has room, or every node is cordoned).", 15))
+		return
+	_dyn.add_child(_lbl(n["name"], 19))
+	var g = GridContainer.new()
+	g.columns = 2
+	g.add_theme_constant_override("h_separation", 10)
+	var status = "Ready" if n["ready"] else "NotReady"
+	if n["cordoned"]:
+		status += ", SchedulingDisabled"
+	_kv(g, "STATUS", status, K.health_color("bad" if not n["ready"] else ("warn" if n["cordoned"] else "ok")))
+	_kv(g, "ROLES", n["roles"])
+	_kv(g, "VERSION", n["version"])
+	_kv(g, "PODS", str(count))
+	_kv(g, "CPU REQUESTS", "%.2f of %.1f cores" % [n["cpu_req"], n["cpu"]])
+	_kv(g, "MEM REQUESTS", "%s of %s" % [K.fmt_mem(n["mem_req"]), K.fmt_mem(n["mem"])])
+	_dyn.add_child(g)
+	var b = _row()
+	if cluster.cap("cordon"):
+		if n["cordoned"]:
+			b.add_child(_btn("Uncordon (allow scheduling)", func(): cluster.act({"op": "cordon", "node": n["name"], "on": false}), "mk2"))
+		else:
+			b.add_child(_btn("Cordon (stop scheduling)", func(): cluster.act({"op": "cordon", "node": n["name"], "on": true}), "mk3"))
+	if cluster.cap("drain"):
+		b.add_child(_btn("Drain node", func(): _confirm("Drain %s? It will be cordoned and every pod on it (except DaemonSet pods) evicted." % n["name"],
+			func(): cluster.act({"op": "drain", "node": n["name"]}), n["name"]), "mk5"))
+	_dyn.add_child(b)
+	_dyn.add_child(_tier_legend())
+
+# ----- service
+
+func open_service(ns: String, sname: String) -> void:
+	var body = _open_modal("service", [ns, sname], "SERVICE DEPOT", Vector2(640, 420))
+	_dyn = _col(8)
+	body.add_child(_dyn)
+	_fill_service()
+
+func _fill_service() -> void:
+	var s = null
+	for x in cluster.state["services"]:
+		if x["ns"] == _modal_arg[0] and x["name"] == _modal_arg[1]:
+			s = x
+	var backs = []
+	if s != null:
+		for p in cluster.state["pods"]:
+			if p["ns"] == s["ns"] and K.selects(s["selector"], p["labels"]):
+				backs.append(p)
+	var sig = JSON.stringify(s) + JSON.stringify(backs)
+	if sig == _dyn_sig:
+		return
+	_dyn_sig = sig
+	_clear(_dyn)
+	if s == null:
+		_dyn.add_child(_lbl("This service no longer exists.", 16))
+		return
+	_dyn.add_child(_lbl("%s / %s" % [s["ns"], s["name"]], 19))
+	var g = GridContainer.new()
+	g.columns = 2
+	_kv(g, "TYPE", s["type"])
+	_kv(g, "CLUSTER IP", s["cluster_ip"])
+	_kv(g, "PORTS", s["ports"])
+	var sel = []
+	for k in s["selector"]:
+		sel.append("%s=%s" % [k, s["selector"][k]])
+	_kv(g, "SELECTOR", ", ".join(PackedStringArray(sel)) if sel.size() > 0 else "(none)")
+	_dyn.add_child(g)
+	_dyn.add_child(_lbl("BELTS TO %d POD(S)" % backs.size(), 13, DIM))
+	for p in backs.slice(0, 8):
+		var r = _row(12)
+		r.add_child(_fixed(_lbl("■ " + p["name"], 14, K.health_color(p["health"])), 380))
+		r.add_child(_fixed(_lbl(p["status"], 14, DIM), 180))
+		_dyn.add_child(r)
+	if backs.size() > 8:
+		_dyn.add_child(_lbl("... and %d more" % (backs.size() - 8), 13, DIM))
+
+# ----- codex (cluster overview at the HUB)
+
+func open_codex() -> void:
+	var body = _open_modal("codex", null, "CLUSTER CODEX", Vector2(1220, 700))
+	var top = _row(10)
+	top.add_child(_lbl("NAMESPACE", 13, DIM))
+	var pick = OptionButton.new()
+	pick.focus_mode = Control.FOCUS_NONE
+	pick.add_item("All namespaces")
+	var nss = _namespaces()
+	for i in nss.size():
+		pick.add_item(nss[i])
+		if nss[i] == world.ns_filter:
+			pick.select(i + 1)
+	pick.item_selected.connect(func(i):
+		world.ns_filter = "" if i == 0 else pick.get_item_text(i)
+		world.apply_state(cluster.state)
+		_fill_codex())
+	top.add_child(pick)
+	top.add_child(_spacer())
+	top.add_child(_lbl("The namespace filter also hides other namespaces' machines in the world.", 13, DIM))
+	body.add_child(top)
+	var hd = _row(10)
+	for c in [["KIND", 100], ["NAMESPACE", 130], ["WORKLOAD", 210], ["READY", 70], ["IMAGE", 270]]:
+		hd.add_child(_fixed(_lbl(c[0], 12, DIM), c[1]))
+	body.add_child(hd)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.custom_minimum_size.y = 520
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_dyn = _col(4)
+	_dyn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(_dyn)
+	body.add_child(sc)
+	_fill_codex()
+
+func _namespaces() -> Array:
+	var seen = {}
+	for p in cluster.state["pods"]:
+		seen[p["ns"]] = true
+	for w in cluster.state["workloads"]:
+		seen[w["ns"]] = true
+	var a = seen.keys()
+	a.sort()
+	return a
+
+func _fill_codex() -> void:
+	var rows = []
+	for w in cluster.state["workloads"]:
+		if world.ns_filter == "" or w["ns"] == world.ns_filter:
+			rows.append(w)
+	rows.sort_custom(func(a, b): return a["ns"] + "/" + a["name"] < b["ns"] + "/" + b["name"])
+	var sig = JSON.stringify(rows) + str(cluster.read_only)
+	if sig == _dyn_sig:
+		return
+	_dyn_sig = sig
+	_clear(_dyn)
+	if rows.is_empty():
+		_dyn.add_child(_lbl("No workloads here yet. Press Q in the world to build one.", 15, DIM))
+	for w in rows:
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, Color(0, 0, 0, 0), 0, 6))
+		var r = _row(10)
+		var ok = w["ready"] >= w["replicas"]
+		r.add_child(_fixed(_lbl(w["kind"], 13, DIM), 100))
+		r.add_child(_fixed(_lbl(w["ns"], 14), 130))
+		r.add_child(_fixed(_lbl(w["name"], 15, K.hue_color(w["ns"] + "/" + w["name"], 0.45, 1.0)), 210))
+		r.add_child(_fixed(_lbl("%d/%d" % [w["ready"], w["replicas"]], 15, K.health_color("ok" if ok else "warn")), 70))
+		r.add_child(_fixed(_lbl(w["image"], 13, DIM), 270))
+		r.add_child(_spacer())
+		var can_scale = w["kind"] != "DaemonSet" and cluster.cap("scale")
+		r.add_child(_btn(" - ", func(): _scale(w, -1), "mk3", can_scale and w["replicas"] > 0))
+		r.add_child(_btn(" + ", func(): _scale(w, 1), "mk2", can_scale))
+		r.add_child(_btn("Restart", func(): cluster.act({"op": "restart", "ns": w["ns"], "kind": w["kind"], "name": w["name"]}), "mk3", cluster.cap("restart")))
+		r.add_child(_btn("Go to", func(): _goto(w)))
+		r.add_child(_btn("Delete", func(): _ask_delete_workload(w), "mk5", cluster.cap("delete_workload")))
+		pc.add_child(r)
+		_dyn.add_child(pc)
+
+func _goto(w: Dictionary) -> void:
+	var spot = world.workload_spot(w["ns"], w["kind"], w["name"])
+	if spot == null:
+		notify("%s has no machines to visit" % w["name"], "warn")
+		return
+	close_modal()
+	player.teleport(spot[0], spot[1])
+
+# ----- build menu
+
+func open_build() -> void:
+	var body = _open_modal("build", null, "BUILD MENU", Vector2(860, 520))
+	body.add_child(_lbl("REPLICATE AN EXISTING WORKLOAD", 14, ORANGE))
+	var r1 = _row(10)
+	var pick = OptionButton.new()
+	pick.focus_mode = Control.FOCUS_NONE
+	pick.custom_minimum_size.x = 520
+	var options = []
+	for w in cluster.state["workloads"]:
+		if w["kind"] != "DaemonSet":
+			options.append(w)
+			pick.add_item("%s / %s   (%s, %d replicas)" % [w["ns"], w["name"], w["kind"], w["replicas"]])
+	r1.add_child(pick)
+	r1.add_child(_btn("Use as blueprint", func():
+		if options.size() > 0:
+			var w = options[pick.selected]
+			_choose({"type": "replica", "ns": w["ns"], "kind": w["kind"], "name": w["name"]}), "primary", options.size() > 0 and cluster.cap("scale")))
+	body.add_child(r1)
+	body.add_child(_lbl("Every click on a foundation adds one replica. Tip: middle-click any machine in the world to copy it.", 13, DIM))
+	body.add_child(HSeparator.new())
+	body.add_child(_lbl("NEW DEPLOYMENT", 14, ORANGE))
+	var name_edit = LineEdit.new()
+	var image_edit = LineEdit.new()
+	var rec = _row(6)
+	rec.add_child(_lbl("RECIPES", 13, DIM))
+	for rc in RECIPES:
+		rec.add_child(_btn(rc[0], func():
+			name_edit.text = rc[0]
+			image_edit.text = rc[1]))
+	body.add_child(rec)
+	var g = GridContainer.new()
+	g.columns = 2
+	g.add_theme_constant_override("h_separation", 12)
+	g.add_theme_constant_override("v_separation", 8)
+	name_edit.custom_minimum_size.x = 420
+	name_edit.placeholder_text = "lowercase-name"
+	image_edit.placeholder_text = "registry/image:tag"
+	g.add_child(_lbl("NAME", 13, DIM))
+	g.add_child(name_edit)
+	g.add_child(_lbl("IMAGE", 13, DIM))
+	g.add_child(image_edit)
+	g.add_child(_lbl("NAMESPACE", 13, DIM))
+	var ns_pick = OptionButton.new()
+	var nss = _namespaces()
+	if not nss.has("default"):
+		nss.insert(0, "default")
+	for i in nss.size():
+		ns_pick.add_item(nss[i])
+		if nss[i] == (world.ns_filter if world.ns_filter != "" else "default"):
+			ns_pick.select(i)
+	g.add_child(ns_pick)
+	g.add_child(_lbl("REPLICAS", 13, DIM))
+	var reps = SpinBox.new()
+	reps.min_value = 1
+	reps.max_value = 20
+	reps.value = 1
+	g.add_child(reps)
+	body.add_child(g)
+	var r2 = _row()
+	var warn = _lbl("", 13, RED)
+	r2.add_child(warn)
+	r2.add_child(_spacer())
+	r2.add_child(_btn("Use as blueprint", func():
+		var nm = name_edit.text.strip_edges()
+		var img = image_edit.text.strip_edges()
+		if not K.valid_name(nm):
+			warn.text = "Name must be lowercase letters, digits and dashes."
+			return
+		if img == "" or img.contains(" "):
+			warn.text = "Enter a container image."
+			return
+		_choose({"type": "new", "ns": ns_pick.get_item_text(ns_pick.selected), "name": nm, "image": img, "replicas": int(reps.value)}), "primary", cluster.cap("create")))
+	body.add_child(r2)
+	body.add_child(_lbl("Then aim at any foundation and click to place it. The cluster's scheduler picks the node that actually runs each pod.", 13, DIM))
+
+func _choose(bp: Dictionary) -> void:
+	close_modal()
+	blueprint_chosen.emit(bp)
+
+# ----- cluster switcher
+
+func open_clusters() -> void:
+	var body = _open_modal("clusters", null, "CLUSTERS", Vector2(980, 600))
+	body.add_child(_lbl("Every context in your kubeconfig (EKS, AKS, GKE, Rancher, on-prem ...), the local Docker engine, and the built-in simulations.", 13, DIM))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.custom_minimum_size.y = 460
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(4)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	if cluster.targets.is_empty():
+		list.add_child(_lbl("Still looking for clusters...", 15, DIM))
+	for t in cluster.targets:
+		var active = cluster.backend != null and t["source"] == cluster.backend.label and t["context"] == cluster.backend.context
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if active else Color(0, 0, 0, 0), 1 if active else 0, 6))
+		var r = _row(10)
+		r.add_child(_fixed(_lbl("■ " + t["provider"], 15, K.provider_color(t["provider"]).lightened(0.3)), 220))
+		r.add_child(_fixed(_lbl(t["source"], 13, DIM), 100))
+		r.add_child(_fixed(_lbl(t["context"], 15), 440))
+		r.add_child(_spacer())
+		if active:
+			r.add_child(_lbl("ACTIVE   ", 14, K.health_color("ok")))
+		else:
+			r.add_child(_btn("Connect", func():
+				close_modal()
+				target_requested.emit(t), "primary"))
+		pc.add_child(r)
+		list.add_child(pc)
+
+# ----- logging station
+
+func open_logs(pod_uid: String = "") -> void:
+	var st = cluster.state
+	if pod_uid != "":
+		var p = K.find_pod(st, pod_uid)
+		if p != null:
+			_ls["tab"] = "pods"
+			_ls["ns"] = p["ns"]
+			_ls["pod"] = p["name"]
+			_ls["container"] = ""
+	var body = _open_modal("logs", null, "HELMSMAN DATAPAD  //  LOG LEDGER", Vector2(1260, 740), true)
+	var tabs = _row()
+	for t in [["pods", "POD LOGS"], ["events", "CLUSTER EVENTS"], ["audit", "AUDIT LOG"]]:
+		tabs.add_child(_btn("  " + t[1] + "  ", func():
+			_ls["tab"] = t[0]
+			open_logs(), "primary" if _ls["tab"] == t[0] else "normal"))
+	# wireless uplink indicator: signal bars + provider + link state
+	tabs.add_child(_spacer())
+	var bars = _row(3)
+	bars.alignment = BoxContainer.ALIGNMENT_END
+	_link_bars = []
+	for i in 4:
+		var holder = Control.new()
+		holder.custom_minimum_size = Vector2(6, 22)
+		var bar = ColorRect.new()
+		bar.size = Vector2(6, 6 + i * 5)
+		bar.position = Vector2(0, 22 - bar.size.y)
+		holder.add_child(bar)
+		bars.add_child(holder)
+		_link_bars.append(bar)
+	tabs.add_child(bars)
+	_link_lbl = _lbl("", 13)
+	tabs.add_child(_link_lbl)
+	body.add_child(tabs)
+	var provs = cluster.backend.providers if cluster.backend != null else []
+	if _ls["tab"] == "pods":
+		var has = false
+		for pr in provs:
+			if pr["id"] == _ls["provider"]:
+				has = true
+		if not has:
+			_ls["provider"] = "kube"
+		var prow = _row(8)
+		prow.add_child(_lbl("LOG PROVIDER", 12, DIM))
+		for pr in provs:
+			var on = pr["id"] == _ls["provider"]
+			var pb = _btn(("((•))  " if on else "") + pr["name"] + ("" if pr["ready"] else "  (offline)"), func():
+				_ls["provider"] = pr["id"]
+				open_logs(), "primary" if on else "normal")
+			pb.tooltip_text = pr["note"]
+			prow.add_child(pb)
+		body.add_child(prow)
+	var ctl = _row(10)
+	var nss = _namespaces()
+	if _ls["tab"] == "pods":
+		# default to the first failing pod, so the station opens on the problem
+		var pods = st["pods"]
+		var cur = null
+		for p in pods:
+			if p["ns"] == _ls["ns"] and p["name"] == _ls["pod"]:
+				cur = p
+		if cur == null:
+			for p in pods:
+				if (_ls["ns"] == "" or p["ns"] == _ls["ns"]) and (cur == null or (p["health"] == "bad" and cur["health"] != "bad")):
+					cur = p
+		if cur != null:
+			_ls["ns"] = cur["ns"]
+			_ls["pod"] = cur["name"]
+		ctl.add_child(_lbl("NAMESPACE", 12, DIM))
+		var nsp = _pick(nss, _ls["ns"], func(v):
+			_ls["ns"] = v
+			_ls["pod"] = ""
+			open_logs())
+		ctl.add_child(nsp)
+		ctl.add_child(_lbl("POD", 12, DIM))
+		var names = []
+		for p in pods:
+			if p["ns"] == _ls["ns"]:
+				names.append(p["name"])
+		names.sort()
+		var pp = _pick(names, _ls["pod"], func(v):
+			_ls["pod"] = v
+			_ls["container"] = ""
+			open_logs())
+		pp.custom_minimum_size.x = 330
+		ctl.add_child(pp)
+		var cnames = []
+		if cur != null:
+			for c in cur["containers"]:
+				cnames.append(c["name"])
+		if not cnames.has(_ls["container"]):
+			_ls["container"] = cnames[0] if cnames.size() > 0 else ""
+		ctl.add_child(_lbl("CONTAINER", 12, DIM))
+		ctl.add_child(_pick(cnames, _ls["container"], func(v):
+			_ls["container"] = v
+			_ls_fetch()))
+		ctl.add_child(_lbl("TAIL", 12, DIM))
+		ctl.add_child(_pick(["100", "200", "500", "2000"], str(_ls["tail"]), func(v):
+			_ls["tail"] = int(v)
+			_ls_fetch()))
+		ctl.add_child(_check("Previous", _ls["previous"], func(on):
+			_ls["previous"] = on
+			_ls_fetch()))
+	elif _ls["tab"] == "events":
+		ctl.add_child(_lbl("NAMESPACE", 12, DIM))
+		ctl.add_child(_pick(["(all)"] + nss, _ls["ens"] if _ls["ens"] != "" else "(all)", func(v):
+			_ls["ens"] = "" if v == "(all)" else v
+			_ls_fetch()))
+		ctl.add_child(_check("Warnings only", _ls["warnings"], func(on):
+			_ls["warnings"] = on
+			_ls_fetch()))
+	else:
+		ctl.add_child(_lbl("Every action taken through KubeFactory. Also written to  " + cluster.log_dir, 13, DIM))
+	body.add_child(ctl)
+	var fr = _row(10)
+	fr.add_child(_lbl("FILTER", 12, DIM))
+	var fe = LineEdit.new()
+	fe.text = _ls["filter"]
+	fe.placeholder_text = "show only lines containing...  (e.g. error)"
+	fe.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fe.text_changed.connect(func(v):
+		_ls["filter"] = v
+		_ls_apply())
+	fr.add_child(fe)
+	_ls_count = _lbl("", 12, DIM)
+	fr.add_child(_ls_count)
+	if _ls["tab"] != "audit":
+		fr.add_child(_check("Follow", _ls["follow"], func(on): _ls["follow"] = on))
+	fr.add_child(_btn("Refresh", func(): open_logs()))
+	fr.add_child(_btn("Save to file", _ls_save))
+	fr.add_child(_btn("Open log folder", func(): OS.shell_open(cluster.log_dir)))
+	body.add_child(fr)
+	# the ledger page: numbered entries, colour-coded by severity
+	var page = PanelContainer.new()
+	page.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.custom_minimum_size = Vector2(0, 470)
+	var pg = _sb(Color(0.02, 0.03, 0.032), Color(0.16, 0.3, 0.26), 1, 10)
+	pg.border_width_left = 5
+	page.add_theme_stylebox_override("panel", pg)
+	_ledger = RichTextLabel.new()
+	_ledger.bbcode_enabled = true
+	_ledger.scroll_following = true
+	_ledger.selection_enabled = true
+	_ledger.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_ledger.add_theme_font_override("normal_font", _mono)
+	_ledger.add_theme_font_size_override("normal_font_size", 13)
+	page.add_child(_ledger)
+	body.add_child(page)
+	_ls_fetch()
+
+func _set_link(state: String, ms: int = 0) -> void:
+	if _link_lbl == null or not is_instance_valid(_link_lbl):
+		return
+	var who = "LOCAL LEDGER"
+	if _ls["tab"] == "events":
+		who = "Kubernetes API"
+	elif _ls["tab"] == "pods" and cluster.backend != null:
+		for pr in cluster.backend.providers:
+			if pr["id"] == _ls["provider"]:
+				who = pr["name"]
+	var col = K.health_color("ok")
+	var lit = 4
+	var txt = ""
+	match state:
+		"sync":
+			col = K.health_color("warn")
+			lit = 2
+			txt = "UPLINK  %s  ·  SYNCING..." % who
+		"ok":
+			lit = 4 if ms < 150 else (3 if ms < 500 else (2 if ms < 1500 else 1))
+			txt = "UPLINK  %s  ·  LINKED  ·  %d ms" % [who, ms]
+		"local":
+			txt = "%s  ·  ON DEVICE" % who
+		_:
+			col = RED
+			lit = 0
+			txt = "UPLINK  %s  ·  NO SIGNAL" % who
+	_link_lbl.text = txt
+	_link_lbl.add_theme_color_override("font_color", col)
+	for i in _link_bars.size():
+		_link_bars[i].color = col if i < lit else Color(0.25, 0.26, 0.28)
+	if state != "sync" and state != "local":
+		world.set_uplink(who, state == "ok")
+
+func _pick(items: Array, current: String, cb: Callable) -> OptionButton:
+	var ob = OptionButton.new()
+	ob.focus_mode = Control.FOCUS_NONE
+	for i in items.size():
+		ob.add_item(items[i])
+		if items[i] == current:
+			ob.select(i)
+	ob.item_selected.connect(func(i): cb.call(ob.get_item_text(i)))
+	return ob
+
+func _check(text: String, on: bool, cb: Callable) -> CheckBox:
+	var c = CheckBox.new()
+	c.text = text
+	c.button_pressed = on
+	c.focus_mode = Control.FOCUS_NONE
+	c.toggled.connect(cb)
+	return c
+
+func _log_view() -> TextEdit:
+	var t = TextEdit.new()
+	t.editable = false
+	t.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	t.add_theme_font_override("font", _mono)
+	t.add_theme_font_size_override("font_size", 13)
+	t.add_theme_stylebox_override("normal", _sb(Color(0.03, 0.035, 0.04), Color(0.25, 0.26, 0.28), 1, 8))
+	t.add_theme_stylebox_override("read_only", _sb(Color(0.03, 0.035, 0.04), Color(0.25, 0.26, 0.28), 1, 8))
+	t.add_theme_color_override("font_readonly_color", Color(0.78, 0.86, 0.8))
+	return t
+
+func _ls_fetch(quiet: bool = false) -> void:
+	_ls_timer = 0.0
+	if _ls["tab"] == "audit":
+		_ls_raw = "\n".join(PackedStringArray(cluster.audit_lines))
+		_ls_apply()
+		_set_link("local")
+		return
+	_log_key = "ls/%d" % Time.get_ticks_msec()
+	if not quiet:
+		_set_link("sync")
+	if _ls["tab"] == "events":
+		cluster.act({"op": "cluster_events", "ns": _ls["ens"], "warnings": _ls["warnings"], "key": _log_key, "quiet": quiet})
+	elif _ls["pod"] != "":
+		cluster.act({"op": "logs", "ns": _ls["ns"], "name": _ls["pod"], "container": _ls["container"],
+			"tail": _ls["tail"], "previous": _ls["previous"], "provider": _ls["provider"], "key": _log_key, "quiet": quiet})
+	else:
+		_ls_raw = "No pods to show logs for."
+		_ls_apply()
+
+func _ls_apply() -> void:
+	if _ledger == null or not is_instance_valid(_ledger):
+		return
+	var raw = _ls_raw.strip_edges(false, true)
+	var all = raw.split("\n") if raw != "" else PackedStringArray()
+	var needle = _ls["filter"].strip_edges().to_lower()
+	var keep = []
+	var bb = []
+	for i in all.size():
+		var line = all[i]
+		var low = line.to_lower()
+		if needle != "" and not low.contains(needle):
+			continue
+		keep.append(line)
+		# severity decides the ink: red for failures, amber for warnings
+		var ink = "c4d8cc"
+		var mark = "·"
+		if low.contains("fatal") or low.contains("error") or low.contains("failed") or low.contains("panic") or low.contains("exception") or low.contains("no signal"):
+			ink = "ff6b5e"
+			mark = "■"
+		elif low.contains("warn") or low.contains("backoff") or low.contains("blocked"):
+			ink = "ffc93c"
+			mark = "■"
+		bb.append("[color=#4d6a60]%04d[/color]  [color=#%s]%s  %s[/color]" % [i + 1, ink, mark, line.replace("[", "[lb]")])
+	var text = "\n".join(PackedStringArray(keep))
+	if text != _ls_shown or _ledger.get_parsed_text() == "":
+		_ls_shown = text
+		_ledger.text = "\n".join(PackedStringArray(bb))
+	_ls_count.text = "%d of %d entries" % [keep.size(), all.size()]
+
+func _ls_save() -> void:
+	var what = "audit"
+	if _ls["tab"] == "pods":
+		what = _ls["pod"] if _ls["pod"] != "" else "pod"
+	elif _ls["tab"] == "events":
+		what = "events"
+	var stamp = Time.get_datetime_string_from_system().replace(":", "").replace("-", "")
+	var path = cluster.log_dir.path_join("%s-%s.log" % [what, stamp])
+	var f = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		notify("Could not write " + path, "bad")
+		return
+	f.store_string(_ls_shown)
+	f.close()
+	cluster.audit("saved %s log to %s" % [what, path])
+	notify("Saved to " + path, "ok")
+
+func _process(delta: float) -> void:
+	if _modal_kind != "logs":
+		return
+	_ls_timer += delta
+	if _ls["tab"] == "audit":
+		if _ls_timer > 1.0:
+			_ls_fetch(true)
+	elif _ls["follow"] and _ls_timer > 3.0:
+		_ls_fetch(true)
+
+# ----- Porter, the Portainer NPC
+
+# Live pods belonging to something Porter installed.
+func _installed_pods(e: Dictionary) -> Array:
+	var names = [e["name"]]
+	if e["kind"] == "app":
+		names = []
+		var app = Apps.find(str(e.get("id", "")))
+		if app != null:
+			for s in app["sim"]:
+				names.append(s[1])
+	var res = []
+	for p in cluster.state["pods"]:
+		if e["kind"] == "template" and cluster.state["source"] == "docker":
+			if p["name"] == e["name"]:
+				res.append(p)
+		elif p["ns"] == e["ns"] and names.has(p["wname"]):
+			res.append(p)
+	return res
+
+func _installed_restart(e: Dictionary, pods: Array) -> void:
+	if cluster.state["source"] == "docker":
+		for p in pods:
+			cluster.act({"op": "restart", "ns": p["ns"], "kind": p["wkind"], "name": p["wname"], "pod": p["name"]})
+		return
+	var done = {}
+	for p in pods:
+		var key = p["wkind"] + "/" + p["wname"]
+		if not done.has(key):
+			done[key] = true
+			cluster.act({"op": "restart", "ns": p["ns"], "kind": p["wkind"], "name": p["wname"]})
+
+func _installed_forget(e: Dictionary) -> void:
+	var all = Apps.load_installed()
+	for x in all.duplicate():
+		if x.get("source") == e.get("source") and x.get("context") == e.get("context") and x["kind"] == e["kind"] and x["name"] == e["name"] and x["ns"] == e["ns"]:
+			all.erase(x)
+	Apps.save_installed(all)
+
+# Keep the install ledger in step with what actually succeeded.
+func on_action(a: Dictionary, r: Dictionary) -> void:
+	if not r.get("ok", false):
+		return
+	var e = {"source": cluster.state["source"], "context": cluster.state["context"], "when": Time.get_datetime_string_from_system()}
+	match a["op"]:
+		"apply_app":
+			var app = Apps.find(a["id"])
+			e.merge({"kind": "app", "id": a["id"], "title": app["name"], "name": a["id"], "ns": a["ns"], "list": "Porter's dock"})
+		"deploy_template":
+			e.merge({"kind": "template", "title": str(a["template"].get("title", a["name"])), "image": str(a["template"].get("image", "")),
+				"name": a["name"], "ns": a["ns"] if cluster.state["source"] != "docker" else "default", "list": str(a.get("list", ""))})
+		"remove_app":
+			_installed_forget({"source": e["source"], "context": e["context"], "kind": "app", "name": a["id"], "ns": a["ns"]})
+			return
+		"remove_template":
+			_installed_forget({"source": e["source"], "context": e["context"], "kind": "template", "name": a["name"],
+				"ns": a["ns"] if cluster.state["source"] != "docker" else "default"})
+			return
+		_:
+			return
+	_installed_forget(e)
+	var all = Apps.load_installed()
+	all.append(e)
+	Apps.save_installed(all)
+
+func _portainer_installed() -> bool:
+	for p in cluster.state["pods"]:
+		if p["ns"] == "portainer" or p["name"] == "portainer":
+			return true
+	return false
+
+func _portrait() -> Control:
+	# a little robot face drawn from rectangles: hard hat, visor, blue overalls
+	var c = Control.new()
+	c.custom_minimum_size = Vector2(210, 230)
+	var blue = Color(0.075, 0.745, 0.976)
+	var parts = [[Rect2(0, 0, 210, 230), Color(0.05, 0.09, 0.11)], [Rect2(35, 150, 140, 80), blue],
+		[Rect2(85, 165, 40, 28), Color(0.98, 0.8, 0.12)], [Rect2(55, 62, 100, 86), Color(0.58, 0.61, 0.65)],
+		[Rect2(66, 86, 78, 24), Color(0.3, 0.95, 1.0)], [Rect2(84, 124, 42, 6), Color(0.2, 0.22, 0.25)],
+		[Rect2(48, 30, 114, 36), Color(0.98, 0.8, 0.12)], [Rect2(34, 58, 142, 10), Color(0.98, 0.8, 0.12)],
+		[Rect2(160, 6, 8, 60), Color(0.98, 0.8, 0.12)], [Rect2(120, 6, 48, 8), Color(0.98, 0.8, 0.12)],
+		[Rect2(122, 14, 3, 18), Color(0.3, 0.3, 0.32)]]
+	for p in parts:
+		var r = ColorRect.new()
+		r.color = p[1]
+		r.position = p[0].position
+		r.size = p[0].size
+		c.add_child(r)
+	return c
+
+func _say(box: VBoxContainer, text: String) -> void:
+	var pc = PanelContainer.new()
+	var sb = _sb(Color(0.06, 0.11, 0.13), Color(0.075, 0.745, 0.976), 0, 14)
+	sb.border_width_left = 4
+	pc.add_theme_stylebox_override("panel", sb)
+	var l = _lbl(text, 16)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size.x = 760
+	pc.add_child(l)
+	box.add_child(pc)
+	# typewriter, so he "speaks" the line
+	l.visible_ratio = 0.0
+	l.create_tween().tween_property(l, "visible_ratio", 1.0, minf(1.2, text.length() * 0.012))
+
+func _valid_ns(edit: LineEdit, warn: Label) -> String:
+	var v = edit.text.strip_edges()
+	if not K.valid_name(v):
+		warn.text = "Use lowercase letters, digits and dashes."
+		return ""
+	return v
+
+func open_talk(screen: String = "main") -> void:
+	_talk["screen"] = screen
+	var docker = cluster.backend != null and cluster.backend.label == "docker"
+	var where = "Compose project" if docker else "namespace"
+	if screen == "catalogue" and _talk["cat"].is_empty():
+		screen = "lists"
+		_talk["screen"] = screen
+	var body = _open_modal("talk", null, "PORTER  //  PORTAINER DOCK", Vector2(1080, 640))
+	var h = _row(18)
+	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var left = _col(6)
+	left.add_child(_portrait())
+	left.add_child(_lbl("PORTER", 18, Color(0.075, 0.745, 0.976)))
+	left.add_child(_lbl("Container logistics", 12, DIM))
+	left.add_child(_lbl("Portainer: %s" % ("installed" if _portainer_installed() else "not installed"), 12, K.health_color("ok") if _portainer_installed() else DIM))
+	h.add_child(left)
+	var box = _col(10)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(box)
+	body.add_child(h)
+	var back = func(): open_talk("main")
+	match screen:
+		"main":
+			_say(box, "Need something built? I do complete setups: the workloads, the services in front of them, storage and generated passwords. Tell me what you want and I will crane it onto the %s." % ("engine" if docker else "cluster"))
+			box.add_child(_btn("Build me an app  (complete setup)", func(): open_talk("apps"), "mk2"))
+			box.add_child(_btn("Show me the app lists  (Portainer templates and others)", func(): open_talk("lists"), "mk2"))
+			box.add_child(_btn("What have you built for me?  (manage installs)", func(): open_talk("installed")))
+			box.add_child(_btn("About Portainer itself  (optional)", func(): open_talk("portainer")))
+			box.add_child(_btn("Never mind", close_modal))
+		"apps":
+			_say(box, "These are the setups I keep on the dock. Each one comes wired up and ready.")
+			for app in Apps.APPS:
+				var pc = PanelContainer.new()
+				pc.add_theme_stylebox_override("panel", _sb(BG2, Color(0, 0, 0, 0), 0, 8))
+				var r = _row(12)
+				var v = _col(2)
+				v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				v.add_child(_lbl(app["name"], 16, ORANGE))
+				var d = _lbl(app["desc"], 13, DIM)
+				d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				d.custom_minimum_size.x = 600
+				v.add_child(d)
+				r.add_child(v)
+				r.add_child(_btn("Look closer", func():
+					_talk["app"] = app["id"]
+					open_talk("app")))
+				pc.add_child(r)
+				box.add_child(pc)
+			box.add_child(_btn("Back", back))
+		"app":
+			var app = Apps.find(_talk["app"])
+			_say(box, "%s. %s Here is everything I will set down:" % [app["name"], app["desc"]])
+			for part in app["parts"]:
+				box.add_child(_lbl("   ■  " + part, 14))
+			if docker:
+				box.add_child(_lbl("On a Docker engine this runs as a Compose project with named volumes.", 12, DIM))
+			var r = _row(10)
+			r.add_child(_lbl(where.to_upper(), 12, DIM))
+			var ns = LineEdit.new()
+			ns.text = app["id"]
+			ns.custom_minimum_size.x = 260
+			r.add_child(ns)
+			var warn = _lbl("", 12, RED)
+			r.add_child(warn)
+			box.add_child(r)
+			var b = _row(8)
+			b.add_child(_btn("Deploy this setup", func():
+				var v = _valid_ns(ns, warn)
+				if v != "":
+					cluster.act({"op": "apply_app", "id": app["id"], "ns": v})
+					close_modal(), "mk2"))
+			b.add_child(_btn("Remove this setup", func():
+				var v = _valid_ns(ns, warn)
+				if v != "":
+					_confirm("Remove the %s setup from %s %s? Its workloads and services are deleted; volumes and the secret are kept." % [app["name"], where, v],
+						func(): cluster.act({"op": "remove_app", "id": app["id"], "ns": v}), v), "mk5"))
+			b.add_child(_spacer())
+			b.add_child(_btn("Back", func(): open_talk("apps")))
+			box.add_child(b)
+		"portainer":
+			if _portainer_installed():
+				_say(box, "Portainer is running here. I can open its console for you. If you put its address and an API key in portainer.json, my template list comes straight from your Portainer instead of the public catalogue.")
+				box.add_child(_btn("Open the Portainer console", func():
+					cluster.act({"op": "portainer_open"})
+					close_modal()))
+			else:
+				_say(box, "Portainer is optional. I work fine without it, but if you want its web console for this %s I can install the Community Edition for you." % ("engine" if docker else "cluster"))
+				box.add_child(_lbl("   ■  " + ("Container  portainer  (portainer/portainer-ce:lts), console on https://localhost:9443, with access to the Docker socket" if docker else "Namespace  portainer,  Deployment + Service + volume from Portainer's official manifest"), 13))
+				box.add_child(_btn("Install Portainer", func():
+					cluster.act({"op": "portainer_install"})
+					close_modal(), "mk2"))
+			box.add_child(_btn("Back", back))
+		"lists":
+			var cats = Apps.load_catalogs()
+			_say(box, "These are the app lists I can order from. Anything in Portainer's template format works, so hand me the address of another list and I will add it to the board.")
+			var sc = ScrollContainer.new()
+			sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			sc.custom_minimum_size.y = 230
+			sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			var rows = _col(4)
+			rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			sc.add_child(rows)
+			box.add_child(sc)
+			for cat in cats:
+				var pc = PanelContainer.new()
+				pc.add_theme_stylebox_override("panel", _sb(BG2, Color(0, 0, 0, 0), 0, 6))
+				var r = _row(10)
+				var loaded = _lists.get(cat["url"])
+				r.add_child(_fixed(_lbl(cat["name"], 15, ORANGE), 210))
+				r.add_child(_fixed(_lbl(cat["url"], 12, DIM), 400))
+				r.add_child(_fixed(_lbl("%d apps" % loaded["templates"].size() if typeof(loaded) == TYPE_DICTIONARY else "", 12, K.health_color("ok")), 70))
+				r.add_child(_spacer())
+				r.add_child(_btn("Browse", func():
+					_talk["cat"] = cat
+					_talk["search"] = ""
+					open_talk("catalogue"), "primary"))
+				if not cat.get("builtin", false):
+					r.add_child(_btn("Forget", func():
+						cats.erase(cat)
+						Apps.save_user_catalogs(cats)
+						cluster.audit("removed app list %s" % cat["url"])
+						open_talk("lists")))
+				pc.add_child(r)
+				rows.add_child(pc)
+			box.add_child(_lbl("ADD A LIST", 12, DIM))
+			var ar = _row(8)
+			var an = LineEdit.new()
+			an.placeholder_text = "name"
+			an.custom_minimum_size.x = 170
+			var au = LineEdit.new()
+			au.placeholder_text = "https://.../templates.json   (Portainer app-template format)"
+			au.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			ar.add_child(an)
+			ar.add_child(au)
+			var aw = _lbl("", 12, RED)
+			ar.add_child(_btn("Add", func():
+				var url = au.text.strip_edges()
+				var nm = an.text.strip_edges()
+				if nm == "" or not (url.begins_with("https://") or url.begins_with("http://")):
+					aw.text = "Give it a name and an http(s) address."
+					return
+				for c in cats:
+					if c["url"] == url:
+						aw.text = "That list is already on the board."
+						return
+				var cat = {"name": nm, "url": url, "builtin": false}
+				cats.append(cat)
+				Apps.save_user_catalogs(cats)
+				cluster.audit("added app list %s (%s)" % [nm, url])
+				_talk["cat"] = cat
+				_talk["search"] = ""
+				open_talk("catalogue"), "mk2"))
+			box.add_child(ar)
+			box.add_child(aw)
+			box.add_child(_btn("Back", back))
+		"installed":
+			var mine = []
+			for e in Apps.load_installed():
+				if e.get("source", "") == cluster.state["source"] and e.get("context", "") == cluster.state["context"]:
+					mine.append(e)
+			_say(box, "Here is everything I have set down on this %s." % ("engine" if docker else "cluster") if mine.size() > 0 else "I have not built anything here yet.")
+			var sc = ScrollContainer.new()
+			sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			sc.custom_minimum_size.y = 330
+			sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			var rows = _col(4)
+			rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			sc.add_child(rows)
+			box.add_child(sc)
+			for e in mine:
+				var pods = _installed_pods(e)
+				var okc = 0
+				for p in pods:
+					if p["health"] == "ok":
+						okc += 1
+				var pc = PanelContainer.new()
+				pc.add_theme_stylebox_override("panel", _sb(BG2, Color(0, 0, 0, 0), 0, 6))
+				var r = _row(8)
+				r.add_child(_fixed(_lbl(str(e.get("title", e["name"])), 15, ORANGE), 180))
+				r.add_child(_fixed(_lbl("%s / %s" % [e["ns"], e["name"]], 13), 190))
+				r.add_child(_fixed(_lbl(str(e.get("list", "")), 12, DIM), 130))
+				r.add_child(_fixed(_lbl("%d/%d running" % [okc, pods.size()] if pods.size() > 0 else "not found", 13,
+					K.health_color("ok" if pods.size() > 0 and okc == pods.size() else ("warn" if pods.size() > 0 else "bad"))), 100))
+				r.add_child(_spacer())
+				if pods.size() > 0:
+					r.add_child(_btn("Go to", func():
+						var spot = world.machine_spot(pods[0]["uid"])
+						if spot != null:
+							close_modal()
+							player.teleport(spot[0], spot[1])))
+					r.add_child(_btn("Logs", func(): open_logs(pods[0]["uid"])))
+					r.add_child(_btn("Restart", func(): _installed_restart(e, pods), "mk3"))
+					r.add_child(_btn("Remove", func(): _confirm("Remove %s (%s / %s)? Its containers are deleted; data volumes are kept." % [e.get("title", e["name"]), e["ns"], e["name"]],
+						func(): cluster.act({"op": "remove_app", "id": e["id"], "ns": e["ns"]} if e["kind"] == "app" else {"op": "remove_template", "name": e["name"], "ns": e["ns"]}), e["name"]), "mk5"))
+				else:
+					r.add_child(_btn("Forget", func():
+						_installed_forget(e)
+						open_talk("installed")))
+				pc.add_child(r)
+				rows.add_child(pc)
+			box.add_child(_btn("Back", back))
+		"catalogue":
+			var cat = _talk["cat"]
+			var data = _lists.get(cat["url"])
+			if typeof(data) != TYPE_DICTIONARY:
+				var err = str(data) if data != null else ""
+				_say(box, ("Radioing %s..." % cat["name"]) if err == "" else "I could not read that list. " + err.left(220))
+				if err == "" and _tpl_key == "":
+					_tpl_key = "tpl/%d" % Time.get_ticks_msec()
+					_tpl_url = cat["url"]
+					cluster.act({"op": "templates", "catalog": cat, "key": _tpl_key})
+				if err != "":
+					box.add_child(_btn("Try again", func():
+						_lists.erase(cat["url"])
+						open_talk("catalogue")))
+				box.add_child(_btn("Back", func(): open_talk("lists")))
+			else:
+				var _templates = data
+				_say(box, "%s: %d container apps%s. Pick one and I will build it with its ports, settings and storage." % [cat["name"], data["templates"].size(),
+					(" (%d stack templates skipped, those need Portainer itself)" % data["skipped"]) if int(data.get("skipped", 0)) > 0 else ""])
+				var search = LineEdit.new()
+				search.placeholder_text = "search templates..."
+				search.text = _talk["search"]
+				box.add_child(search)
+				var sc = ScrollContainer.new()
+				sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+				sc.custom_minimum_size.y = 330
+				sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+				var list = _col(4)
+				list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				sc.add_child(list)
+				box.add_child(sc)
+				var fill = func(needle: String):
+					_clear(list)
+					var shown = 0
+					for t in _templates["templates"]:
+						var title = str(t.get("title", ""))
+						if needle != "" and not (title + " " + str(t.get("description", ""))).to_lower().contains(needle.to_lower()):
+							continue
+						shown += 1
+						if shown > 120:
+							list.add_child(_lbl("... more apps match; type in the search box to narrow it down", 12, DIM))
+							break
+						var pc = PanelContainer.new()
+						pc.add_theme_stylebox_override("panel", _sb(BG2, Color(0, 0, 0, 0), 0, 6))
+						var r = _row(10)
+						r.add_child(_fixed(_lbl(title, 15, ORANGE), 190))
+						r.add_child(_fixed(_lbl(str(t.get("description", "")), 13, DIM), 330))
+						r.add_child(_fixed(_lbl(str(t.get("image", "")), 12, DIM), 190))
+						r.add_child(_spacer())
+						r.add_child(_btn("Pick", func():
+							_talk["tpl"] = t
+							open_talk("tpl")))
+						pc.add_child(r)
+						list.add_child(pc)
+				fill.call(_talk["search"])
+				search.text_changed.connect(func(v):
+					_talk["search"] = v
+					fill.call(v))
+				box.add_child(_btn("Back", func(): open_talk("lists")))
+		"tpl":
+			var t = _talk["tpl"]
+			_say(box, "%s: %s" % [t.get("title", ""), t.get("description", "")])
+			var g = GridContainer.new()
+			g.columns = 2
+			g.add_theme_constant_override("h_separation", 10)
+			_kv(g, "IMAGE", str(t.get("image", "")))
+			var ports = []
+			for p in t.get("ports", []):
+				ports.append(str(p))
+			_kv(g, "PORTS", ", ".join(PackedStringArray(ports)) if ports.size() > 0 else "-")
+			var envinfo = Apps.template_env(t)
+			var envs = []
+			for e in envinfo[0]:
+				envs.append(e[0] + (" (generated)" if envinfo[1].has(e[0]) else ""))
+			_kv(g, "SETTINGS", ", ".join(PackedStringArray(envs)) if envs.size() > 0 else "-")
+			var vols = []
+			var binds = []
+			for v in t.get("volumes", []):
+				if v.has("bind"):
+					binds.append(str(v["bind"]))
+				else:
+					vols.append(str(v.get("container", "")))
+			_kv(g, "STORAGE", ", ".join(PackedStringArray(vols)) if vols.size() > 0 else "-")
+			box.add_child(g)
+			var allow_binds = CheckBox.new()
+			allow_binds.visible = false
+			if binds.size() > 0:
+				var bw = _lbl("Heads up: this template asks to mount host paths (%s). %s" % [", ".join(PackedStringArray(binds)),
+					"They are left out unless you tick the box below. Mounting them gives the container access to those paths; the Docker socket means control of the whole engine." if docker else "Those are skipped on Kubernetes, so it may not work there."], 13, K.health_color("warn"))
+				bw.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				bw.custom_minimum_size.x = 760
+				box.add_child(bw)
+				if docker:
+					allow_binds.text = "Mount these host paths (I trust this template)"
+					allow_binds.focus_mode = Control.FOCUS_NONE
+					allow_binds.visible = true
+			box.add_child(allow_binds)
+			if not docker:
+				box.add_child(_lbl("On Kubernetes I build it as a Deployment plus a Service; its storage is scratch space (emptyDir).", 12, DIM))
+			var r = _row(10)
+			r.add_child(_lbl("NAME", 12, DIM))
+			var nm = LineEdit.new()
+			nm.text = Apps.slug(str(t.get("title", "app")))
+			nm.custom_minimum_size.x = 220
+			r.add_child(nm)
+			var ns = LineEdit.new()
+			ns.text = "apps"
+			ns.custom_minimum_size.x = 180
+			if not docker:
+				r.add_child(_lbl("NAMESPACE", 12, DIM))
+				r.add_child(ns)
+			var warn = _lbl("", 12, RED)
+			r.add_child(warn)
+			box.add_child(r)
+			var b = _row(8)
+			b.add_child(_btn("Build it", func():
+				var n = _valid_ns(nm, warn)
+				var s = _valid_ns(ns, warn)
+				if n != "" and s != "":
+					cluster.act({"op": "deploy_template", "template": t, "name": n, "ns": s, "list": str(_talk["cat"].get("name", "")), "host_binds": allow_binds.button_pressed})
+					close_modal(), "mk2"))
+			b.add_child(_spacer())
+			b.add_child(_btn("Back", func(): open_talk("catalogue")))
+			box.add_child(b)
+
+# ----- settings + first-run welcome
+
+func _save_setting(key: String, value) -> void:
+	settings[key] = value
+	K.save_settings(settings)
+
+func open_welcome() -> void:
+	var body = _open_modal("welcome", null, "WELCOME TO KUBEFACTORY", Vector2(900, 560))
+	var intro = _lbl("Your cluster is a factory. Walk it, spot what is broken, and fix it with the tool belt.", 16)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 850
+	body.add_child(intro)
+	var g = GridContainer.new()
+	g.columns = 2
+	g.add_theme_constant_override("h_separation", 18)
+	g.add_theme_constant_override("v_separation", 6)
+	for row in [["Platforms", "nodes. The gantry sign shows status, CPU and memory."],
+			["Machines", "pods. Green screen = healthy; a red light column = failing."],
+			["Depots and belts", "services and the pods they route to."],
+			["The HUB", "cluster overview. Beside it: cluster gates, the Logging Station and Porter."],
+			["WASD / Shift / Space", "move, sprint, jump. Double-tap Space for the hoverpack."],
+			["1-6 or mouse wheel", "pick a tool. Higher Mk = more destructive = longer hold."],
+			["E", "inspect or talk.    Q  build menu.    L  log datapad.    Tab  cluster codex."],
+			["G", "jump to the next problem.    Esc  menu and settings."]]:
+		g.add_child(_fixed(_lbl(row[0], 14, ORANGE), 200))
+		g.add_child(_lbl(row[1], 14))
+	body.add_child(g)
+	body.add_child(_tier_legend())
+	var note = _lbl("You are signed in as %s. Tools above your allowed tier are locked; every change is written to the audit log." % cluster.user_name(), 13, DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 850
+	body.add_child(note)
+	body.add_child(_spacer())
+	body.add_child(_btn("Start", func():
+		_save_setting("welcomed", true)
+		close_modal(), "primary"))
+
+# ----- pause menu
+
+func open_pause() -> void:
+	var body = _open_modal("pause", null, "KUBEFACTORY  %s" % version, Vector2(480, 540))
+	body.add_child(_btn("Resume", close_modal, "primary"))
+	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
+	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
+	body.add_child(_btn("Logging station  (L)", func(): open_logs()))
+	body.add_child(_btn("Read-only mode:  %s" % ("ON" if cluster.read_only else "OFF"), func():
+		cluster.read_only = not cluster.read_only
+		on_state(cluster.state)
+		open_pause()))
+	body.add_child(_btn("Conveyor belts:  %s" % ("ON" if world.show_belts else "OFF"), func():
+		world.show_belts = not world.show_belts
+		world.apply_state(cluster.state)
+		_save_setting("belts", world.show_belts)
+		open_pause()))
+	body.add_child(_btn("Sound:  %s   (M)" % ("OFF" if sfx.muted else "ON"), func():
+		sfx.set_muted(not sfx.muted)
+		_save_setting("muted", sfx.muted)
+		open_pause()))
+	body.add_child(_btn("Toggle fullscreen  (F11)", func():
+		var w = get_window()
+		w.mode = Window.MODE_WINDOWED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
+		_save_setting("fullscreen", w.mode == Window.MODE_FULLSCREEN)))
+	var sr = _row(10)
+	sr.add_child(_lbl("MOUSE SENSITIVITY", 12, DIM))
+	var sl = HSlider.new()
+	sl.min_value = 0.3
+	sl.max_value = 3.0
+	sl.step = 0.05
+	sl.value = player.sensitivity
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sl.focus_mode = Control.FOCUS_NONE
+	var sv = _lbl("%.2f" % player.sensitivity, 13)
+	sl.value_changed.connect(func(v):
+		player.sensitivity = v
+		sv.text = "%.2f" % v
+		_save_setting("sensitivity", v))
+	sr.add_child(sl)
+	sr.add_child(sv)
+	body.add_child(sr)
+	body.add_child(_btn("How to play", open_welcome))
+	body.add_child(_spacer())
+	body.add_child(_btn("Quit to desktop", func(): get_tree().quit(), "danger"))

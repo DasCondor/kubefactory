@@ -1,0 +1,16 @@
+{
+  "catalogs": [
+    {
+      "name": "Portainer official",
+      "url": "https://raw.githubusercontent.com/portainer/templates/v3/templates.json"
+    },
+    {
+      "name": "Lissy93 community list",
+      "url": "https://raw.githubusercontent.com/Lissy93/portainer-templates/main/templates.json"
+    },
+    {
+      "name": "SelfhostedPro",
+      "url": "https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/portainer-v2.json"
+    }
+  ]
+}

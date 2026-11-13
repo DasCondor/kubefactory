@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: wordpress
+    volumes: ["mysql-data:/var/lib/mysql"]
+    restart: unless-stopped
+  wordpress:
+    image: wordpress:6-apache
+    depends_on: [mysql]
+    ports: ["8081:80"]
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD}
+    restart: unless-stopped
+volumes:
+  mysql-data:
