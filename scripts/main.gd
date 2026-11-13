@@ -1,0 +1,840 @@
+extends Node3D
+# KubeFactory - a first-person factory builder whose factory is your cluster.
+#
+# Command line (after "--"):
+#   --demo | --kubectl | --docker   force a data source (default: auto-detect)
+#   --context=<name>                connect to a specific kubeconfig context
+#   --sim=<name>                    a simulated cluster (aws-eks-prod, azure-aks-staging,
+#                                   gke-analytics, rancher-edge, helmsman-sim)
+#   --read-only                     block every action that changes the cluster
+#   --shots=<dir>                   automated screenshot tour, then quit (dev)
+
+const K = preload("res://scripts/kutil.gd")
+const Cluster = preload("res://scripts/cluster.gd")
+const World = preload("res://scripts/world.gd")
+const Player = preload("res://scripts/player.gd")
+const Hud = preload("res://scripts/hud.gd")
+const Sfx = preload("res://scripts/sfx.gd")
+const VERSION = "1.0.1"
+
+var cluster
+var world
+var player
+var hud
+var sfx
+
+var mode = 0            # 0 inspect, 1 build, 2 dismantle
+var blueprint = null
+var _dis = 0.0
+var _dis_lock = false
+var _prob_i = 0
+var settings = {}
+var world_sun: DirectionalLight3D
+var _shots_running = false
+
+func _ready() -> void:
+	_setup_input()
+	_setup_environment()
+	cluster = Cluster.new()
+	add_child(cluster)
+	world = World.new()
+	world.sun = world_sun
+	add_child(world)
+	player = Player.new()
+	add_child(player)
+	sfx = Sfx.new()
+	add_child(sfx)
+	hud = Hud.new()
+	hud.sfx = sfx
+	hud.version = VERSION
+	hud.cluster = cluster
+	hud.world = world
+	hud.player = player
+	world.player = player
+	add_child(hud)
+
+	cluster.state_updated.connect(func(st):
+		world.apply_state(st)
+		hud.on_state(st))
+	cluster.action_done.connect(func(ok, msg):
+		hud.notify(msg, "ok" if ok else "bad")
+		sfx.play("ok" if ok else "error", -12.0))
+	player.stepped.connect(func(): sfx.play("step", -20.0, randf_range(0.85, 1.15)))
+	cluster.logs_ready.connect(hud.on_logs)
+	cluster.action_finished.connect(hud.on_action)
+	cluster.source_changed.connect(func(label, note):
+		hud.notify("Connected to %s. %s" % [label, note], "ok" if label != "simulation" else "info"))
+	world.event.connect(hud.notify)
+	# multi-user: tell the cluster where we are; show who else is here and what they do
+	cluster.presence_info = func():
+		var doing = ""
+		if hud.modal_open():
+			doing = "at a terminal"
+		elif _dis > 0.0:
+			doing = "using the " + hud.TOOLS[mode]["name"].capitalize()
+		return {"pos": "%.1f,%.1f,%.1f,%.2f" % [player.global_position.x, player.global_position.y, player.global_position.z, player.rotation.y],
+			"tool": mode, "doing": doing}
+	cluster.peers_updated.connect(func(peers):
+		var names = []
+		for t in hud.TOOLS:
+			names.append("MK.%d %s" % [t["mk"], t["name"].capitalize()])
+		world.set_peers(peers, names)
+		hud.refresh_who())
+	cluster.feed_event.connect(func(_user, msg, ok):
+		hud.notify(msg, "info" if ok else "bad")
+		sfx.play("click", -14.0, 1.4))
+	hud.blueprint_chosen.connect(func(bp):
+		blueprint = bp
+		_set_mode(2))
+	hud.target_requested.connect(_connect_target)
+	cluster.targets_changed.connect(func():
+		world.set_targets(cluster.targets, cluster.backend.label, cluster.backend.context))
+
+	var source = "auto"
+	var ctx = ""
+	var shots = ""
+	var mptest = ""
+	var flyby = false
+	for a in OS.get_cmdline_user_args():
+		if a == "--demo":
+			source = "simulation"
+		elif a == "--kubectl":
+			source = "kubernetes"
+		elif a == "--docker":
+			source = "docker"
+		elif a.begins_with("--context="):
+			source = "kubernetes"
+			ctx = a.trim_prefix("--context=")
+		elif a.begins_with("--sim="):
+			source = "simulation"
+			ctx = a.trim_prefix("--sim=")
+		elif a == "--read-only":
+			cluster.read_only = true
+		elif a.begins_with("--shots="):
+			shots = a.trim_prefix("--shots=")
+		elif a == "--flyby":
+			flyby = true
+		elif a.begins_with("--mptest="):
+			mptest = a.trim_prefix("--mptest=")
+		elif a.begins_with("--flythrough="):
+			shots = "-"
+			_run_flythrough(a.trim_prefix("--flythrough="))
+	player.teleport(Vector3(0, 0.4, 17))
+	_set_mode(0)
+	if not OS.has_feature("web"):   # browsers only grant mouse capture on a click
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_set_icon()
+	# saved per-user settings
+	settings = K.load_settings()
+	hud.settings = settings
+	player.sensitivity = clampf(float(settings["sensitivity"]), 0.2, 4.0)
+	world.show_belts = bool(settings["belts"])
+	if OS.has_feature("web"):
+		source = "simulation"   # a browser cannot run kubectl or docker
+	if shots == "" and mptest == "" and not flyby:
+		sfx.set_muted(bool(settings["muted"]))
+		if bool(settings["fullscreen"]):
+			get_window().mode = Window.MODE_FULLSCREEN
+		if not bool(settings["welcomed"]):
+			hud.open_welcome.call_deferred()
+	cluster.start(source, ctx)
+	if shots != "" and shots != "-":
+		_run_shots(shots)
+	if mptest != "":
+		_run_mptest(mptest)
+	if flyby:
+		_run_flyby()
+
+# Window / taskbar icon, drawn in code: an orange factory block on dark.
+func _set_icon() -> void:
+	var img = Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.09, 0.1, 0.11))
+	var o = Color(0.98, 0.584, 0.286)
+	img.fill_rect(Rect2i(8, 30, 48, 26), o)
+	img.fill_rect(Rect2i(12, 14, 9, 18), o)
+	img.fill_rect(Rect2i(26, 20, 9, 12), o)
+	img.fill_rect(Rect2i(16, 38, 10, 10), Color(0.3, 0.95, 0.5))
+	img.fill_rect(Rect2i(32, 38, 10, 10), Color(0.09, 0.1, 0.11))
+	img.fill_rect(Rect2i(8, 52, 48, 4), Color(0.2, 0.21, 0.23))
+	DisplayServer.set_icon(img)
+
+func _key(action: String, keys: Array) -> void:
+	InputMap.add_action(action)
+	for k in keys:
+		var ev = InputEventKey.new()
+		ev.physical_keycode = k
+		InputMap.action_add_event(action, ev)
+
+func _setup_input() -> void:
+	_key("move_forward", [KEY_W, KEY_UP])
+	_key("move_back", [KEY_S, KEY_DOWN])
+	_key("move_left", [KEY_A, KEY_LEFT])
+	_key("move_right", [KEY_D, KEY_RIGHT])
+	_key("jump", [KEY_SPACE])
+	_key("descend", [KEY_CTRL, KEY_C])
+	_key("sprint", [KEY_SHIFT])
+	_key("interact", [KEY_E])
+	_key("build_menu", [KEY_Q])
+	_key("codex", [KEY_TAB])
+	for i in 6:
+		_key("tool%d" % (i + 1), [KEY_1 + i])
+	_key("belts", [KEY_B])
+	_key("next_problem", [KEY_G])
+	_key("logs", [KEY_L])
+	_key("mute", [KEY_M])
+	_key("fullscreen", [KEY_F11])
+	for pair in [["fire", MOUSE_BUTTON_LEFT], ["sample", MOUSE_BUTTON_MIDDLE]]:
+		InputMap.add_action(pair[0])
+		var ev = InputEventMouseButton.new()
+		ev.button_index = pair[1]
+		InputMap.action_add_event(pair[0], ev)
+
+func _setup_environment() -> void:
+	var sky_mat = ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.22, 0.42, 0.78)
+	sky_mat.sky_horizon_color = Color(0.72, 0.8, 0.88)
+	sky_mat.ground_bottom_color = Color(0.25, 0.3, 0.22)
+	sky_mat.ground_horizon_color = Color(0.72, 0.8, 0.88)
+	sky_mat.sun_angle_max = 12.0
+	var sky = Sky.new()
+	sky.sky_material = sky_mat
+	var env = Environment.new()
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.66, 0.7, 0.78)
+	env.ambient_light_energy = 0.75
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_white = 6.0
+	env.ssao_enabled = true
+	env.ssao_radius = 1.6
+	env.ssao_intensity = 2.2
+	env.ssil_enabled = true
+	env.glow_enabled = true
+	env.glow_intensity = 0.7
+	env.glow_bloom = 0.08
+	env.glow_hdr_threshold = 1.1
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.72, 0.8, 0.88)
+	env.fog_density = 0.0011
+	env.fog_aerial_perspective = 0.7
+	env.fog_sky_affect = 0.2
+	env.volumetric_fog_enabled = true
+	env.volumetric_fog_density = 0.0035
+	env.volumetric_fog_albedo = Color(0.9, 0.93, 1.0)
+	env.volumetric_fog_length = 220.0
+	env.volumetric_fog_anisotropy = 0.55
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.12
+	env.adjustment_contrast = 1.05
+	var we = WorldEnvironment.new()
+	we.environment = env
+	add_child(we)
+	var sun = DirectionalLight3D.new()
+	sun.rotation = Vector3(deg_to_rad(-42.0), deg_to_rad(38.0), 0)
+	sun.light_color = Color(1.0, 0.95, 0.86)
+	sun.light_energy = 1.5
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 260.0
+	sun.directional_shadow_blend_splits = true
+	if RenderingServer.get_rendering_device() == null:
+		# Compatibility renderer (the browser build): no HDR pipeline, so the Forward+
+		# light levels blow out. Tone them down and drop the effects it cannot do.
+		sun.light_energy = 0.9
+		env.ambient_light_energy = 0.45
+		env.fog_density = 0.0004
+		env.fog_aerial_perspective = 0.0
+		env.glow_enabled = false
+		env.ssao_enabled = false
+		env.ssil_enabled = false
+		env.volumetric_fog_enabled = false
+	if OS.has_feature("web"):
+		# WebGL draws nothing at all once a frame passes ~4096 elements, and every
+		# shadow cascade re-draws the scene. One cascade keeps the demo well under.
+		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+		sun.directional_shadow_max_distance = 120.0
+	world_sun = sun
+	add_child(sun)
+
+func _set_mode(m: int) -> void:
+	if m != mode:
+		sfx.play("click", -12.0, 0.8 + m * 0.08)
+	mode = m
+	hud.set_mode(mode, blueprint)
+	player.set_tool(mode, K.tier_color(hud.TOOLS[mode]["mk"]))
+
+# What holding the trigger does with the current tool on the current target.
+# Returns {} or {label, time, act}. Stronger tools take longer to charge.
+func _hold_action(type: String, meta: Dictionary) -> Dictionary:
+	if mode < 3:
+		return {}
+	var st = cluster.state
+	if hud.TOOLS[mode]["mk"] > cluster.max_tier():
+		return {}
+	if type == "pod":
+		var p = K.find_pod(st, meta["uid"])
+		if p == null:
+			return {}
+		var w = K.find_workload(st, p["ns"], p["wkind"], p["wname"])
+		if mode == 3:
+			if st["source"] == "docker":
+				return {"label": "restart this container", "time": 0.7,
+					"act": {"op": "restart", "ns": p["ns"], "kind": p["wkind"], "name": p["wname"], "pod": p["name"]}}
+			if w != null:
+				return {"label": "rolling restart of %s" % w["name"], "time": 0.7,
+					"act": {"op": "restart", "ns": w["ns"], "kind": w["kind"], "name": w["name"]}}
+		elif mode == 4:
+			return {"label": "delete this pod", "time": 0.9, "act": {"op": "delete_pod", "ns": p["ns"], "name": p["name"]}}
+		elif mode == 5 and w != null:
+			return {"label": "DELETE WORKLOAD %s and all %d pods" % [w["name"], w["replicas"]], "time": 2.4,
+				"act": {"op": "delete_workload", "ns": w["ns"], "kind": w["kind"], "name": w["name"]}}
+	elif type == "node":
+		for n in st["nodes"]:
+			if n["name"] == meta["name"]:
+				if mode == 3:
+					return {"label": "uncordon node" if n["cordoned"] else "cordon node", "time": 0.7,
+						"act": {"op": "cordon", "node": n["name"], "on": not n["cordoned"]}}
+				if mode == 5:
+					return {"label": "DRAIN NODE - evict every pod", "time": 2.4, "act": {"op": "drain", "node": n["name"]}}
+	return {}
+
+func _process(delta: float) -> void:
+	if hud.modal_open():
+		world.hide_hologram()
+		world.select(null)
+		hud.set_target("")
+		hud.set_progress(0.0)
+		sfx.charge(0.0)
+		return
+	var h = player.hit
+	var meta = h.get("meta", {})
+	var type = meta.get("type", "")
+	var hold = _hold_action(type, meta)
+	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc"] else null,
+		K.tier_color(hud.TOOLS[mode]["mk"]) if not hold.is_empty() else Color(0.98, 0.584, 0.286))
+	if mode == 2 and blueprint != null and type == "platform":
+		world.show_hologram(h["pos"])
+	else:
+		world.hide_hologram()
+	hud.set_target(_tooltip(type, meta, hold))
+	if not hold.is_empty() and Input.is_action_pressed("fire") and not _dis_lock and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or _shots_running):
+		_dis += delta / hold["time"]
+		if _dis >= 1.0:
+			_dis = 0.0
+			_dis_lock = true
+			if K.tier_of(hold["act"], cluster.state) >= cluster.confirm_tier():
+				# the most destructive tier also asks you to type the target's name
+				hud.guarded_act(hold["act"], hold["label"] + "?", str(hold["act"].get("name", hold["act"].get("node", ""))))
+			else:
+				sfx.play(["click", "click", "build", "click", "dismantle", "boom"][mode], -8.0)
+				cluster.act(hold["act"])
+	elif delta > 0.0:
+		_dis = 0.0
+		if not Input.is_action_pressed("fire"):
+			_dis_lock = false
+	hud.set_progress(_dis)
+	sfx.charge(_dis)
+
+func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
+	var tool = hud.TOOLS[mode]
+	var action = ""
+	if not hold.is_empty():
+		action = "[Hold LMB]  MK.%d %s:  %s" % [tool["mk"], tool["name"], hold["label"]]
+	match type:
+		"pod":
+			var p = K.find_pod(cluster.state, meta["uid"])
+			if p == null:
+				return ""
+			var head = "%s\n%s  ·  %s  ·  %s\n" % [p["name"], p["status"], p["ns"], p["node"] if p["node"] != "" else "unscheduled"]
+			if action != "":
+				return head + action
+			if mode == 1:
+				return head + "[LMB] open its log ledger"
+			if mode == 2 and blueprint != null:
+				return head + "[LMB] build: " + hud.bp_text(blueprint)
+			if tool["mk"] > cluster.max_tier():
+				return head + "MK.%d %s is locked for you on this cluster" % [tool["mk"], tool["name"]]
+			if mode >= 3:
+				return head + "%s has nothing to do here" % tool["name"]
+			return head + "[E] inspect     [MMB] copy as blueprint"
+		"node":
+			return "Node %s\n%s" % [meta["name"], action if action != "" else "[E] node terminal"]
+		"service":
+			return "Service %s / %s\n[E] details" % [meta["ns"], meta["name"]]
+		"hub":
+			return "THE HUB\n[E] cluster codex"
+		"npc":
+			return "PORTER  ·  Portainer dock\n[E] talk: complete app setups, Portainer templates"
+		"logs":
+			return "LOGGING STATION\n[E] open the datapad: pod logs, cluster events, audit trail"
+		"cluster":
+			if meta["index"] < cluster.targets.size():
+				var t = cluster.targets[meta["index"]]
+				return "%s\n%s\n[E] connect to this cluster" % [t["provider"], t["context"]]
+		"platform":
+			if mode == 2 and blueprint != null:
+				return "[LMB] build: " + hud.bp_text(blueprint)
+	return ""
+
+func _unhandled_input(ev: InputEvent) -> void:
+	if ev.is_action_pressed("fullscreen"):
+		var w = get_window()
+		w.mode = Window.MODE_WINDOWED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
+		settings["fullscreen"] = w.mode == Window.MODE_FULLSCREEN
+		K.save_settings(settings)
+		return
+	if ev.is_action_pressed("ui_cancel"):
+		if hud.modal_open():
+			hud.close_modal()
+		else:
+			hud.open_pause()
+		return
+	if hud.modal_open():
+		return
+	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		if ev is InputEventMouseButton and ev.pressed:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		return
+	for i in 6:
+		if ev.is_action_pressed("tool%d" % (i + 1)):
+			_set_mode(i)
+			return
+	if ev is InputEventMouseButton and ev.pressed and (ev.button_index == MOUSE_BUTTON_WHEEL_UP or ev.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+		_set_mode(posmod(mode + (1 if ev.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1), 6))
+	elif ev.is_action_pressed("build_menu"):
+		hud.open_build()
+	elif ev.is_action_pressed("codex"):
+		hud.open_codex()
+	elif ev.is_action_pressed("belts"):
+		world.show_belts = not world.show_belts
+		world.apply_state(cluster.state)
+		hud.notify("Conveyor belts %s" % ("shown" if world.show_belts else "hidden"), "info")
+	elif ev.is_action_pressed("logs"):
+		hud.open_logs()
+	elif ev.is_action_pressed("mute"):
+		sfx.set_muted(not sfx.muted)
+		settings["muted"] = sfx.muted
+		K.save_settings(settings)
+		hud.notify("Sound %s" % ("off" if sfx.muted else "on"), "info")
+	elif ev.is_action_pressed("next_problem"):
+		_next_problem()
+	elif ev.is_action_pressed("interact"):
+		_interact()
+	elif ev.is_action_pressed("sample"):
+		_sample()
+	elif ev.is_action_pressed("fire"):
+		var meta = player.hit.get("meta", {})
+		if mode == 0:
+			_interact()
+		elif mode == 1:
+			if meta.get("type", "") == "pod":
+				hud.open_logs(meta["uid"])
+			else:
+				hud.open_logs()
+		elif mode == 2:
+			_build()
+
+func _interact() -> void:
+	var meta = player.hit.get("meta", {})
+	match meta.get("type", ""):
+		"pod":
+			hud.open_pod(meta["uid"])
+		"node":
+			hud.open_node(meta["name"])
+		"service":
+			hud.open_service(meta["ns"], meta["name"])
+		"hub":
+			hud.open_codex()
+		"logs":
+			hud.open_logs()
+		"npc":
+			hud.open_talk()
+		"cluster":
+			if meta["index"] < cluster.targets.size():
+				_connect_target(cluster.targets[meta["index"]])
+
+func _connect_target(t: Dictionary) -> void:
+	if cluster.backend != null and t["source"] == cluster.backend.label and t["context"] == cluster.backend.context:
+		hud.notify("Already connected to %s" % t["context"], "info")
+		return
+	hud.notify("Connecting to %s  (%s)..." % [t["context"], t["provider"]], "info")
+	blueprint = null
+	_set_mode(0)
+	world.ns_filter = ""
+	cluster.connect_target(t)
+
+func _sample() -> void:
+	var meta = player.hit.get("meta", {})
+	if meta.get("type", "") != "pod":
+		return
+	var p = K.find_pod(cluster.state, meta["uid"])
+	if p == null:
+		return
+	var w = K.find_workload(cluster.state, p["ns"], p["wkind"], p["wname"])
+	if w == null or w["kind"] == "DaemonSet":
+		hud.notify("%s is not part of a scalable workload, so it cannot be copied" % p["name"], "warn")
+		return
+	blueprint = {"type": "replica", "ns": w["ns"], "kind": w["kind"], "name": w["name"]}
+	_set_mode(2)
+
+func _build() -> void:
+	if blueprint == null:
+		hud.notify("No blueprint selected: press Q for the build menu, or middle-click a machine to copy it", "warn")
+		return
+	var type = player.hit.get("meta", {}).get("type", "")
+	if type != "platform" and type != "pod":
+		hud.notify("Aim at a foundation to build", "warn")
+		return
+	if blueprint["type"] == "replica":
+		var w = K.find_workload(cluster.state, blueprint["ns"], blueprint["kind"], blueprint["name"])
+		if w == null:
+			hud.notify("%s is not in the cluster (yet) - try again in a moment" % blueprint["name"], "warn")
+			return
+		sfx.play("build", -9.0)
+		cluster.act({"op": "scale_by", "ns": w["ns"], "kind": w["kind"], "name": w["name"], "delta": 1})
+	else:
+		sfx.play("build", -9.0)
+		cluster.act({"op": "create", "ns": blueprint["ns"], "name": blueprint["name"],
+			"image": blueprint["image"], "replicas": blueprint["replicas"]})
+		# further clicks add replicas of the thing just built
+		blueprint = {"type": "replica", "ns": blueprint["ns"], "kind": "Deployment", "name": blueprint["name"]}
+		_set_mode(2)
+
+func _next_problem() -> void:
+	if hud.problems.is_empty():
+		hud.notify("No problems in the cluster right now", "ok")
+		return
+	for i in hud.problems.size():
+		_prob_i = (_prob_i + 1) % hud.problems.size()
+		var spot = world.machine_spot(hud.problems[_prob_i])
+		if spot != null:
+			player.teleport(spot[0], spot[1])
+			return
+	hud.notify("The failing pods are hidden by the namespace filter", "warn")
+
+# ---- dev: automated screenshot tour -------------------------------------
+
+func _shot(dir: String, name_: String) -> void:
+	await get_tree().create_timer(0.6).timeout
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png(dir.path_join(name_ + ".png"))
+	print("shot ", name_)
+
+func _run_shots(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await get_tree().create_timer(9.0).timeout
+	hud.open_welcome()
+	await _shot(dir, "00_welcome")
+	hud.open_pause()
+	await _shot(dir, "00_pause")
+	hud.close_modal()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await _shot(dir, "01_spawn")
+	player.flying = true
+	player.teleport(Vector3(-52, 30, 6), Vector3(0, 2, -70))
+	await _shot(dir, "02_overview")
+	player.teleport(Vector3(6, 9, -30), Vector3(-30, 4, -62))
+	await _shot(dir, "03_platform")
+	player.flying = false
+	var bad = ""
+	var good = ""
+	for p in cluster.state["pods"]:
+		if p["health"] == "bad" and bad == "":
+			bad = p["uid"]
+		if p["health"] == "ok" and p["wname"] == "frontend":
+			good = p["uid"]
+	var spot = world.machine_spot(good)
+	if spot != null:
+		player.teleport(spot[0], spot[1])
+		await get_tree().create_timer(0.5).timeout
+		_process(0.016)
+		await _shot(dir, "04_machine")
+	spot = world.machine_spot(bad)
+	if spot != null:
+		player.flying = true
+		player.teleport(spot[1] + Vector3(9, 7, 16), spot[1] + Vector3(0, 3, 0))
+		await _shot(dir, "05_problem")
+		player.flying = false
+		hud.open_pod(bad)
+		await get_tree().create_timer(1.5).timeout
+		await _shot(dir, "06_pod_panel")
+	hud.open_codex()
+	await _shot(dir, "07_codex")
+	hud.open_build()
+	await _shot(dir, "08_build_menu")
+	hud.close_modal()
+	blueprint = {"type": "replica", "ns": "shop", "kind": "Deployment", "name": "frontend"}
+	_set_mode(2)
+	var bspot = world.workload_spot("shop", "Deployment", "frontend")
+	if bspot != null:
+		player.teleport(bspot[0] + Vector3(1.5, 0, 2.5), bspot[1] + Vector3(0, -2.4, 3.0))
+	await get_tree().create_timer(0.4).timeout
+	for i in 2:
+		_build()
+	await get_tree().create_timer(5.0).timeout
+	await _shot(dir, "09_build_mode")
+	hud.open_node(cluster.state["nodes"][cluster.state["nodes"].size() - 1]["name"])
+	await _shot(dir, "10_node")
+	if cluster.state["workloads"].size() > 0:
+		hud._ask_delete_workload(cluster.state["workloads"][0])
+		await _shot(dir, "10b_typed_confirm")
+		hud.close_modal()
+	hud.open_logs()
+	await get_tree().create_timer(1.5).timeout
+	await _shot(dir, "12_logs")
+	hud._ls["tab"] = "events"
+	hud.open_logs()
+	await get_tree().create_timer(1.5).timeout
+	await _shot(dir, "13_events")
+	hud._ls["tab"] = "audit"
+	hud.open_logs()
+	await _shot(dir, "14_audit")
+	hud.open_clusters()
+	await _shot(dir, "15_clusters")
+	hud.close_modal()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	player.teleport(Vector3(-4, 0.4, 20), Vector3(-22, 4, 0))
+	await _shot(dir, "16_gates")
+	# --- Porter (Portainer NPC): conversation screens + real deploys
+	hud.open_talk()
+	await get_tree().create_timer(1.3).timeout
+	await _shot(dir, "20_porter_talk")
+	hud.open_talk("apps")
+	await get_tree().create_timer(1.0).timeout
+	await _shot(dir, "21_porter_apps")
+	hud._talk["app"] = "wordpress"
+	hud.open_talk("app")
+	await get_tree().create_timer(1.3).timeout
+	await _shot(dir, "22_porter_app")
+	hud.open_talk("lists")
+	await get_tree().create_timer(1.0).timeout
+	await _shot(dir, "23a_porter_lists")
+	var cats = hud.Apps.load_catalogs()
+	var registry = null
+	for ci in mini(cats.size(), 2):
+		hud._talk["cat"] = cats[cats.size() - 1 - ci] if cats.size() > 1 else cats[0]
+		hud._talk["cat"] = cats[1 - ci] if cats.size() > 1 else cats[0]
+		hud.open_talk("catalogue")
+		await get_tree().create_timer(6.0).timeout
+		var data = hud._lists.get(hud._talk["cat"]["url"])
+		print("porter list '", hud._talk["cat"]["name"], "': ", data["templates"].size() if typeof(data) == TYPE_DICTIONARY else str(data).left(120))
+		await _shot(dir, "23b_porter_catalogue_%d" % ci)
+		if typeof(data) == TYPE_DICTIONARY:
+			for t in data["templates"]:
+				if str(t.get("title", "")) == "Registry":
+					registry = t
+	if registry != null:
+		hud._talk["tpl"] = registry
+		hud.open_talk("tpl")
+		await get_tree().create_timer(1.0).timeout
+		await _shot(dir, "24_porter_template")
+	hud.close_modal()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var live = cluster.state["source"] != "simulation"
+	cluster.act({"op": "apply_app", "id": "postgres", "ns": "kf-pg"})
+	if registry != null:
+		cluster.act({"op": "deploy_template", "template": registry, "name": "kf-registry", "ns": "kf-apps"})
+	player.teleport(Vector3(8.5, 0.4, 15.5), Vector3(11.5, 1.9, 9.0))
+	await _shot(dir, "25_porter")
+	await get_tree().create_timer(40.0 if live else 6.0).timeout
+	for p in cluster.state["pods"]:
+		if p["ns"] in ["kf-pg", "kf-apps"] or p["name"].begins_with("kf-"):
+			print("porter built: ", p["ns"], "/", p["name"], "  ", p["status"], "  ", p["wkind"], "/", p["wname"])
+	for s in cluster.state["services"]:
+		if s["ns"] in ["kf-pg", "kf-apps"]:
+			print("porter service: ", s["ns"], "/", s["name"], "  ", s["ports"])
+	var pspot = world.workload_spot("kf-pg", "StatefulSet" if cluster.state["source"] != "docker" else "Compose", "postgres")
+	if pspot != null:
+		player.teleport(pspot[0] + Vector3(2.5, 0, 3.5), pspot[1])
+		await _shot(dir, "26_porter_result")
+	hud.open_talk("installed")
+	await get_tree().create_timer(1.0).timeout
+	await _shot(dir, "27_porter_installed")
+	if cluster.state["source"] == "docker":
+		cluster.act({"op": "portainer_install"})
+		await get_tree().create_timer(45.0).timeout
+		print("porter: portainer installed = ", hud._portainer_installed())
+		hud.open_talk("portainer")
+		await get_tree().create_timer(1.2).timeout
+		await _shot(dir, "28_porter_portainer")
+	hud.close_modal()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	cluster.act({"op": "remove_app", "id": "postgres", "ns": "kf-pg"})
+	if registry != null:
+		cluster.act({"op": "remove_template", "name": "kf-registry", "ns": "kf-apps"})
+	await get_tree().create_timer(4.0).timeout
+	if cluster.state["source"] == "simulation":
+		_connect_target({"source": "simulation", "context": "azure-aks-staging", "provider": "Azure AKS"})
+		await get_tree().create_timer(5.0).timeout
+		player.flying = true
+		player.teleport(Vector3(-40, 26, 10), Vector3(0, 2, -70))
+		await _shot(dir, "17_aws")
+		player.flying = false
+	elif cluster.state["source"] == "docker":
+		# live Docker engine: run, inspect, restart and remove one throwaway container
+		cluster.act({"op": "create", "ns": "default", "name": "kf-selftest", "image": "nginx:1.27-alpine", "replicas": 1})
+		await get_tree().create_timer(12.0).timeout
+		var uid = ""
+		for p in cluster.state["pods"]:
+			if p["name"] == "kf-selftest":
+				uid = p["uid"]
+		print("docker selftest container visible: ", uid != "")
+		if uid != "":
+			var dspot = world.machine_spot(uid)
+			player.teleport(dspot[0] + Vector3(2, 0, 3), dspot[1])
+			await _shot(dir, "17_docker_machine")
+			hud.open_logs(uid)
+			await get_tree().create_timer(1.5).timeout
+			await _shot(dir, "18_docker_logs")
+			hud.close_modal()
+			cluster.act({"op": "restart", "ns": "default", "kind": "Pod", "name": "", "pod": "kf-selftest"})
+			await get_tree().create_timer(4.0).timeout
+		cluster.act({"op": "delete_pod", "ns": "default", "name": "kf-selftest"})
+		await get_tree().create_timer(3.0).timeout
+	else:
+		# live cluster: exercise every mutating action once, on a throwaway deployment
+		var node_name = cluster.state["nodes"][cluster.state["nodes"].size() - 1]["name"]
+		for a in [{"op": "create", "ns": "default", "name": "kf-selftest", "image": "nginx:1.27-alpine", "replicas": 1},
+				{"op": "scale", "ns": "default", "kind": "Deployment", "name": "kf-selftest", "replicas": 2},
+				{"op": "restart", "ns": "default", "kind": "Deployment", "name": "kf-selftest"},
+				{"op": "cordon", "node": node_name, "on": true},
+				{"op": "cordon", "node": node_name, "on": false}]:
+			cluster.act(a)
+			await get_tree().create_timer(3.0).timeout
+		player.flying = true
+		player.teleport(Vector3(-40, 26, 10), Vector3(0, 2, -70))
+		await _shot(dir, "17_live_after_actions")
+		player.flying = false
+		cluster.act({"op": "delete_workload", "ns": "default", "kind": "Deployment", "name": "kf-selftest"})
+		await get_tree().create_timer(3.0).timeout
+	hud.close_modal()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var wspot = world.workload_spot("shop", "Deployment", "frontend")
+	if wspot != null:
+		# real hold-to-fire test: dismantle one frontend pod with the MK.4 tool
+		_set_mode(4)
+		player.teleport(wspot[0] + Vector3(2.5, 0, 3.5), wspot[1])
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		await get_tree().create_timer(0.4).timeout
+		print("hold-test target: ", player.hit.get("meta", {}))
+		Input.action_press("fire")
+		await get_tree().create_timer(0.5).timeout
+		print("hold-test mid: progress=", _dis)
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(dir.path_join("11_charging.png"))
+		await get_tree().create_timer(0.7).timeout
+		Input.action_release("fire")
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_set_mode(0)
+		await get_tree().create_timer(2.5).timeout
+	for l in cluster.audit_lines.slice(maxi(0, cluster.audit_lines.size() - 40)):
+		print("AUDIT ", l)
+	get_tree().quit()
+
+# ---- dev: multi-user test bot. Several instances run at once, each as a
+# different identity; each reports what it can see and do, then quits.
+#   --mptest=<dir>,<x>,<z>,<seconds>
+
+func _run_mptest(spec: String) -> void:
+	var parts = spec.split(",")
+	var dir = parts[0]
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	sfx.set_muted(true)
+	await get_tree().create_timer(10.0).timeout
+	var me = cluster.user_name()
+	player.teleport(Vector3(parts[1].to_float(), 0.4, parts[2].to_float()), Vector3(0, 1.6, 12))
+	var st = cluster.state
+	var by_ns = {}
+	for p in st["pods"]:
+		by_ns[p["ns"]] = by_ns.get(p["ns"], 0) + 1
+	print("[%s] user=%s groups=%s" % [me, st.get("user", ""), st.get("groups", [])])
+	print("[%s] max_tier=%d scoped_ns='%s' multiuser=%s nodes=%d pods_by_ns=%s" % [me, cluster.max_tier(), st.get("scoped_ns", ""), st.get("multiuser", false), st["nodes"].size(), by_ns])
+	print("[%s] permissions=%s" % [me, cluster.backend.caps])
+	var results = []
+	cluster.action_done.connect(func(ok, msg): results.append("%s | %s" % ["ok" if ok else "REFUSED", msg]))
+	if me != "kubernetes-admin":
+		# try one action of each tier and see which are let through
+		var pod = null
+		for p in st["pods"]:
+			if p["ns"] == "shop" and p["wname"] == "frontend":
+				pod = p
+		for a in [{"op": "scale_by", "ns": "shop", "kind": "Deployment", "name": "frontend", "delta": 1},
+				{"op": "restart", "ns": "shop", "kind": "Deployment", "name": "redis"},
+				{"op": "delete_pod", "ns": "shop", "name": pod["name"] if pod != null else "none"},
+				{"op": "delete_workload", "ns": "shop", "kind": "Deployment", "name": "redis"},
+				{"op": "restart", "ns": "kube-system", "kind": "Deployment", "name": "coredns"}]:
+			_set_mode([2, 3, 4, 5, 3][results.size()] if results.size() < 5 else 0)
+			cluster.act(a)
+			await get_tree().create_timer(3.5).timeout
+			print("[%s] MK.%d %s  =>  %s" % [me, K.tier_of(a, cluster.state), cluster.describe(a), results[results.size() - 1] if results.size() > 0 else "?"])
+	var seconds = parts[3].to_float()
+	var t = 0.0
+	while t < seconds:
+		await get_tree().create_timer(5.0).timeout
+		t += 5.0
+		var names = []
+		for p in cluster.peers:
+			names.append("%s@%s tool=%d" % [p["user"], p["pos"], p["tool"]])
+		print("[%s] t=%d online: %s" % [me, int(t), names])
+	if cluster.peers.size() > 0:
+		var pp = str(cluster.peers[0]["pos"]).split(",")
+		player.teleport(player.global_position, Vector3(pp[0].to_float(), 1.5, pp[2].to_float()))
+	hud.set_mode(mode, blueprint)
+	await _shot(dir, "mp_" + me)
+	get_tree().quit()
+
+# ---- dev: scripted camera fly-through for the README clip.
+#   engine\Godot...console.exe --path . --write-movie <dir>/f.png --fixed-fps 30 -- --demo --flyby
+
+func _run_flyby() -> void:
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	sfx.set_muted(true)
+	player.flying = true
+	player.enabled = false
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	# [camera position, look-at point]
+	var path = [[Vector3(0, 3, 30), Vector3(0, 4, 0)], [Vector3(-20, 18, 10), Vector3(-27, 2, -70)],
+		[Vector3(-54, 10, -56), Vector3(-27, 3, -66)], [Vector3(0, 10, -58), Vector3(27, 2, -64)],
+		[Vector3(60, 24, -10), Vector3(0, 2, -60)], [Vector3(16, 3, 20), Vector3(11, 2, 9)]]
+	for i in range(1, path.size()):
+		var t = 0.0
+		while t < 1.0:
+			t += get_process_delta_time() / 2.2
+			var k = smoothstep(0.0, 1.0, t)
+			player.teleport(path[i - 1][0].lerp(path[i][0], k), path[i - 1][1].lerp(path[i][1], k))
+			await get_tree().process_frame
+	get_tree().quit()
+
+# ---- dev: README fly-through. Saves numbered frames; tools/make_gif.py turns them into docs/flythrough.gif.
+#   --demo --flythrough=<dir>
+
+func _run_flythrough(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	await get_tree().create_timer(9.0).timeout
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	sfx.set_muted(true)
+	player.flying = true
+	player.enabled = false
+	var keys = [[Vector3(0, 2.2, 24), Vector3(0, 4, 0)], [Vector3(-14, 10, 6), Vector3(-27, 3, -52)],
+		[Vector3(-44, 22, -18), Vector3(-22, 2, -62)], [Vector3(-27, 13, -34), Vector3(-27, 2, -58)],
+		[Vector3(8, 18, -30), Vector3(27, 2, -58)], [Vector3(48, 9, -36), Vector3(62, 3, -56)],
+		[Vector3(30, 5, -18), Vector3(0, 3, -24)], [Vector3(11.5, 2.3, 17), Vector3(10.5, 1.8, 9)]]
+	var n = 0
+	for k in keys.size() - 1:
+		for i in 13:
+			var f = smoothstep(0.0, 1.0, i / 13.0)
+			player.teleport(keys[k][0].lerp(keys[k + 1][0], f), keys[k][1].lerp(keys[k + 1][1], f))
+			await get_tree().create_timer(0.07).timeout
+			await RenderingServer.frame_post_draw
+			var img = get_viewport().get_texture().get_image()
+			img.resize(640, 360, Image.INTERPOLATE_LANCZOS)
+			img.save_png(dir.path_join("f%03d.png" % n))
+			n += 1
+	get_tree().quit()

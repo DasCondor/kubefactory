@@ -1,0 +1,6 @@
+{
+  "contexts": [
+    { "match": "prod", "max_tier": 3, "confirm_tier": 4 }
+  ],
+  "audit_webhook": ""
+}

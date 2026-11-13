@@ -1,0 +1,8 @@
+# downloaded by setup.ps1 / the release workflow
+engine/*
+!engine/.gdignore
+# build output
+dist/*
+!dist/.gdignore
+# Godot's import cache
+.godot/

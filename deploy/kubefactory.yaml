@@ -1,0 +1,144 @@
+# KubeFactory multi-user setup. A cluster admin applies this once per cluster:
+#
+#   kubectl apply -f deploy/kubefactory.yaml
+#
+# It creates:
+#   - namespace  kubefactory           shared space for presence + the action feed
+#   - configmap  kubefactory-policy    who may use which tool tier (edit this)
+#   - role       kubefactory-player    lets every signed-in user announce presence,
+#                                      post to the action feed and read the policy
+#   - clusterroles kubefactory-viewer / -operator / -admin   ready-made permission
+#                                      sets to bind to people (see the end of the file)
+#
+# The policy is a guard rail inside the game. What a person can REALLY do is
+# decided by the Roles you bind to them, exactly as with kubectl.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubefactory
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubefactory-policy
+  namespace: kubefactory
+data:
+  policy.json: |
+    {
+      "max_tier": 3,
+      "users": {
+      },
+      "groups": {
+        "system:masters": 5,
+        "kubeadm:cluster-admins": 5
+      },
+      "protected_namespaces": ["kube-system", "kube-public", "kube-node-lease", "kubefactory"],
+      "protected_max_tier": 1,
+      "confirm_tier": 5,
+      "presence": true
+    }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubefactory-player
+  namespace: kubefactory
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["kubefactory-policy"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubefactory-players
+  namespace: kubefactory
+subjects:
+  - kind: Group
+    name: system:authenticated
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: kubefactory-player
+  apiGroup: rbac.authorization.k8s.io
+---
+# Mk.1: look, read logs and events.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubefactory-viewer
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces", "pods", "pods/log", "services", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+# Mk.2 + Mk.3: build, scale, restart, cordon.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubefactory-operator
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces", "pods", "pods/log", "services", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["services", "secrets", "persistentvolumeclaims"]
+    verbs: ["create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["patch"]
+---
+# Mk.4 + Mk.5: everything above plus delete pods / workloads and drain nodes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubefactory-admin
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces", "pods", "pods/log", "services", "events", "secrets", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets", "deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+---
+# Giving people access (examples, not applied by this file):
+#
+#   whole cluster, read only:
+#     kubectl create clusterrolebinding bob-view --clusterrole=kubefactory-viewer --user=bob
+#   operator in one namespace only:
+#     kubectl create rolebinding alice-ops -n shop --clusterrole=kubefactory-operator --user=alice
+#   full control for a group:
+#     kubectl create clusterrolebinding sre-admin --clusterrole=kubefactory-admin --group=sre
+#
+# Then raise their tool tier in the policy above if the default (3) is not right:
+#     "users":  { "alice": 3, "bob": 1 },
+#     "groups": { "sre": 5 }
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubefactory-info
+  namespace: kubefactory
+data:
+  about: "KubeFactory multi-user support. See deploy/kubefactory.yaml in the game folder."

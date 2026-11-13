@@ -1,0 +1,19 @@
+{
+  "hours": 1,
+  "loki": {
+    "url": "",
+    "query": "{namespace=\"%NS%\", pod=\"%POD%\"}",
+    "tenant": "",
+    "user": ""
+  },
+  "cloudwatch": {
+    "log_group": "",
+    "region": ""
+  },
+  "azure": {
+    "workspace_id": ""
+  },
+  "gcp": {
+    "project": ""
+  }
+}

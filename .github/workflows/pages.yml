@@ -1,0 +1,64 @@
+# Builds the in-browser sandbox demo and publishes it to GitHub Pages.
+# The demo runs only the built-in simulated clusters; it connects to nothing.
+#
+# While the repo is private this only runs when started by hand ("Run workflow")
+# and only builds. Once the repo is public and Pages is set to "GitHub Actions",
+# every push to main redeploys https://<owner>.github.io/<repo>/.
+name: web demo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # shortcut: re-downloads ~1 GB of export templates every run; add actions/cache if pushes get frequent
+      - name: Fetch Godot 4.3 and its web export template
+        run: |
+          base=https://github.com/godotengine/godot/releases/download/4.3-stable
+          curl -fsSL -o godot.zip "$base/Godot_v4.3-stable_linux.x86_64.zip"
+          curl -fsSL -o tpl.zip "$base/Godot_v4.3-stable_export_templates.tpz"
+          # pinned checksums: refuse to build with anything but the official 4.3 files
+          echo "fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a  godot.zip" | sha512sum -c -
+          echo "476366caf0fd45a8f24136cf9cf1dc0bc2b96f7c82d53e5f82200b55aefd07b286d283fd6f1ce29e0de70648c5a51d3b12f96c6d4fafd4e8c4878ecda6406d6a  tpl.zip" | sha512sum -c -
+          unzip -q godot.zip
+          dst="$HOME/.local/share/godot/export_templates/4.3.stable"
+          mkdir -p "$dst"
+          unzip -q -j tpl.zip templates/web_nothreads_release.zip templates/version.txt -d "$dst"
+          rm godot.zip tpl.zip
+
+      - name: Export the web build
+        run: |
+          mkdir -p dist/web
+          ./Godot_v4.3-stable_linux.x86_64 --headless --path . --export-release "Web" dist/web/index.html
+          test -s dist/web/index.wasm && test -s dist/web/index.pck
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/web
+
+  deploy:
+    if: ${{ !github.event.repository.private }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
