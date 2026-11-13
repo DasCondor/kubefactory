@@ -1,5 +1,5 @@
 extends CharacterBody3D
-const Tex = preload("res://scripts/tex.gd")
+const ViewModel = preload("res://scripts/viewmodel.gd")
 # First-person pioneer: walk / sprint / jump, double-tap Space for the hoverpack.
 
 const WALK = 7.0
@@ -20,9 +20,7 @@ var camera: Camera3D
 var hit = {}
 
 var _pitch = 0.0
-var _tool: Node3D = null
-var _tool_home = Vector3.ZERO
-var _bob = 0.0
+var view: Node3D
 var _last_space = -10.0
 
 func _ready() -> void:
@@ -39,45 +37,22 @@ func _ready() -> void:
 	camera.far = 3000.0
 	add_child(camera)
 	camera.make_current()
+	view = ViewModel.new()
+	view.player = self
+	camera.add_child(view)
 	floor_snap_length = 0.4
 
-# The tool in your hand: a small viewmodel recoloured per tool tier.
+# The tool in your hand (see viewmodel.gd), recoloured per tool tier.
 func set_tool(index: int, color: Color) -> void:
-	if _tool != null:
-		_tool.queue_free()
-	_tool = Node3D.new()
-	_tool.position = Vector3(0.34, -0.3, -0.62)
-	_tool.rotation = Vector3(0.05, 0.12, 0.0)
-	camera.add_child(_tool)
-	var dark = Tex.shared("dark")
-	var glow = Tex.glow(color, 1.6)
-	var parts = []
-	if index == 1:
-		# datapad: a slab with a lit screen
-		_tool.position = Vector3(0.3, -0.26, -0.55)
-		_tool.rotation = Vector3(0.55, 0.25, 0.05)
-		parts = [[Vector3(0.36, 0.24, 0.025), dark, Vector3.ZERO], [Vector3(0.31, 0.19, 0.01), glow, Vector3(0, 0, 0.016)]]
-	else:
-		var len = 0.34 + index * 0.05
-		parts = [[Vector3(0.1, 0.13, len), dark, Vector3.ZERO],
-			[Vector3(0.06, 0.16, 0.1), dark, Vector3(0, -0.12, len * 0.3)],
-			[Vector3(0.105, 0.035, len * 0.8), glow, Vector3(0, 0.03, 0)],
-			[Vector3(0.05 + index * 0.012, 0.05 + index * 0.012, 0.16), Tex.shared("steel"), Vector3(0, 0.0, -len * 0.5 - 0.06)],
-			[Vector3(0.03, 0.03, 0.02), glow, Vector3(0, 0, -len * 0.5 - 0.15)]]
-	for p in parts:
-		var mi = MeshInstance3D.new()
-		var b = BoxMesh.new()
-		b.size = p[0]
-		mi.mesh = b
-		mi.material_override = p[1]
-		mi.position = p[2]
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_tool.add_child(mi)
-	_tool.scale = Vector3.ONE * 0.62
-	_tool.position += Vector3(0.06, -0.04, 0.0)
-	_tool_home = _tool.position
-	_tool.position.y -= 0.25
-	create_tween().tween_property(_tool, "position:y", _tool_home.y, 0.18)
+	view.set_tool(index, color)
+
+# A jolt through the tool: `strength` 1 for a finished action, less for a click.
+func tool_kick(strength: float = 1.0) -> void:
+	view.kick(strength)
+
+# 0..1 while a hold action is winding up.
+func tool_charge(f: float) -> void:
+	view.charge = f
 
 func teleport(pos: Vector3, look_at_point = null) -> void:
 	global_position = pos
@@ -133,10 +108,6 @@ func _physics_process(delta: float) -> void:
 		if _stride > 2.4:
 			_stride = 0.0
 			stepped.emit()
-	if _tool != null and is_on_floor():
-		_bob += delta * Vector2(velocity.x, velocity.z).length() * 1.4
-		_tool.position.x = _tool_home.x + sin(_bob) * 0.008
-		_tool.rotation.z = sin(_bob * 0.5) * 0.02
 	# What is under the crosshair?
 	var from = camera.global_position
 	var to = from - camera.global_transform.basis.z * REACH
