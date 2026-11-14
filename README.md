@@ -18,7 +18,7 @@ homelab use.
 [![Web demo](https://img.shields.io/github/actions/workflow/status/DasCondor/kubefactory/pages.yml?label=web%20demo)](https://github.com/DasCondor/kubefactory/actions/workflows/pages.yml)
 [![Made with Godot 4.3](https://img.shields.io/badge/Godot-4.3-478cbf?logo=godotengine&logoColor=white)](https://godotengine.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
-![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20browser-8b949e)
+![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20browser-8b949e)
 
 ![Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service belts and a failing pod's alarm](docs/flythrough.gif)
 
@@ -123,10 +123,27 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 
 ## 📥 Download
 
-Get the latest Windows build from
-**https://github.com/DasCondor/kubefactory/releases/latest**
-(`KubeFactory-<version>-win64.zip` plus its `.sha256` checksum). The executable
-is not code-signed, so Windows SmartScreen asks for confirmation on first run.
+Get the latest build from
+**https://github.com/DasCondor/kubefactory/releases/latest**:
+
+| Platform | Package | Start it |
+|---|---|---|
+| Windows | `KubeFactory-<version>-win64.zip` | `install.ps1`, or `KubeFactory.exe` |
+| Linux (x86_64) | `KubeFactory-<version>-linux-x86_64.tar.gz` | `./KubeFactory.x86_64` |
+| macOS (Apple Silicon and Intel) | `KubeFactory-<version>-macos.zip` | `KubeFactory.app` (see below) |
+
+**Checking a download.** Every package has a `.sha256`, the release has one
+`SHA256SUMS`, and every package carries a signed build-provenance attestation
+that ties it to this repository's release workflow and the exact commit:
+
+    gh attestation verify KubeFactory-<version>-linux-x86_64.tar.gz -R DasCondor/kubefactory
+
+None of the packages is signed with a Windows or Apple developer identity.
+Windows SmartScreen asks for confirmation on first run. On macOS the app is
+ad-hoc signed but not notarized, so Gatekeeper blocks a downloaded copy until
+you clear the quarantine flag on the unpacked folder:
+
+    xattr -dr com.apple.quarantine KubeFactory-<version>-macos
 
 ## 📦 Install (release build)
 

@@ -143,6 +143,11 @@ images you trust, as you would with `docker run`.
 
 The setup script and the build workflows verify the Godot engine and export
 templates against pinned SHA-512 checksums. Releases ship with a SHA-256
-checksum file. Neither `KubeFactory.exe` nor `kf-agent.exe` is code-signed, so
-Windows SmartScreen will warn on first run. The companion's Go dependencies
+checksum per package and one `SHA256SUMS`, and each package has a build
+provenance attestation signed through Sigstore by the release workflow
+(`gh attestation verify <package> -R DasCondor/kubefactory` checks it came from
+this repository's workflow at a given commit). No package is signed with a
+Windows or Apple developer identity: Windows SmartScreen warns on first run,
+and the macOS app is only ad-hoc signed (not notarized), so Gatekeeper blocks
+it until the quarantine flag is cleared. The companion's Go dependencies
 are pinned by `agent/go.sum`.

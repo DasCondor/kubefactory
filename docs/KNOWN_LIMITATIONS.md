@@ -36,6 +36,21 @@ exactly that: the code exists and has not been run against the real thing.
 - No clean-Windows-machine installation test was done. No large-cluster
   benchmark (hundreds of nodes, thousands of pods) was done.
 
+## Linux and macOS
+
+- **Linux:** the exported game was run headless on Ubuntu 24.04 in a container
+  (the simulation loads, no script errors), the unit tests pass on the Linux
+  engine, and the companion answers there. Not played on a Linux desktop with
+  a GPU, and not tested against a real cluster from Linux.
+- **macOS:** the package is built (universal, ad-hoc signed) but has **not
+  been run on a Mac**. It is not notarized.
+- On both, the companion cannot keep tokens and keys yet: it seals them with
+  Windows' per-user protection only, so Grafana, Tautulli, AI provider and
+  Komodo credentials are refused rather than stored in the clear. Kubeconfig
+  connections, Docker and the simulation do not need it.
+- The helper scripts (install, dev cluster, packaging) are PowerShell on
+  Windows; Linux and macOS have `tools/package.sh` only.
+
 ## By design, for now
 
 - **Docker still uses the `docker` command.** Only Kubernetes is native.

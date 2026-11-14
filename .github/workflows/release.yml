@@ -1,5 +1,16 @@
-# Push a tag like v1.0.0 to build the release zip and publish it as a GitHub Release.
-# "Run workflow" builds the same zip as a downloadable artifact without releasing.
+# Push a tag like v1.0.0 to build Windows, Linux and macOS packages and
+# publish them as a GitHub Release. "Run workflow" builds the same packages as
+# downloadable artifacts without releasing.
+#
+# Every package gets a .sha256, the release gets one SHA256SUMS file, and each
+# package gets a signed build-provenance attestation (Sigstore, keyless) that
+# ties it to this workflow and commit:
+#
+#   gh attestation verify <package> -R DasCondor/kubefactory
+#
+# Nothing is signed with a Windows or Apple developer identity: the Windows
+# exe and the macOS app are not code-signed by a publisher (the macOS app is
+# ad-hoc signed so Apple Silicon will run it), and nothing claims otherwise.
 name: release
 
 on:
@@ -8,11 +19,20 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  GODOT_BASE: https://github.com/godotengine/godot/releases/download/4.3-stable
+  # pinned checksums, as published in Godot's SHA512-SUMS.txt for 4.3-stable
+  TPL_SHA512: 476366caf0fd45a8f24136cf9cf1dc0bc2b96f7c82d53e5f82200b55aefd07b286d283fd6f1ce29e0de70648c5a51d3b12f96c6d4fafd4e8c4878ecda6406d6a
 
 jobs:
-  package:
+  windows:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
@@ -27,11 +47,9 @@ jobs:
       - name: Fetch Godot 4.3 and its Windows export templates
         shell: pwsh
         run: |
-          $base = "https://github.com/godotengine/godot/releases/download/4.3-stable"
-          curl.exe -fsSL -o godot.zip "$base/Godot_v4.3-stable_win64.exe.zip"
-          curl.exe -fsSL -o tpl.zip "$base/Godot_v4.3-stable_export_templates.tpz"
-          # pinned checksums: refuse to build with anything but the official 4.3 files
-          $want = @{ "godot.zip" = "ad09b7e19949327700dfbe64e35880a2a08091c0751277f5cc21b915e5df9b4fe93fb43c50d6bdfb9d16b46168592491aa698e0d2dbe9f92132e163dd77b97e1"; "tpl.zip" = "476366caf0fd45a8f24136cf9cf1dc0bc2b96f7c82d53e5f82200b55aefd07b286d283fd6f1ce29e0de70648c5a51d3b12f96c6d4fafd4e8c4878ecda6406d6a" }
+          curl.exe -fsSL -o godot.zip "$env:GODOT_BASE/Godot_v4.3-stable_win64.exe.zip"
+          curl.exe -fsSL -o tpl.zip "$env:GODOT_BASE/Godot_v4.3-stable_export_templates.tpz"
+          $want = @{ "godot.zip" = "ad09b7e19949327700dfbe64e35880a2a08091c0751277f5cc21b915e5df9b4fe93fb43c50d6bdfb9d16b46168592491aa698e0d2dbe9f92132e163dd77b97e1"; "tpl.zip" = $env:TPL_SHA512 }
           foreach ($f in $want.Keys) {
             if ((Get-FileHash $f -Algorithm SHA512).Hash.ToLower() -ne $want[$f]) { throw "checksum mismatch for $f" }
           }
@@ -41,7 +59,6 @@ jobs:
           tar -xf tpl.zip -C $dst --strip-components=1 "templates/windows_*_x86_64*.exe" templates/version.txt
           Remove-Item godot.zip, tpl.zip
 
-      # the native companion (agent/) is built by tools/package.ps1 and needs Go
       - uses: actions/setup-go@v5
         with:
           go-version-file: agent/go.mod
@@ -55,16 +72,119 @@ jobs:
         shell: pwsh
         run: ./tools/package.ps1
 
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.zip
+
       - uses: actions/upload-artifact@v4
         with:
-          name: KubeFactory-win64
+          name: KubeFactory-windows
           path: |
             dist/*.zip
             dist/*.sha256
 
+  linux:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Godot 4.3 and its Linux export templates
+        run: |
+          curl -fsSL -o godot.zip "$GODOT_BASE/Godot_v4.3-stable_linux.x86_64.zip"
+          curl -fsSL -o tpl.zip "$GODOT_BASE/Godot_v4.3-stable_export_templates.tpz"
+          echo "fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a  godot.zip" | sha512sum -c -
+          echo "$TPL_SHA512  tpl.zip" | sha512sum -c -
+          unzip -q godot.zip -d "$HOME/godot"
+          dst="$HOME/.local/share/godot/export_templates/4.3.stable"
+          mkdir -p "$dst"
+          unzip -q -j tpl.zip templates/linux_release.x86_64 templates/linux_debug.x86_64 templates/version.txt -d "$dst"
+          rm godot.zip tpl.zip
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      - name: Companion tests
+        run: cd agent && go test ./...
+
+      - name: Test, export and package
+        run: GODOT="$HOME/godot/Godot_v4.3-stable_linux.x86_64" bash tools/package.sh linux
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KubeFactory-linux
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  macos:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Godot 4.3 and its macOS export templates
+        run: |
+          curl -fsSL -o godot.zip "$GODOT_BASE/Godot_v4.3-stable_macos.universal.zip"
+          curl -fsSL -o tpl.zip "$GODOT_BASE/Godot_v4.3-stable_export_templates.tpz"
+          echo "8a556637aa6b83a60473decdb43a448b214f31fd13318b6f7ba2ebc4cca4e40d1f7a933330ce40afa8d72273ef6a6f3a0e3b0f0abf8e1be3fe4f03119cae62c2  godot.zip" | shasum -a 512 -c -
+          echo "$TPL_SHA512  tpl.zip" | shasum -a 512 -c -
+          unzip -q godot.zip -d "$HOME/godot"
+          dst="$HOME/Library/Application Support/Godot/export_templates/4.3.stable"
+          mkdir -p "$dst"
+          unzip -q -j tpl.zip templates/macos.zip templates/version.txt -d "$dst"
+          rm godot.zip tpl.zip
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      - name: Test, export and package
+        run: GODOT="$HOME/godot/Godot.app/Contents/MacOS/Godot" bash tools/package.sh macos
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*-macos.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KubeFactory-macos
+          path: |
+            dist/*-macos.zip
+            dist/*.sha256
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: One checksum file for everything
+        run: |
+          cd out
+          sha256sum *.zip *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create $env:GITHUB_REF_NAME (Get-ChildItem dist/*.zip, dist/*.sha256) --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" out/*.zip out/*.tar.gz out/*.sha256 out/SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes
