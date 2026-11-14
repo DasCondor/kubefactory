@@ -99,6 +99,7 @@ func registerAll() {
 	registerBrowser()
 	registerProviders()
 	registerAI()
+	registerKomodo()
 }
 
 func main() {

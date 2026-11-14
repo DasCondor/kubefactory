@@ -36,6 +36,16 @@ exactly that: the code exists and has not been run against the real thing.
 - No clean-Windows-machine installation test was done. No large-cluster
   benchmark (hundreds of nodes, thousands of pods) was done.
 
+## Komodo
+
+- **Not tested against a real Komodo Core**: the requests and answers follow
+  the published `komodo_client` source (2.1), and the tests use a stand-in
+  built from it. Komodo versions with a different API may not connect.
+- Read-only by design: no restart, deploy or removal through KubeFactory.
+- Shown per server, not per Compose stack (container labels are not in
+  Komodo's list); logs, capacity figures and storage doors are not available
+  over a Komodo connection.
+
 ## By design, for now
 
 - **Docker still uses the `docker` command.** Only Kubernetes is native.

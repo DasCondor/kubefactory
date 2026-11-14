@@ -1082,6 +1082,8 @@ func open_clusters() -> void:
 			cluster.discover_targets()
 			open_clusters(), "", not cluster.finding_targets and not cluster.detecting and cluster.backend != null))
 	top.add_child(_btn("Add or manage kubeconfigs...", func(): open_connect(), "primary"))
+	if Agent.available() and cluster.edition != "demo":
+		top.add_child(_btn("Komodo...", open_komodo))
 	body.add_child(top)
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1122,6 +1124,91 @@ func _cluster_row(t: Dictionary) -> Control:
 		pc.add_child(r)
 		return pc
 	return null
+
+# ----- Komodo connections (agent/komodo.go): read-only, key and secret sealed by the companion
+
+var _kmd = {"list": [], "form": {}, "msg": "", "busy": false}
+
+func open_komodo() -> void:
+	var body = _open_modal("komodo", null, "KOMODO", Vector2(900, 640))
+	var intro = _lbl("Every server and container a Komodo Core manages, without KubeFactory touching the hosts. KubeFactory sends Komodo only read requests and offers no actions; a read-only API key in Komodo (Settings > API keys) is enough. The key and secret go to the companion, which keeps them sealed for your Windows account.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 840
+	body.add_child(intro)
+	if _kmd["msg"] != "":
+		body.add_child(_lbl(_kmd["msg"], 13, K.health_color("warn")))
+	for c in _kmd["list"]:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(str(c["name"]), 14), 240))
+		var addr = _lbl(str(c["base_url"]), 12, DIM)
+		addr.clip_text = true
+		r.add_child(_fixed(addr, 300))
+		var id = str(c["id"])
+		r.add_child(_btn("Test", func():
+			_kmd["msg"] = "Testing..."
+			open_komodo()
+			_komodo_call("komodo.test", {"id": id}, func(res):
+				_kmd["msg"] = ("Reached Komodo %s." % res["data"].get("version", "")) if res["ok"] else str(res["msg"])
+				open_komodo())))
+		r.add_child(_btn("Connect", func():
+			close_modal()
+			target_requested.emit({"source": "komodo", "context": str(c["name"]), "komodo_id": id, "provider": "Komodo (read-only)"}), "primary"))
+		r.add_child(_btn("Remove", func():
+			_komodo_call("komodo.remove", {"id": id}, func(_res): _komodo_refresh())))
+		body.add_child(r)
+	body.add_child(_lbl("ADD A KOMODO CONNECTION", 14, ORANGE))
+	var f: Dictionary = _kmd["form"]
+	for fld in [["Name", "name", "e.g. Home Komodo", false], ["Address", "base_url", "https://komodo.example.lan", false], ["API key", "key", "K-...", true], ["API secret", "secret", "S-...", true]]:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(fld[0], 13, DIM), 120))
+		var le = LineEdit.new()
+		le.text = str(f.get(fld[1], ""))
+		le.placeholder_text = fld[2]
+		le.secret = fld[3]
+		le.custom_minimum_size.x = 560
+		var key = fld[1]
+		le.text_changed.connect(func(v): f[key] = v)
+		r.add_child(le)
+		body.add_child(r)
+	var hr = _row(8)
+	hr.add_child(_btn("Plain http to another computer: %s" % ("ALLOWED" if f.get("allow_http", false) else "NOT ALLOWED"), func():
+		f["allow_http"] = not f.get("allow_http", false)
+		open_komodo()))
+	hr.add_child(_lbl("only if Komodo has no https: the key would travel unencrypted", 12, DIM))
+	body.add_child(hr)
+	var br = _row(8)
+	br.add_child(_btn("Save", func():
+		_komodo_call("komodo.save", {"name": str(f.get("name", "")), "base_url": str(f.get("base_url", "")), "key": str(f.get("key", "")),
+			"secret": str(f.get("secret", "")), "allow_http": bool(f.get("allow_http", false))}, func(res):
+			if res["ok"]:
+				_kmd["form"] = {}
+				_kmd["msg"] = "Saved %s. Test it, then Connect." % res["data"].get("name", "")
+				cluster.discover_targets()
+			else:
+				_kmd["msg"] = str(res["msg"])
+			_komodo_refresh()), "primary"))
+	br.add_child(_spacer())
+	br.add_child(_btn("Back to clusters", open_clusters))
+	body.add_child(br)
+	if not _kmd.get("loaded", false) and not _kmd["busy"]:
+		_komodo_refresh()
+
+func _komodo_refresh() -> void:
+	_kmd["busy"] = true
+	_komodo_call("komodo.list", {}, func(res):
+		_kmd["busy"] = false
+		_kmd["loaded"] = true
+		_kmd["list"] = res["data"].get("connections", []) if res["ok"] else []
+		if _modal_kind == "komodo":
+			open_komodo())
+
+func _komodo_call(op: String, args: Dictionary, done: Callable) -> void:
+	var t = Thread.new()
+	t.start(func():
+		var r = Agent.request(op, args, 30.0)
+		(func():
+			t.wait_to_finish()
+			done.call(r)).call_deferred())
 
 # ----- storage: what is behind a machine's service door.
 # A read-only look at the pod's (or container's) mounted volumes: what is mounted

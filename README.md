@@ -191,6 +191,17 @@ kubeconfigs...**), or just drop a kubeconfig file on the window. It:
 - says what went wrong in plain words: cannot reach the server, certificate not
   trusted, sign-in refused or expired, not permitted.
 
+### Komodo (read-only)
+
+Using [Komodo](https://komo.do) for your Docker hosts? Esc > Switch cluster >
+**Komodo...**, enter the Core's address and an API key and secret (Komodo:
+Settings > API keys; a read-only key is enough). Every server becomes a
+platform and every container a machine, and the Krew reads them. KubeFactory
+sends Komodo only read requests (`GetVersion`, `ListServers`,
+`ListAllDockerContainers`), never `/write` or `/execute`, and offers no
+actions on a Komodo connection: changes stay in Komodo. The key and secret are
+sealed by the companion and never shown again.
+
 ## 🚪 Open a machine: storage inspection (key `F`)
 
 Machines that have a door open it. Inside are the pod's volumes as drawers.

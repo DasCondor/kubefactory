@@ -6,6 +6,10 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Komodo connections (read-only).** Esc > Switch cluster > Komodo...: every
+  server a Komodo Core manages is a platform, every container a machine; Bob,
+  Sentinel and Scout read them. Only three read requests are ever sent; the
+  API key and secret are sealed by the companion (`agent/komodo.go`).
 - **Foreman** (key `H`): correlates the Krew's findings into incidents and a
   shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
   Claude, any OpenAI-compatible endpoint) answer plain-language questions from
