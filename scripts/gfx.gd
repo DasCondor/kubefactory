@@ -38,6 +38,20 @@ static var _rec = {}
 static func lite() -> bool:
 	return OS.has_feature("web") or RenderingServer.get_rendering_device() == null
 
+# The browser has its own two presets: Standard (the light path, drawn in code)
+# and High (the model library fetched from the site, 4x anti-aliasing, finer
+# shadow filtering). WebGL cannot run global illumination or screen-space
+# reflections, so Enhanced and Ultra stay desktop-only.
+const WEB_NAMES = ["Standard", "High"]
+const WEB_BLURB = [
+	"Drawn in code. Starts at once and runs on any device.",
+	"The full model library (about 13 MB, loaded once per visit), 4x anti-aliasing and softer shadows. Global illumination and reflections need the desktop version.",
+]
+static var web_high = false         # browser: the library is loaded and High is on
+
+static func web() -> bool:
+	return OS.has_feature("web")
+
 static func occlusion() -> bool:
 	return use_occlusion and not lite()
 
@@ -138,6 +152,10 @@ static func recommend() -> Dictionary:
 # `base` holds the shipped (Standard) values so switching back restores them exactly.
 static func apply(env: Environment, sun: DirectionalLight3D, vp: Viewport, base: Dictionary) -> void:
 	if lite():
+		if web_high:
+			vp.msaa_3d = Viewport.MSAA_4X
+			RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_HIGH)
+			sun.shadow_blur = 1.2
 		return
 	var lv = level
 	vp.msaa_3d = [Viewport.MSAA_2X, Viewport.MSAA_4X, Viewport.MSAA_4X][lv]

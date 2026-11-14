@@ -48,10 +48,22 @@ static func root() -> String:
 					_catalog[str(m["id"])] = m
 	return _root
 
-# The library is used on the desktop renderer; the browser / compatibility
-# path keeps the lighter code-drawn models.
+# The library is used on the desktop renderer, and in the browser when the
+# player chose High (web_assets.gd fetched it); otherwise the browser /
+# compatibility path keeps the lighter code-drawn models.
 static func available() -> bool:
-	return root() != "" and not Gfx.lite()
+	return root() != "" and (not Gfx.lite() or Gfx.web_high)
+
+static var _web = {}            # browser: relative path -> GLB bytes
+
+static func web_load(catalog: Dictionary, files: Dictionary) -> void:
+	_checked = true
+	_catalog.clear()
+	for m in catalog.get("models", []):
+		_catalog[str(m["id"])] = m
+	_web = files
+	_root = "web:" if not files.is_empty() else ""
+	_templates.clear()
 
 static func entry(id: String) -> Dictionary:
 	root()
@@ -117,11 +129,16 @@ static func _load_scene(id: String, t: String) -> Node3D:
 	var v = e.get("variants", {}).get(t)
 	if v == null:
 		return null
-	var path = _root.path_join(str(v["path"]).trim_prefix("assets/"))
-	if not FileAccess.file_exists(path):
-		return null
+	var rel = str(v["path"]).trim_prefix("assets/")
 	var doc = GLTFDocument.new()
 	var st = GLTFState.new()
+	if _root == "web:":
+		if not _web.has(rel) or doc.append_from_buffer(_web[rel], "", st) != OK:
+			return null
+		return doc.generate_scene(st)
+	var path = _root.path_join(rel)
+	if not FileAccess.file_exists(path):
+		return null
 	if doc.append_from_file(path, st) != OK:
 		return null
 	return doc.generate_scene(st)

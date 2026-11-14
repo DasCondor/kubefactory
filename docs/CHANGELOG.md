@@ -6,6 +6,11 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **High graphics in the browser demo.** Esc → Graphics → High (or `?gfx=high`)
+  fetches the model library's machines, Krew and tools from the same site
+  (about 13 MB, each file checked against the catalog's SHA-256) and adds 4x
+  anti-aliasing and softer shadows. Standard stays the default and opens at
+  once. Anything that fails to load is drawn in code as before.
 - **Foreman** (key `H`): correlates the Krew's findings into incidents and a
   shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
   Claude, any OpenAI-compatible endpoint) answer plain-language questions from

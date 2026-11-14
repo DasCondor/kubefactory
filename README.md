@@ -45,7 +45,7 @@ homelab use.
 - 👥 **Use it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows.
 - 🧪 **Try it safely first.** Four simulated demo worlds let you use every tool without touching anything real.
 - 📺 **Screens that show the real thing.** Each machine's screen steps through its application's own page, its metrics, its log and its storage. Click it to open it full size.
-- 🎨 **Built with Godot 4.3.** Desktop machines, tools, Porter, Bob and Gauge come from the bundled model library; the browser build draws everything in code. Textures, icons and sounds are generated.
+- 🎨 **Built with Godot 4.3.** Desktop machines, tools, Porter, Bob and Gauge come from the bundled model library; the browser build draws everything in code, or loads the library from the site on its High preset. Textures, icons and sounds are generated.
 
 ## 📸 Screenshots
 
@@ -94,8 +94,13 @@ The browser build is a sandbox: it runs the built-in simulated clusters only and
 connects to nothing. A browser cannot run `kubectl` or Docker, so managing real
 clusters needs the desktop build below. Every tool works against the simulation,
 including Porter's bundled app setups; his online app lists do not load there.
-Graphics are lighter than the desktop build (one shadow pass, fewer machine
-details). On desktop, click the page to capture the mouse; touch devices have
+Graphics start light (drawn in code, one shadow pass) so the demo opens at once
+on any device. **Esc → Graphics → High** switches to the real model library
+(about 13 MB, fetched once from the same site and checked against the catalog's
+checksums), 4x anti-aliasing and softer shadows; the page reloads to apply it,
+and `?gfx=high` in the address opens it that way. Global illumination and
+reflections need the desktop build: WebGL cannot run them. On desktop, click the
+page to capture the mouse; touch devices have
 on-screen controls. It is rebuilt and redeployed on every push to `main` by
 `.github/workflows/pages.yml`.
 
@@ -279,6 +284,7 @@ are marked **SIMULATED**.
 
 ![The Krew's stations](docs/krew-stations.png)
 ![The same stations as the browser build draws them](docs/krew-stations-browser.png)
+![The browser's High preset: the library models on the same renderer](docs/web-high.png)
 ![Sentinel's findings in the operations center](docs/krew-panel.png)
 ![Scrappy's cleanup awaiting approval](docs/krew-scrappy.png)
 ![Archie, Forge and Blueprint in the second row](docs/krew-second-row.png)
@@ -478,8 +484,10 @@ The rules they are built to:
 - **Graphics never limit management.** Every tool, panel, board and action is
   built by code that does not look at the preset, and switching preset keeps
   your connection, position and open work.
-- **The browser demo stays light.** It always runs its own lean path, whatever
-  preset is asked for.
+- **The browser demo has its own two presets.** Standard is drawn in code;
+  High loads the model library from the site, with 4x anti-aliasing and softer
+  shadows. Enhanced and Ultra need the desktop build (WebGL has no global
+  illumination or screen-space reflections).
 
 How the recommendation is made: the GPU's name and type, memory and CPU threads
 (`recommend()` in `scripts/gfx.gd`). Integrated or entry-level GPUs get Standard,
