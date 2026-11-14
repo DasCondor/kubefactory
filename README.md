@@ -390,3 +390,9 @@ MIT, see [LICENSE](LICENSE). KubeFactory is built with the Godot Engine (MIT);
 notices for it and for the third-party names used are in
 [THIRDPARTY.md](docs/THIRDPARTY.md). KubeFactory is an independent project and is
 not affiliated with Kubernetes, Portainer, Docker or any cloud provider.
+
+## Support development
+
+<img src=".github/dascondor-logo.png" alt="DasCondor logo" width="64" height="64">
+
+If this project was useful to you, you can [buy me a coffee](https://buymeacoffee.com/dascondor) to support future work. Contributions are voluntary.
