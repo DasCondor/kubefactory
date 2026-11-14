@@ -350,7 +350,7 @@ static func read_json(path: String) -> Variant:
 
 # ---- per-user settings (kept in the user folder, survive upgrades)
 static func load_settings() -> Dictionary:
-	var s = {"fullscreen": false, "muted": false, "sensitivity": 1.0, "welcomed": false, "belts": true}
+	var s = {"fullscreen": false, "muted": false, "sensitivity": 1.0, "welcomed": false, "belts": true, "graphics": "auto"}
 	var d = read_json(OS.get_user_data_dir().path_join("settings.json"))
 	if typeof(d) == TYPE_DICTIONARY:
 		for k in d:

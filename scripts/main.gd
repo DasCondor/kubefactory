@@ -16,6 +16,8 @@ const Player = preload("res://scripts/player.gd")
 const Hud = preload("res://scripts/hud.gd")
 const Sfx = preload("res://scripts/sfx.gd")
 const Demo = preload("res://scripts/backend_demo.gd")
+const Gfx = preload("res://scripts/gfx.gd")
+const Bench = preload("res://scripts/bench.gd")
 const VERSION = "1.0.1"
 
 const SKY_SHADER = """
@@ -57,11 +59,16 @@ var _dis_lock = false
 var _prob_i = 0
 var settings = {}
 var world_sun: DirectionalLight3D
+var _env: Environment
+var _gfx_base = {}
 var _shots_running = false
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
 
 func _ready() -> void:
 	_setup_input()
+	# the graphics preset has to be known before the world is built
+	settings = K.load_settings()
+	Gfx.setup(str(settings.get("graphics", "auto")), OS.get_cmdline_user_args())
 	_setup_environment()
 	cluster = Cluster.new()
 	add_child(cluster)
@@ -115,6 +122,7 @@ func _ready() -> void:
 		blueprint = bp
 		_set_mode(2))
 	hud.target_requested.connect(_connect_target)
+	hud.graphics_requested.connect(set_graphics)
 	cluster.targets_changed.connect(func():
 		world.set_targets(cluster.targets, cluster.backend.label, cluster.backend.context))
 
@@ -153,6 +161,12 @@ func _ready() -> void:
 			shots = a.trim_prefix("--shots=")
 		elif a == "--flyby":
 			flyby = true
+		elif a.begins_with("--bench="):
+			shots = "-"
+			Bench.run(self, a.trim_prefix("--bench="), Gfx.id_of(Gfx.level))
+		elif a.begins_with("--gfxshots="):
+			shots = "-"
+			_run_gfxshots(a.trim_prefix("--gfxshots="))
 		elif a == "--trailer":
 			shots = "-"
 			_run_trailer()
@@ -325,6 +339,21 @@ func _setup_environment() -> void:
 		sun.directional_shadow_max_distance = 120.0
 	world_sun = sun
 	add_child(sun)
+	# the shipped values are the Standard preset; the others are built on top of them
+	_env = env
+	_gfx_base = {"shadow_dist": sun.directional_shadow_max_distance, "ssao": env.ssao_intensity, "ambient": env.ambient_light_energy,
+		"glow": env.glow_intensity, "bloom": env.glow_bloom, "vfog": env.volumetric_fog_density, "contrast": env.adjustment_contrast}
+	Gfx.apply(env, sun, get_viewport(), _gfx_base)
+
+# Switch graphics preset while playing: renderer settings first, then the world
+# rebuilds its scenery and machines at the new detail level.
+func set_graphics(id: String) -> void:
+	settings["graphics"] = id
+	K.save_settings(settings)
+	Gfx.setup(id, OS.get_cmdline_user_args() if id == "auto" else [])
+	Gfx.apply(_env, world_sun, get_viewport(), _gfx_base)
+	world.rebuild_graphics(cluster.state)
+	hud.notify("Graphics: %s" % Gfx.NAMES[Gfx.level], "info")
 
 func _set_mode(m: int) -> void:
 	if m != mode:
@@ -598,6 +627,40 @@ func _shot(dir: String, name_: String) -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(dir.path_join(name_ + ".png"))
 	print("shot ", name_)
+
+# The same views under each graphics preset, switching live, then one panel on
+# each to show the interface does not depend on the preset.
+func _run_gfxshots(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	var views = [["spawn", Vector3(0, 0.4, 19), Vector3(0, 3.6, 0)], ["overview", Vector3(-52, 30, 6), Vector3(0, 2, -70)],
+		["platform", Vector3(6, 9, -30), Vector3(-30, 4, -62)], ["yard", Vector3(26, 7, 34), Vector3(60, 3, 26)],
+		["skyline", Vector3(0, 14, -40), Vector3(-20, 30, -470)]]
+	for lv in 3:
+		set_graphics(Gfx.id_of(lv))
+		await get_tree().create_timer(9.0 if lv == 0 else 7.0).timeout
+		player.flying = true
+		for v in views:
+			player.teleport(v[1], v[2])
+			await _shot(dir, "%d_%s_%s" % [lv, Gfx.id_of(lv), v[0]])
+		var m = world.machines.values()[0]
+		var c = m.get_parent().position + m.position
+		player.teleport(c + Vector3(5.5, 2.0, 7.5), c + Vector3(0, 2.4, 0))
+		await _shot(dir, "%d_%s_machine" % [lv, Gfx.id_of(lv)])
+		player.teleport(c + Vector3(-6.5, 3.0, -6.0), c + Vector3(0, 2.2, 0))
+		await _shot(dir, "%d_%s_machine_back" % [lv, Gfx.id_of(lv)])
+		hud.open_bob()
+		await get_tree().create_timer(1.3).timeout
+		await _shot(dir, "%d_%s_panel" % [lv, Gfx.id_of(lv)])
+		hud.open_graphics()
+		await _shot(dir, "%d_%s_menu" % [lv, Gfx.id_of(lv)])
+		hud.close_modal()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	set_graphics("standard")
+	get_tree().quit()
 
 # One shot of each handheld tool at rest, plus one mid wind-up, then quit.
 func _run_toolshots(dir: String) -> void:

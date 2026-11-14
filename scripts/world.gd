@@ -8,6 +8,8 @@ const K = preload("res://scripts/kutil.gd")
 const Tex = preload("res://scripts/tex.gd")
 const Platform = preload("res://scripts/platform.gd")
 const Machine = preload("res://scripts/machine.gd")
+const Gfx = preload("res://scripts/gfx.gd")
+const Scenery = preload("res://scripts/scenery.gd")
 
 const FRONT_Z = -46.0
 const YARD_Z = -22.0
@@ -90,6 +92,7 @@ var _select_size = Vector3.ZERO
 var _first = true
 var _source = ""
 var _t = 0.0
+var _scenery: Node3D = null
 
 func _ready() -> void:
 	_build_ground()
@@ -113,6 +116,42 @@ func _ready() -> void:
 		_select.add_child(e)
 	_select.visible = false
 	add_child(_select)
+	_rebuild_scenery()
+	if not Gfx.lite():
+		# big flat boards hide what is behind them from the renderer
+		for o in [[Vector3(9.0, 5.0, 0.3), Vector3(0, 4.6, 0)], [Vector3(7.2, 4.0, 4.0), Vector3(18.0, 2.3, -0.5)]]:
+			var occ = OccluderInstance3D.new()
+			var bo = BoxOccluder3D.new()
+			bo.size = o[0]
+			occ.occluder = bo
+			occ.position = o[1]
+			add_child(occ)
+
+# The preset's decorative layer (see scenery.gd): nothing on Standard.
+func _rebuild_scenery() -> void:
+	if _scenery != null:
+		_scenery.queue_free()
+		_scenery = null
+	if Gfx.detail() > 0:
+		_scenery = Scenery.build(Gfx.detail())
+		add_child(_scenery)
+
+# The graphics preset changed: restyle the shared materials, swap the scenery
+# layer, and rebuild platforms and machines at the new detail level. The
+# cluster state, the selection and every panel are untouched.
+func rebuild_graphics(st: Dictionary) -> void:
+	Tex.apply_detail()
+	_rebuild_scenery()
+	for m in machines.values():
+		m.queue_free()
+	machines.clear()
+	for pf in platforms.values():
+		pf.queue_free()
+	platforms.clear()
+	_belt_sig = ""
+	_first = true
+	if not st.is_empty() and st.has("nodes"):
+		apply_state(st)
 
 func _make_mm(size: Vector3, material: StandardMaterial3D) -> MultiMeshInstance3D:
 	var mm = MultiMesh.new()

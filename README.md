@@ -205,6 +205,46 @@ Other keys: WASD, Shift sprint, Space jump (double-tap for hoverpack, Ctrl to
 descend), E inspect, MMB copy a machine as blueprint, Tab cluster codex,
 L datapad, G jump to next problem, B belts, F11 fullscreen, Esc menu.
 
+## 🎨 Graphics presets
+
+Three presets on the same world, switched live from the pause menu
+(**Esc > Graphics**) or with `--gfx=standard|enhanced|ultra`. The game picks one
+for your hardware the first time and tells you why; "Automatic" keeps following
+that recommendation.
+
+| Preset | What you get | Meant for |
+|---|---|---|
+| **Standard** | the look the game has always had, drawn for less work than before | integrated and entry-level GPUs |
+| **Enhanced** | framed, riveted machines with ladders and cooling units; platform railings; concrete walkways, lit lamp posts, a perimeter fence, container stacks, tanks and pipe racks; finer shadows and anti-aliasing; surfaces that vary from dull to glossy | mid-range GPUs |
+| **Ultra** | all of Enhanced, plus global illumination, screen-space reflections, softer sun shadows, lit base strips and gauges on machines, platform floodlights, a gantry crane, low haze, and an industrial skyline: cooling towers and smokestacks breathing steam, factory halls, pylons | high-end GPUs |
+
+The rules they are built to:
+
+- **Standard is the floor.** Nothing is drawn below the shipped look on any
+  preset; the others only add to it. Colours, shapes and layout are the same
+  everywhere, so it is recognisably the same factory.
+- **One set of models and one code path.** A preset decides how much is layered
+  on top and how hard the renderer works. The extra detail is separate meshes
+  that drop out with distance.
+- **Graphics never limit management.** Every tool, panel, board and action is
+  built by code that does not look at the preset, and switching preset keeps
+  your connection, position and open work.
+- **The browser demo stays light.** It always runs its own lean path, whatever
+  preset is asked for.
+
+How the recommendation is made: the GPU's name and type, memory and CPU threads
+(`recommend()` in `scripts/gfx.gd`). Integrated or entry-level GPUs get Standard,
+mid-range discrete GPUs Enhanced, high-end ones Ultra, stepping down a level
+under 16 GB of memory or 8 threads.
+
+![Standard, Enhanced and Ultra side by side: spawn, overview, a platform, and the same panel on each](docs/presets.png)
+
+Close-ups of machines, the yard and the skyline are in
+[docs/presets-detail.png](docs/presets-detail.png).
+
+Measured against the last release in [docs/BENCHMARK.md](docs/BENCHMARK.md);
+`tools\bench.ps1` reruns it on your machine.
+
 ## 👥 Teams (multi-user)
 
 Several people can work on the same cluster at once, each with their own login.
@@ -354,6 +394,9 @@ them in `log-providers.json`:
     scripts/platform.gd         node platform        scripts/machine.gd   pod machine
     scripts/hud.gd              HUD, panels, datapad, Porter's and Bob's conversations
     scripts/viewmodel.gd        the first-person tool in your hand
+    scripts/gfx.gd              graphics presets and the hardware recommendation
+    scripts/scenery.gd          the Enhanced / Ultra industrial surroundings
+    scripts/bench.gd            the rendering benchmark (tools\bench.ps1 drives it)
     scripts/kutil.gd            shared helpers, Bob's diagnoses, sign text fitting
     scripts/bob.gd              Bob 2.0: log and event reading, its rules, bob.json
     scripts/cluster.gd          polling, actions, audit log

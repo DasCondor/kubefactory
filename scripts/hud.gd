@@ -4,11 +4,13 @@ extends CanvasLayer
 
 signal blueprint_chosen(bp)
 signal target_requested(target)
+signal graphics_requested(id)
 
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
 const Bob = preload("res://scripts/bob.gd")
 const DemoSim = preload("res://scripts/backend_demo.gd")
+const Gfx = preload("res://scripts/gfx.gd")
 const ORANGE = Color(0.98, 0.584, 0.286)
 const BG = Color(0.075, 0.085, 0.095, 0.95)
 const BG2 = Color(0.15, 0.16, 0.18, 1.0)
@@ -2045,6 +2047,50 @@ func open_welcome() -> void:
 		else:
 			close_modal(), "primary"))
 
+# ----- graphics presets (scripts/gfx.gd). They change how the world is drawn,
+# never what you can do in it.
+
+func open_graphics() -> void:
+	var body = _open_modal("graphics", null, "GRAPHICS", Vector2(820, 520))
+	var rec = Gfx.recommend()
+	var intro = _lbl("Three presets on the same world. Every tool, panel and action works identically on all of them; Standard is the look the game has always had and nothing is ever drawn below it.", 14, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 780
+	body.add_child(intro)
+	for lv in 3:
+		var active = Gfx.level == lv
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if active else Color(0, 0, 0, 0), 1 if active else 0, 10))
+		var r = _row(12)
+		var v = _col(2)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var head = _row(10)
+		head.add_child(_lbl(Gfx.NAMES[lv].to_upper(), 17, ORANGE if active else TXT))
+		if rec["level"] == lv:
+			head.add_child(_lbl("recommended for this machine", 12, K.health_color("ok")))
+		v.add_child(head)
+		v.add_child(_lbl(Gfx.BLURB[lv], 13, DIM))
+		r.add_child(v)
+		if active and Gfx.chosen != "auto":
+			r.add_child(_lbl("IN USE   ", 14, K.health_color("ok")))
+		else:
+			r.add_child(_btn("In use (automatic) - pin it" if active else "Use", func():
+				graphics_requested.emit(Gfx.id_of(lv))
+				open_graphics(), "primary" if not active else "normal"))
+		pc.add_child(r)
+		body.add_child(pc)
+	var auto = _row(10)
+	auto.add_child(_btn("Automatic: follow the recommendation", func():
+		graphics_requested.emit("auto")
+		open_graphics(), "normal", Gfx.chosen != "auto"))
+	auto.add_child(_spacer())
+	auto.add_child(_btn("Back", open_pause))
+	body.add_child(auto)
+	var hw = _lbl("Detected: %s%s. Changing preset rebuilds the scenery in place; the cluster connection, your position and open work are not affected." % [rec["gpu"], (" - " + rec["why"]) if rec["why"] != "" else ""], 12, DIM)
+	hw.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hw.custom_minimum_size.x = 780
+	body.add_child(hw)
+
 # ----- pause menu
 
 func open_pause() -> void:
@@ -2058,6 +2104,8 @@ func open_pause() -> void:
 		cluster.read_only = not cluster.read_only
 		on_state(cluster.state)
 		open_pause()))
+	if not Gfx.lite():
+		body.add_child(_btn("Graphics  (%s)" % (Gfx.NAMES[Gfx.level] + (", automatic" if Gfx.chosen == "auto" else "")), open_graphics))
 	body.add_child(_btn("Conveyor belts:  %s" % ("ON" if world.show_belts else "OFF"), func():
 		world.show_belts = not world.show_belts
 		world.apply_state(cluster.state)
