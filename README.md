@@ -35,7 +35,7 @@ homelab use.
 
 ## ✨ Why use it
 
-- 🛠️ **It manages the real thing.** Every action runs your own `kubectl` or `docker`, as you: logs, events, rolling restarts, scaling, cordon and drain, deleting pods and workloads, deploying and removing complete stacks. Nothing sits in between and no credentials are stored.
+- 🛠️ **It manages the real thing.** Every action goes to your cluster with your own kubeconfig, or to your own `docker`, as you: logs, events, rolling restarts, scaling, cordon and drain, deleting pods and workloads, deploying and removing complete stacks. Nothing sits in between and no credentials are stored.
 - 🏠 **Made for your own gear.** Point it at a homelab cluster, a cloud cluster or just Docker on your PC. Compose projects show up as namespaces, and Porter deploys ready-made stacks: a media server, a monitoring dashboard, WordPress, databases.
 - 🗺️ **See the whole cluster at a glance.** Nodes are platforms, pods are machines, services are conveyor belts. A failing pod throws a red light column you can see from anywhere.
 - 🔧 **Six tools, five tiers.** From a harmless scanner to the Mk.5 Demolisher. Stronger actions take a longer hold, and the worst ones make you type the target's name.
@@ -115,10 +115,63 @@ Command-line options go after `--`:
     KubeFactory.exe -- --context=<name>         a specific kubeconfig context
     KubeFactory.exe -- --read-only              look, don't touch
 
+    KubeFactory.exe -- --kubectl-cli            use kubectl instead of the built-in client
+
 With no options it connects to your current kube context, then Docker, then the
 simulation. `KubeFactory.console.exe` is the same game with a console window,
-for troubleshooting. `check-requirements.ps1` checks for kubectl and the
-optional cloud CLIs.
+for troubleshooting. `check-requirements.ps1` checks for the optional cloud CLIs.
+
+## 🔌 Connecting to a cluster (no kubectl needed)
+
+> **2.0 is in development.** Connecting and managing have been run against a
+> real Kubernetes API server, but not yet against a cluster that runs
+> containers or any cloud provider; storage inspection and LiveView are
+> verified against the simulation and a local test page only. See
+> [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+
+KubeFactory ships a small companion program, `kf-agent.exe`, that reads your
+kubeconfig and talks to the cluster itself. You do not need `kubectl`.
+
+Open the connection wizard from the cluster list (**Add or manage
+kubeconfigs...**), or just drop a kubeconfig file on the window. It:
+
+- finds `~/.kube/config` and anything in `KUBECONFIG`, and lists the contexts;
+- takes a file, a dropped file or pasted text (pasted text is kept in your user
+  folder, never in the game folder);
+- tells you how each context signs in (certificate, token, or a helper program)
+  without ever showing the secret;
+- asks before running a sign-in helper such as `aws` or `gke-gcloud-auth-plugin`.
+  Nothing named in a kubeconfig runs until you approve that exact command;
+- says what went wrong in plain words: cannot reach the server, certificate not
+  trusted, sign-in refused or expired, not permitted.
+
+## 🚪 Open a machine: storage inspection (key `F`)
+
+Machines that have a door open it. Inside are the pod's volumes as drawers.
+Pick one to browse it: folders, sizes, owners, and a preview of any file as
+text or hex, 64 KiB at a time.
+
+It is read-only and it stays inside the volume: no `..`, no following a
+symlinked folder out, and Secret and service-account volumes are never read.
+It uses the container's own `ls` and `head`, so an image without them
+(distroless) says "unsupported" rather than guessing. It never starts a helper
+pod and never mounts anything. A neighbouring machine in the way stops the door.
+
+## 📺 LiveView: the application's own page (key `V`)
+
+Point at a machine and press `V` to put its web page on the machine's screen,
+or open it in a window. It is the real page: your mouse and keyboard work, so
+you can use Grafana, Portainer or Sonarr from inside the factory.
+
+- Docker: published ports are offered straight away.
+- Kubernetes: Services are offered and reached through a private port-forward
+  on this computer only.
+- Simulated worlds have no real application behind them, so LiveView says so.
+  It never draws a stand-in picture.
+
+The page is drawn by the Edge or Chrome already on your computer, in a private
+profile that is deleted when you close the display. Links to other hosts are
+blocked. Up to four displays run at once; ones you walk away from slow down.
 
 The files next to the exe are yours to edit: `policy.json`, `catalogs.json`,
 `log-providers.json`, `portainer.json`, `bob.json` and the app setups in `apps\`.
@@ -157,7 +210,9 @@ run them from source with `play.bat --edition=docker` / `--edition=demo`.
 | Software | Needed for | Install |
 |---|---|---|
 | Godot 4.3 (portable, in `engine\`) | running the game | `tools\setup.ps1` downloads it |
-| kubectl | any real Kubernetes cluster | `winget install Kubernetes.kubectl` |
+| Go 1.25+ | building the companion from source (`tools\build-agent.ps1`; `-Fetch` gets a private copy) | `winget install GoLang.Go` |
+| Microsoft Edge or Google Chrome | LiveView | Edge ships with Windows |
+| kubectl | optional: only for `--kubectl-cli` and the admin commands in `docs/ADMIN.md` | `winget install Kubernetes.kubectl` |
 | Docker Desktop | local containers, dev cluster | `winget install Docker.DockerDesktop` |
 | kind | dev cluster in Docker | `winget install Kubernetes.kind` |
 | AWS CLI | EKS login, CloudWatch logs | `winget install Amazon.AWSCLI` |
@@ -400,11 +455,27 @@ them in `log-providers.json`:
     scripts/kutil.gd            shared helpers, Bob's diagnoses, sign text fitting
     scripts/bob.gd              Bob 2.0: log and event reading, its rules, bob.json
     scripts/cluster.gd          polling, actions, audit log
-    scripts/backend_kubectl.gd  real clusters        scripts/backend_docker.gd   Docker engine
+    agent/                      kf-agent: the native companion (Go): kubeconfig, Kubernetes client, files, LiveView
+    assets/                     the model library (141 models x 3 tiers) and its catalog
+    scripts/backend_native.gd   real clusters through kf-agent (default)
+    scripts/agent.gd            starts and talks to kf-agent      scripts/connections.gd  saved kubeconfig profiles
+    scripts/models.gd           model library loading, doors, screens
+    scripts/liveview.gd         LiveView sessions
+    scripts/backend_kubectl.gd  real clusters via kubectl (--kubectl-cli)   scripts/backend_docker.gd   Docker engine
     scripts/backend_demo.gd     simulated clusters   scripts/log_sources.gd      log providers
     scripts/apps.gd             Porter's setups, app lists, install ledger
     scripts/sfx.gd              synthesised sound    apps/                       bundled app setups
     tests/normalize_test.gd     parser test:  engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tests/normalize_test.gd
+
+More tests and checks:
+
+    powershell -ExecutionPolicy Bypass -File tools\build-agent.ps1 -Test                                          companion tests (Go)
+    powershell -ExecutionPolicy Bypass -File tools\live-test.ps1                                                  companion against a real, disposable kube-apiserver (no Docker)
+    engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tools/model_audit.gd                        audits every model, writes docs/MODEL_AUDIT.md
+
+Design and status documents: [ARCHITECTURE](docs/ARCHITECTURE.md),
+[FEATURE_PARITY](docs/FEATURE_PARITY.md), [KNOWN_LIMITATIONS](docs/KNOWN_LIMITATIONS.md),
+[MODEL_AUDIT](docs/MODEL_AUDIT.md), [CHANGELOG](docs/CHANGELOG.md).
 
 `play.bat --demo --shots=<folder>` runs an automated screenshot tour (dev aid).
 Against a real context or Docker engine it also deploys and removes throwaway
@@ -421,8 +492,9 @@ convert it with Windows' own encoder:
 
 ## 🔒 Security
 
-KubeFactory has no server and stores no credentials: it runs your own `kubectl`
-and `docker`, as you. Your cluster permissions are the security boundary; the
+KubeFactory has no server and no credentials of its own: it uses your
+kubeconfig and your `docker`, as you. (A kubeconfig you paste into the wizard is
+saved in your user folder; nothing else is kept.) Your cluster permissions are the security boundary; the
 in-game tiers and confirmations are guard rails. App lists are treated as
 untrusted input. See [SECURITY.md](docs/SECURITY.md) for the details and for how to
 report a problem.

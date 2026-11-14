@@ -154,11 +154,17 @@ func (s *session) mounts(ns, pod string) ([]mountInfo, error) {
 // guard checks that root is a real mount of this container and that p stays
 // inside it, then returns the cleaned absolute path and the mount.
 func (s *session) guard(a fileArgs) (string, *mountInfo, error) {
+	// the path is judged first, on its own: a request that leaves the volume is
+	// refused before the cluster is asked anything
+	root := path.Clean(a.Root)
+	full := path.Clean(path.Join(root, a.Path))
+	if strings.ContainsRune(a.Path, 0) || (full != root && !strings.HasPrefix(full, strings.TrimSuffix(root, "/")+"/")) {
+		return "", nil, fail("invalid", "that path is outside the mounted volume")
+	}
 	ms, err := s.mounts(a.Namespace, a.Pod)
 	if err != nil {
 		return "", nil, err
 	}
-	root := path.Clean(a.Root)
 	var m *mountInfo
 	for i := range ms {
 		if ms[i].Container == a.Container && ms[i].Path == root {
@@ -170,10 +176,6 @@ func (s *session) guard(a fileArgs) (string, *mountInfo, error) {
 	}
 	if !m.Running {
 		return "", nil, fail("unsupported", "container %s is not running, so its files cannot be read", a.Container)
-	}
-	full := path.Clean(path.Join(root, a.Path))
-	if strings.ContainsRune(a.Path, 0) || (full != root && !strings.HasPrefix(full, strings.TrimSuffix(root, "/")+"/")) {
-		return "", nil, fail("invalid", "that path is outside the mounted volume")
 	}
 	// no directory between the mount and the target may be a symlink
 	if full != root {

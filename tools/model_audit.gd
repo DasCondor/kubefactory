@@ -159,7 +159,7 @@ func _write(rows: Array, totals: Dictionary) -> void:
 	md.append("| Display clear | %d rays out of each LiveView glass, %d cm, against every other part's triangles | verified |" % [GRID.x * GRID.y, int(REACH * 100)])
 	md.append("| Same parts at every tier | part names compared with the standard tier | verified |")
 	md.append("| Solid parts pushed into each other | **not checked**: needs a look at each model | not tested |")
-	md.append("| Art standard (Porter V3) | krew and machines are V3; the other categories are V2 and used only as set dressing | by category, not measured |")
+	md.append("| Art standard (Porter V3) | krew and machines are V3; the other categories are V2 and are not placed in the world | by category, not measured |")
 	md.append("")
 	md.append("## Findings")
 	md.append("")
@@ -171,7 +171,7 @@ func _write(rows: Array, totals: Dictionary) -> void:
 		for r in rows:
 			md.append("| `%s` | %s | %s | %s | %s |" % r)
 	md.append("")
-	md.append("Models that reach below the ground are set dressing (props, storage) or Krew members the game does not place yet. Porter and Bob are stood on their lowest point, so the game is not affected; the files should still be corrected at the source.")
+	md.append("Models that reach below the ground are V2 models or Krew members the game does not place. Porter and Bob are stood on their lowest point, so the game is not affected; the files should still be corrected at the source.")
 	md.append("")
 	md.append("## Corrections applied at load")
 	md.append("")

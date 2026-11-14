@@ -9,9 +9,31 @@ the Esc menu).
 
 ## What KubeFactory can and cannot do
 
-KubeFactory has no server and no credentials of its own. It runs the `kubectl`
-and `docker` already on your machine, as you. It can do exactly what your own
-account can do, and nothing more.
+KubeFactory has no server and no credentials of its own. It talks to
+Kubernetes through its companion program (`kf-agent`, started by the game,
+using your kubeconfig) and to Docker through the `docker` already on your
+machine, as you. It can do exactly what your own account can do, and nothing
+more.
+
+- **Your kubeconfig is read, never copied out.** The companion reads it to
+  connect. Its contents are not written to any log, not shown in full in the
+  game, and not sent anywhere except, as credentials, to the cluster it names.
+  Pasted kubeconfig text is stored in your user folder only.
+- **Sign-in helpers need your approval.** A kubeconfig can name a program to
+  run for credentials. KubeFactory will not run it until you approve that
+  exact command for that profile, and never runs anything else an imported
+  file names.
+- **Storage inspection is read-only and confined.** It lists and reads files
+  inside a pod's mounted volumes using fixed commands in the pod's own
+  container. It refuses paths that leave the volume, never reads Secret or
+  service-account volumes, never creates a pod and never adds a mount. It
+  needs the `pods/exec` permission; without it you get "not permitted".
+  File previews are shown as text or hex and are never run or rendered as HTML.
+- **LiveView is a separate, disposable browser.** It uses the Edge or Chrome
+  on your machine, headless, in a profile created for that display and deleted
+  when it closes. It can only load the host you opened; everything else is
+  refused. It has no access to your own browser's cookies or saved passwords.
+  Port-forwards it uses listen on 127.0.0.1 only.
 
 - **Your cluster permissions are the security boundary.** The in-game tool
   tiers, protected namespaces and typed confirmations are guard rails against
@@ -25,8 +47,12 @@ account can do, and nothing more.
 
 ## How secrets are handled
 
-- KubeFactory stores no cluster credentials. Authentication is whatever your
-  kubeconfig and Docker setup already use.
+- Authentication is whatever your kubeconfig and Docker setup already use.
+  KubeFactory keeps a list of the kubeconfig files you added (their paths) in
+  `connections.json` in your user folder. If you paste kubeconfig text instead
+  of pointing at a file, that text is saved in the same folder, as plain text
+  like any kubeconfig: protect it the same way. Removing the profile in the
+  wizard deletes it.
 - Generated database passwords go straight into a Kubernetes Secret (via a
   short-lived temporary file, never the command line). On a plain Docker engine
   they are written to a per-project `.env` file in your user folder.
@@ -57,5 +83,6 @@ images you trust, as you would with `docker run`.
 
 The setup script and the build workflows verify the Godot engine and export
 templates against pinned SHA-512 checksums. Releases ship with a SHA-256
-checksum file. The Windows executable is not code-signed, so Windows
-SmartScreen will warn on first run.
+checksum file. Neither `KubeFactory.exe` nor `kf-agent.exe` is code-signed, so
+Windows SmartScreen will warn on first run. The companion's Go dependencies
+are pinned by `agent/go.sum`.
