@@ -306,7 +306,7 @@ func _ready() -> void:
 	_bp.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_root.add_child(_bp)
 
-	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · K Krew · B belts · F storage · V screen · R next view · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
+	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · K Krew · H Foreman · B belts · F storage · V screen · R next view · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
 	help.anchor_left = 0.0
 	help.anchor_right = 1.0
 	help.anchor_top = 1.0
@@ -3164,6 +3164,7 @@ func open_pause() -> void:
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
 	body.add_child(_btn("Krew operations  (K)", func(): open_krew()))
+	body.add_child(_btn("Foreman  (H)", func(): open_foreman()))
 	body.add_child(_btn("Gauge  (resource desk)", open_gauge))
 	body.add_child(_btn("Gauge in the world:  %s" % ("ON" if world._gauge.visible else "OFF"), func():
 		var show = not world._gauge.visible
@@ -3866,3 +3867,316 @@ func _krew_export(fmt: String) -> void:
 	f.store_string(krew.report_markdown() if fmt == "md" else krew.report_json())
 	f.close()
 	notify("Saved to " + path, "ok")
+
+# ----- Foreman: incidents, the shift brief, and questions to an AI provider
+#
+# Rules always work: incidents come from the Krew's findings. With a provider
+# chosen, a question goes out with a redacted summary the operator can read
+# first; what comes back is shown as text, and any action it proposes is
+# checked (foreman.gd) and offered as a button that runs through guarded_act.
+
+var foreman: Node = null           # set by main
+var _fm_question = ""
+var _fm_show_context = false
+var _fm_edit = {}                  # the provider form being edited
+var _fm_test = {}                  # provider id -> last test result
+var _fm_scroll: ScrollContainer = null
+
+func open_foreman() -> void:
+	if foreman == null:
+		return
+	var sc_keep = 0.0
+	if _modal_kind == "foreman" and is_instance_valid(_fm_scroll):
+		sc_keep = _fm_scroll.scroll_vertical
+	var body = _open_modal("foreman", "", "FOREMAN  //  OPERATIONS", Vector2(1260, 820))
+	var idn = foreman.identity()
+	var head = _row(10)
+	head.add_child(_lbl(str(idn["label"]).to_upper(), 16, idn["color"]))
+	var st = _lbl(foreman.status_line(), 13, K.health_color("bad") if foreman.status in ["offline", "unavailable"] else DIM)
+	st.clip_text = true
+	head.add_child(_fixed(st, 640))
+	head.add_child(_spacer())
+	if foreman.available():
+		var names = ["Rules only"]
+		var current = "Rules only"
+		for p in foreman.providers:
+			names.append(str(p["name"]))
+			if str(p["id"]) == foreman.active:
+				current = str(p["name"])
+		head.add_child(_pick(names, current, func(n):
+			var id = ""
+			for p in foreman.providers:
+				if str(p["name"]) == n:
+					id = str(p["id"])
+			foreman.select(id)
+			notify("Foreman now uses %s." % n, "info")))
+		head.add_child(_btn("AI providers...", open_foreman_providers))
+	head.add_child(_btn("Export incidents", func():
+		var path = cluster.log_dir.path_join("foreman-incidents-%s.md" % Time.get_datetime_string_from_system(false).replace(":", "").replace("-", "").replace("T", "-"))
+		var f = FileAccess.open(path, FileAccess.WRITE)
+		if f == null:
+			notify("Could not write " + path, "bad")
+			return
+		f.store_string(foreman.incidents_markdown())
+		f.close()
+		notify("Saved to " + path, "ok")))
+	body.add_child(head)
+	var brief = _lbl(foreman.brief(krew, cluster.state), 15, TXT)
+	brief.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	brief.custom_minimum_size.x = 1180
+	body.add_child(brief)
+	if foreman.status in ["offline", "unavailable"]:
+		var off = _row(8)
+		off.add_child(_lbl("%s is not answering. Foreman keeps working from rules; nothing is sent anywhere else." % foreman.provider().get("name", "The provider"), 13, K.health_color("warn")))
+		off.add_child(_btn("Use rules only", func(): foreman.select("")))
+		body.add_child(off)
+	# asking
+	var p = foreman.provider()
+	if not p.is_empty():
+		var ar = _row(8)
+		var q = LineEdit.new()
+		q.text = _fm_question
+		q.placeholder_text = "Ask Foreman, e.g.  why is checkout failing?   what can be cleaned up safely?"
+		q.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		q.text_changed.connect(func(v): _fm_question = v)
+		var go = func():
+			_fm_question = q.text
+			foreman.ask(q.text)
+		q.text_submitted.connect(func(_v): go.call())
+		ar.add_child(q)
+		if foreman.status == "asking":
+			ar.add_child(_btn("Cancel", func(): foreman.cancel()))
+		else:
+			ar.add_child(_btn("Ask", go, "primary", not cluster.state.is_empty()))
+		body.add_child(ar)
+		var ctx: String = foreman.build_context(cluster.state, krew)
+		var note = _row(8)
+		note.add_child(_lbl("Sends a redacted summary of this world (%d characters) and your question to %s%s. Nothing runs without your approval." % [ctx.length(), p["name"],
+			" on this computer" if p.get("local", false) else ", in the cloud"], 12, DIM))
+		note.add_child(_btn("Hide what is sent" if _fm_show_context else "Show what is sent", func():
+			_fm_show_context = not _fm_show_context
+			open_foreman()))
+		body.add_child(note)
+		if _fm_show_context:
+			var te = TextEdit.new()
+			te.text = ctx
+			te.editable = false
+			te.custom_minimum_size = Vector2(1180, 160)
+			body.add_child(te)
+	elif foreman.available():
+		body.add_child(_lbl("To ask in plain words, add an AI provider (a local Ollama or LM Studio, OpenAI, Claude, or your own endpoint). The incidents below need no AI.", 12, DIM))
+	else:
+		body.add_child(_lbl("This build has no companion, so Foreman works from rules only. AI providers need the desktop version.", 12, DIM))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(6)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	_fm_scroll = sc
+	(func(): if is_instance_valid(sc): sc.scroll_vertical = int(sc_keep)).call_deferred()
+	var last: Dictionary = foreman.last
+	if not last.is_empty():
+		list.add_child(_foreman_answer(last))
+	list.add_child(_lbl("INCIDENTS", 14, ORANGE))
+	var incs = foreman.incidents(krew)
+	if incs.is_empty():
+		list.add_child(_lbl("None open.", 14, DIM))
+	for inc in incs.slice(0, 60):
+		list.add_child(_foreman_incident(inc))
+	var u = foreman.usage
+	if u["requests"] > 0:
+		list.add_child(_lbl("This session: %d question%s, %d tokens in, %d out." % [u["requests"], "" if u["requests"] == 1 else "s", u["in"], u["out"]], 12, DIM))
+
+func _foreman_answer(last: Dictionary) -> Control:
+	var pc = PanelContainer.new()
+	pc.add_theme_stylebox_override("panel", _sb(BG2, foreman.identity()["color"], 1, 10))
+	var v = _col(6)
+	pc.add_child(v)
+	var ql = _lbl("You asked:  " + str(last["question"]), 13, DIM)
+	ql.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ql.custom_minimum_size.x = 1140
+	v.add_child(ql)
+	if foreman.status == "asking":
+		v.add_child(_lbl("%s is thinking..." % last.get("provider", "The provider"), 14, DIM))
+		return pc
+	if last.has("error"):
+		var el = _lbl(str(last["error"]), 14, K.health_color("bad"))
+		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		el.custom_minimum_size.x = 1140
+		v.add_child(el)
+		return pc
+	var al = _lbl(str(last["answer"]) if str(last["answer"]) != "" else "(no answer)", 15, TXT)
+	al.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	al.custom_minimum_size.x = 1140
+	v.add_child(al)
+	v.add_child(_lbl("%s · %s · %.1f s%s. An AI can be wrong: check before you approve." % [last.get("provider", ""), last.get("model", ""), float(last.get("ms", 0)) / 1000.0,
+		" · SIMULATED world" if str(cluster.state.get("source", "")) == "simulation" else ""], 11, DIM))
+	for a in last["actions"]:
+		var r = _row(8)
+		if a["ok"]:
+			var tier = K.tier_of(a["action"], cluster.state)
+			var allowed = not cluster.read_only and tier <= cluster.max_tier(str(a["action"].get("ns", ""))) and cluster.cap(str(a["action"]["op"]))
+			r.add_child(_btn(str(a["label"]), func():
+				guarded_act(a["action"], "%s?" % a["label"], str(a["action"].get("name", a["action"].get("node", "")))), "mk%d" % tier, allowed))
+			if not allowed:
+				r.add_child(_lbl("read-only mode is on" if cluster.read_only else ("above your tool tier here" if tier > cluster.max_tier(str(a["action"].get("ns", ""))) else "not supported by this source"), 12, DIM))
+		else:
+			r.add_child(_lbl("Not offered: %s (%s)" % [a["tool"] if a["tool"] != "" else "an action", a["reason"]], 13, K.health_color("warn")))
+		v.add_child(r)
+		var why = ("Why: " + str(a["why"]) if str(a["why"]) != "" else "") + ("    Risk: " + str(a["risk"]) if str(a["risk"]) != "" else "")
+		if why != "":
+			var wl = _lbl(why, 12, DIM)
+			wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			wl.custom_minimum_size.x = 1120
+			v.add_child(wl)
+	return pc
+
+func _foreman_incident(inc: Dictionary) -> Control:
+	var pc = PanelContainer.new()
+	var sb = _sb(BG2, SEV_COLORS.get(inc["severity"], DIM), 0, 8)
+	sb.border_width_left = 4
+	pc.add_theme_stylebox_override("panel", sb)
+	var r = _row(10)
+	pc.add_child(r)
+	r.add_child(_fixed(_lbl(str(inc["severity"]).to_upper(), 13, SEV_COLORS.get(inc["severity"], DIM)), 80))
+	r.add_child(_fixed(_lbl(str(inc["id"]), 12, DIM), 100))
+	var res = _lbl(str(inc["resource"]), 13)
+	res.clip_text = true
+	r.add_child(_fixed(res, 280))
+	var t = _lbl(str(inc["findings"][0]["title"]) + ("  (+%d more)" % (inc["findings"].size() - 1) if inc["findings"].size() > 1 else ""), 13)
+	t.clip_text = true
+	r.add_child(_fixed(t, 470))
+	r.add_child(_fixed(_lbl(", ".join(PackedStringArray(inc["workers"].map(func(w): return str(w).capitalize()))), 12, DIM), 150))
+	r.add_child(_btn("%d proposal%s" % [inc["proposals"].size(), "" if inc["proposals"].size() == 1 else "s"] if not inc["proposals"].is_empty() else "Details", func():
+		for f in inc["findings"]:
+			_krew_open[str(f["key"])] = true
+		open_krew(str(inc["workers"][0]) if inc["workers"].size() == 1 else "")))
+	return pc
+
+var _fm_sig = ""
+
+func on_foreman_changed() -> void:
+	if _modal_kind != "foreman" or foreman == null:
+		return
+	var sig = JSON.stringify([foreman.status, foreman.active, foreman.providers, foreman.last, foreman.incidents(krew).map(func(i): return [i["id"], i["severity"], i["findings"].size(), i["proposals"].size()]), cluster.read_only])
+	if sig != _fm_sig:
+		_fm_sig = sig
+		open_foreman()
+
+# --- the provider list and form
+
+func open_foreman_providers() -> void:
+	var body = _open_modal("foreman_providers", "", "FOREMAN  //  AI PROVIDERS", Vector2(1000, 780))
+	var intro = _lbl("Foreman works without AI. A provider adds answers in plain words. Keys are kept by the companion with this computer's per-user protection, never in the game's files, logs or screenshots. A provider on another computer receives nothing until you allow it below.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 940
+	body.add_child(intro)
+	for p in foreman.providers:
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, foreman.IDENTITIES.get(str(p["type"]), foreman.IDENTITIES[""])["color"], 1, 8))
+		var v = _col(4)
+		pc.add_child(v)
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(str(p["name"]), 14, TXT), 220))
+		var info = _lbl("%s  ·  %s  ·  %s%s" % [p["model"], p["base_url"], "this computer" if p["local"] else ("cloud, allowed" if p["cloud_ok"] else "cloud, NOT allowed yet"), "  ·  key saved" if p["has_key"] else ""], 12, DIM)
+		info.clip_text = true
+		r.add_child(_fixed(info, 470))
+		var id = str(p["id"])
+		r.add_child(_btn("Test", func():
+			_fm_test[id] = {"msg": "Testing..."}
+			open_foreman_providers()
+			foreman.test_provider(id, func(res):
+				_fm_test[id] = res
+				if _modal_kind == "foreman_providers":
+					open_foreman_providers())))
+		r.add_child(_btn("Edit", func():
+			_fm_edit = p.duplicate()
+			_fm_edit["key"] = ""
+			open_foreman_providers()))
+		r.add_child(_btn("Remove", func():
+			foreman.remove_provider(id, func(_res): open_foreman_providers())))
+		v.add_child(r)
+		if _fm_test.has(id):
+			var tr: Dictionary = _fm_test[id]
+			var txt = str(tr.get("msg", ""))
+			var col = DIM
+			if tr.has("ok"):
+				if tr["ok"]:
+					var models: Array = tr["data"].get("models", [])
+					txt = "Reached. %d models offered%s: %s" % [models.size(), "" if tr["data"].get("model_listed", false) else " (the chosen model is not among them)", ", ".join(PackedStringArray(models.slice(0, 12)))]
+					col = K.health_color("ok") if tr["data"].get("model_listed", false) else K.health_color("warn")
+				else:
+					txt = str(tr["msg"])
+					col = K.health_color("bad")
+			var tl = _lbl(txt, 12, col)
+			tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			tl.custom_minimum_size.x = 920
+			v.add_child(tl)
+		body.add_child(pc)
+	# the form
+	var e = _fm_edit
+	body.add_child(_lbl("EDIT PROVIDER" if e.has("id") else "ADD A PROVIDER", 14, ORANGE))
+	var types = ["ollama", "lmstudio", "openai", "claude", "custom"]
+	var tnames = types.map(func(t): return foreman.IDENTITIES[t]["label"])
+	if not e.has("type"):
+		e["type"] = "ollama"
+	var tr2 = _row(8)
+	tr2.add_child(_fixed(_lbl("Type", 13, DIM), 120))
+	tr2.add_child(_pick(tnames, foreman.IDENTITIES[e["type"]]["label"], func(n):
+		e["type"] = types[tnames.find(n)]
+		open_foreman_providers()))
+	body.add_child(tr2)
+	var hints = {"ollama": ["http://localhost:11434", "e.g. llama3.1"], "lmstudio": ["http://localhost:1234", "the model loaded in LM Studio"],
+		"openai": ["https://api.openai.com", "the model to use"], "claude": ["https://api.anthropic.com", "claude-opus-5-5"], "custom": ["https://your-endpoint (OpenAI-compatible)", "model name"]}
+	var field = func(label: String, key: String, hint: String, secret: bool = false):
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(label, 13, DIM), 120))
+		var le = LineEdit.new()
+		le.text = str(e.get(key, ""))
+		le.placeholder_text = hint
+		le.secret = secret
+		le.custom_minimum_size.x = 620
+		le.text_changed.connect(func(v): e[key] = v)
+		r.add_child(le)
+		body.add_child(r)
+	field.call("Name", "name", foreman.IDENTITIES[e["type"]]["label"])
+	field.call("Address", "base_url", hints[e["type"]][0])
+	field.call("Model", "model", hints[e["type"]][1])
+	field.call("API key", "key", "kept from before (type to replace)" if e.get("has_key", false) else ("required" if e["type"] in ["openai", "claude"] else "optional"), true)
+	# consent as buttons that say what is set: a tick box is too easy to miss
+	var toggle = func(key: String, on_text: String, off_text: String, note: String):
+		var r = _row(8)
+		var on = bool(e.get(key, false))
+		r.add_child(_btn(on_text if on else off_text, func():
+			e[key] = not bool(e.get(key, false))
+			open_foreman_providers(), "primary" if on else "normal"))
+		var nl = _lbl(note, 12, DIM)
+		nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		nl.custom_minimum_size.x = 640
+		r.add_child(nl)
+		body.add_child(r)
+	toggle.call("cloud_ok", "Cloud: ALLOWED", "Cloud: NOT ALLOWED", "A provider that is not on this computer receives nothing until this is allowed. Questions include a redacted summary of your infrastructure: names, states and the Krew's findings.")
+	toggle.call("allow_http", "Plain http: ALLOWED", "Plain http: NOT ALLOWED", "Only for another computer: the key and the questions would travel unencrypted. Not needed for this computer.")
+	var br = _row(8)
+	br.add_child(_btn("Save", func():
+		var args = {"id": str(e.get("id", "")), "type": e["type"], "name": str(e.get("name", "")), "base_url": str(e.get("base_url", "")), "model": str(e.get("model", "")),
+			"key": str(e.get("key", "")), "allow_http": bool(e.get("allow_http", false)), "cloud_ok": bool(e.get("cloud_ok", false))}
+		foreman.save_provider(args, func(res):
+			if res["ok"]:
+				_fm_edit = {}
+				notify("Saved %s." % res["data"].get("name", "the provider"), "ok")
+				if foreman.active == "":
+					foreman.select(str(res["data"]["id"]))
+			else:
+				notify(str(res["msg"]), "bad")
+			if _modal_kind == "foreman_providers":
+				open_foreman_providers()), "primary"))
+	if e.has("id"):
+		br.add_child(_btn("Cancel edit", func():
+			_fm_edit = {}
+			open_foreman_providers()))
+	br.add_child(_spacer())
+	br.add_child(_btn("Back to Foreman", open_foreman))
+	body.add_child(br)

@@ -82,8 +82,9 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Sentinel (security), Scout (network), Scrappy (cleanup) with stations | verified live: Docker (disposable privileged container with the socket mounted) and kind (privileged host-root pod, a Service selecting nothing); approved removals verified in simulation only |
 | | Archie (storage), Forge (build), Blueprint (architect) with stations | verified live on Docker with throw-away containers (database image without a volume, unnamed volume, Compose service with a stopped container); Forge's local-build check verified in simulation only, because Docker Desktop's containerd image store does not record image origin. Kubernetes in simulation and unit tests |
 | | Gauge forecasts and right-sizing; backups and restores (Archie); build analysis and publishing (Forge); Compose/YAML import and Terraform plans (Blueprint); incident coordination | unsupported |
-| 09 AI | Providers, action pipeline, tool registry, natural-language workflows | unsupported |
-| 09A Foreman | Provider-specific characters | unsupported (models shipped, not placed) |
+| 09 AI | Providers (Ollama, LM Studio, OpenAI, Claude, OpenAI-compatible), redacted bounded context, typed proposals checked against a tool registry and the state, approval through the guard rails | verified with a mock provider (agent unit tests for both API shapes; in-game test on both renderers). **Not tested** against any real provider |
+| | Read tools on demand, multi-step plans, streaming, cost limits beyond the per-request bounds, scheduled or autonomous actions | unsupported |
+| 09A Foreman | Six identities (rules, Ollama, LM Studio, OpenAI, Claude, custom) mapped to their models, drawn fallback in the browser build; rules-only incidents and brief | verified in simulation (both renderers) |
 | 10 Autonomy | Policy engine, self-healing, scheduling | unsupported |
 | 11 Security | No credentials in logs, Git or shipped files; browser demo isolated | verified by review and by two tests (`TestInspectListsContextsWithoutSecrets`, `TestBadKubeconfigErrorsDoNotEchoContents`) |
 | | Multiplayer beyond 1.0.1 presence | unsupported |

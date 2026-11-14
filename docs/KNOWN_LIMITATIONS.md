@@ -156,6 +156,14 @@ exactly that: the code exists and has not been run against the real thing.
   containers, overhead or resources outside the visible namespace. They are
   not runtime usage or a scheduling guarantee. Gauge does not forecast, perform
   right-sizing or make changes; actual Kubernetes metrics remain untested.
+- **Foreman's AI providers** were tested only against a mock provider
+  (OpenAI-compatible and Claude request shapes), not against a real Ollama,
+  LM Studio, OpenAI or Claude. One question at a time; no streaming, so a long
+  answer shows only when complete (120 s limit). The model sees a summary
+  chosen by the game (up to 60 workloads and unhealthy pods, 40 findings); it
+  cannot ask for logs or more detail. Redaction is pattern-based and can miss a
+  secret written in an unusual form. Incidents are grouped by resource only;
+  they are not kept after the game closes, apart from an export.
 - **Archie, Forge and Blueprint** report only; none of them changes anything.
   Archie judges software by its image name (a database, broker, cache...) and
   sees volumes only as the pod spec or `docker inspect` states them; it knows
@@ -198,7 +206,6 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Not implemented from the 2.0 handoff
 
-See `FEATURE_PARITY.md` for the full table. In short: most of the Krew workforce
-beyond Porter, Bob, Gauge, Sentinel, Scout and Scrappy, the AI providers and Foreman, the autonomy and policy engine,
+See `FEATURE_PARITY.md` for the full table. In short: the autonomy and policy engine,
 self-healing and scheduling, an in-game terminal, a bundled browser engine, a
 native Docker Engine client, and Linux or macOS builds.

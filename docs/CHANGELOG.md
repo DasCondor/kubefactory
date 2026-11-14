@@ -6,6 +6,13 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Foreman** (key `H`): correlates the Krew's findings into incidents and a
+  shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
+  Claude, any OpenAI-compatible endpoint) answer plain-language questions from
+  a redacted, bounded summary. Proposed actions are checked against a tool
+  registry and the current state and run only on approval. Keys are sealed by
+  the companion; a provider on another computer receives nothing until allowed.
+  Foreman's figure follows the chosen provider.
 - **Archie, Forge and Blueprint** join the Krew. Archie (storage): stateful
   software with no lasting storage, unnamed Docker volumes. Forge (build):
   images that exist only on this machine, idle build cache. Blueprint

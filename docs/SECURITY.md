@@ -81,6 +81,30 @@ screen), so it keeps details of your computer off the screen:
 - Changing a provider's address drops its saved token: a token belongs to the
   address it was entered for.
 
+## Foreman's AI providers
+
+- Off by default: Foreman works from rules alone, and the browser build has no
+  way to reach a provider.
+- API keys are handled like provider tokens: typed once, sealed by the
+  companion for your Windows account, never returned, logged or shown. An error
+  a provider sends back has the key removed before the game sees it.
+- A provider whose address is not this computer is a cloud provider. Nothing is
+  sent to it until you set **Cloud: ALLOWED** for that provider. Switching
+  providers never resends a question, and an outage never falls over to
+  another provider.
+- What is sent: the question and a summary the game builds (names, states,
+  counts and the Krew's findings), with passwords, tokens, keys, URL
+  credentials, private keys, long encoded strings and your home folder
+  removed. **Show what is sent** displays it. No logs, files, kubeconfig,
+  socket or credential is given to the model.
+- The model's reply is untrusted. It is told that the context is data, not
+  instructions, but the protection does not depend on that: a proposed action
+  must name a tool from a fixed list and a resource that exists, becomes the
+  game's own typed operation, and runs only when you press its button, through
+  the tiers, read-only mode and confirmation. There is no shell tool.
+- Bounded: 48 KiB per question, 8192 answer tokens, 120 s, 2 MiB reply, one
+  question at a time per provider, no retries, redirects not followed.
+
 ## How secrets are handled
 
 - Authentication is whatever your kubeconfig and Docker setup already use.

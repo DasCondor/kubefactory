@@ -284,6 +284,38 @@ are marked **SIMULATED**.
 ![Archie, Forge and Blueprint in the second row](docs/krew-second-row.png)
 ![All eight workers on the board](docs/krew-roster.png)
 
+### Foreman: incidents and plain-language questions (key `H`)
+
+Foreman supervises the Krew from the operations desk at the end of its row
+(or press `H`). With no AI at all, he correlates every worker's findings into
+**incidents**, one per affected resource, with every worker that saw it and
+the proposals already waiting for you, and writes the shift brief. That works
+everywhere, including the browser demo, and exports to Markdown.
+
+Optionally, choose an **AI provider** under **AI providers...**: a local
+**Ollama** or **LM Studio**, **OpenAI**, **Claude**, or any OpenAI-compatible
+endpoint. Then ask in plain words ("why is checkout failing?"). Foreman's figure
+changes to that provider's model.
+
+- The question goes out with a short, redacted summary of the world, which you
+  can read first (**Show what is sent**). Passwords, tokens, keys and your home
+  folder are stripped.
+- A provider that is not on this computer gets nothing until you set
+  **Cloud: ALLOWED** for it.
+- The answer is shown as text. Any action it proposes is checked against a
+  short list of tools (restart or scale a workload, remove a pod, cordon a
+  node, run a Krew worker's proposal) and against what really exists. Anything
+  else is refused and shown as refused. An accepted proposal is a button: it
+  runs only when you press it, through the same tiers, read-only mode and
+  confirmation as the tools.
+- Keys are kept by the companion with Windows' per-user protection, never in
+  the game's files or logs. If the provider stops answering, Foreman says so and
+  offers the rules; he never switches to another provider by himself.
+
+![Foreman's desk; his figure follows the chosen provider](docs/foreman-station.png)
+![An answer with one checked proposal and one refused (test provider, simulated world)](docs/foreman-answer.png)
+![Adding an AI provider](docs/foreman-providers.png)
+
 ### Tables
 
 Lists with columns (workloads, clusters, files in a volume, Grafana dashboards
