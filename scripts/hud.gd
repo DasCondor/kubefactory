@@ -12,6 +12,7 @@ const Apps = preload("res://scripts/apps.gd")
 const Bob = preload("res://scripts/bob.gd")
 const DemoSim = preload("res://scripts/backend_demo.gd")
 const Gfx = preload("res://scripts/gfx.gd")
+const Models = preload("res://scripts/models.gd")
 const Agent = preload("res://scripts/agent.gd")
 const Native = preload("res://scripts/backend_native.gd")
 const Connections = preload("res://scripts/connections.gd")
@@ -51,6 +52,10 @@ var _bp: Label
 var _prog: ColorRect
 var _prog_bg: ColorRect
 var _slots = []
+var _help: Label = null
+var touch: CanvasLayer = null     # the touch controls, when the browser demo is on a touch screen
+var touch_u = 0.0                 # their unit size while they are on; 0 = desktop
+
 var _notes: VBoxContainer
 var _mono: SystemFont
 var _who: Label
@@ -231,8 +236,8 @@ func _ready() -> void:
 	_target.anchor_right = 1.0
 	_target.anchor_top = 0.5
 	_target.anchor_bottom = 0.5
-	_target.offset_top = 40
-	_target.offset_bottom = 150
+	_target.offset_top = 200
+	_target.offset_bottom = 330
 	_target.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_target.add_theme_constant_override("outline_size", 6)
 	_target.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
@@ -292,7 +297,7 @@ func _ready() -> void:
 	_bp.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_root.add_child(_bp)
 
-	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · B belts · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
+	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · B belts · F storage · V screen · R next view · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
 	help.anchor_left = 0.0
 	help.anchor_right = 1.0
 	help.anchor_top = 1.0
@@ -300,6 +305,7 @@ func _ready() -> void:
 	help.offset_top = -26
 	help.offset_bottom = -6
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_help = help
 	help.add_theme_constant_override("outline_size", 4)
 	help.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	_root.add_child(help)
@@ -356,6 +362,85 @@ func refresh_who() -> void:
 				names.append("%s (%s)" % [p["user"], TOOLS[clampi(p["tool"], 0, TOOLS.size() - 1)]["name"].capitalize()])
 			txt += "\nONLINE  %d other%s:  %s" % [names.size(), "" if names.size() == 1 else "s", ",  ".join(PackedStringArray(names))]
 	_who.text = txt
+
+# Touch controls on or off: the keyboard ribbon and the key-number hotbar make way.
+func set_touch(on: bool, unit: float) -> void:
+	touch_u = unit if on else 0.0
+	if _help != null:
+		_help.visible = not on
+	for s in _slots:
+		s.get_parent().visible = not on
+	if _target != null:
+		_target.add_theme_font_size_override("font_size", int(clampf(unit * 0.26, 17, 60)) if on else 17)
+		_target.offset_top = unit * 0.6 if on else 200
+		_target.offset_bottom = unit * 1.9 if on else 330
+
+# ----- tables: click a column to sort by it, type to keep the rows that contain something
+#
+# One strip above a table: a CONTAINS box and the column headings as buttons.
+# First click sorts A-Z (or low to high), second click reverses, third goes
+# back to the order the rows came in. What you choose is remembered per table.
+
+var _tables = {}     # table key -> {col, desc, filter}
+
+func _table_state(key: String) -> Dictionary:
+	if not _tables.has(key):
+		_tables[key] = {"col": "", "desc": false, "filter": ""}
+	return _tables[key]
+
+# cols: [[id, title, width]]   refill: called when the sort or the filter changes
+func _table_head(key: String, cols: Array, refill: Callable, count: int = 0) -> Control:
+	var st = _table_state(key)
+	var v = _col(4)
+	var fr = _row(8)
+	fr.add_child(_lbl("CONTAINS", 12, DIM))
+	var e = LineEdit.new()
+	e.text = st["filter"]
+	e.placeholder_text = "show only rows containing..."
+	e.custom_minimum_size.x = 300
+	e.clear_button_enabled = true
+	fr.add_child(e)
+	if count >= K.TABLE_LIMIT:
+		e.editable = false
+		fr.add_child(_lbl("%d rows: too many to sort or filter here" % count, 12, K.health_color("warn")))
+	v.add_child(fr)
+	var hd = _row(10)
+	var buttons = []
+	var relabel = func():
+		for i in cols.size():
+			buttons[i].text = str(cols[i][1]) + (("  ▼" if st["desc"] else "  ▲") if st["col"] == cols[i][0] else "")
+			buttons[i].add_theme_color_override("font_color", ORANGE if st["col"] == cols[i][0] else DIM)
+	for c in cols:
+		var b = Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_font_size_override("font_size", 12)
+		b.tooltip_text = "Sort by this column"
+		b.disabled = count >= K.TABLE_LIMIT
+		b.pressed.connect(func():
+			if st["col"] != c[0]:
+				st["col"] = c[0]
+				st["desc"] = false
+			elif not st["desc"]:
+				st["desc"] = true
+			else:
+				st["col"] = ""
+				st["desc"] = false
+			relabel.call()
+			refill.call())
+		buttons.append(b)
+		hd.add_child(_fixed(b, c[2]))
+	relabel.call()
+	e.text_changed.connect(func(t):
+		st["filter"] = t
+		refill.call())
+	v.add_child(hd)
+	return v
+
+func _table_rows(key: String, rows: Array, getters: Dictionary) -> Array:
+	var st = _table_state(key)
+	return K.table_rows(rows, st["col"], st["desc"], st["filter"], getters)
 
 func set_target(text: String) -> void:
 	_target.text = text
@@ -440,6 +525,15 @@ func on_state(st: Dictionary) -> void:
 func modal_open() -> bool:
 	return _modal != null
 
+# On a touch screen a dialog is scaled to use the screen it has, so its buttons are as large as they can be.
+func _fit_modal(center: Control, panel: Control) -> void:
+	if not is_instance_valid(panel) or not is_instance_valid(center):
+		return
+	var vp = get_viewport().get_visible_rect().size
+	var s = minf(vp.x * 0.98 / maxf(panel.size.x, 1.0), vp.y * 0.97 / maxf(panel.size.y, 1.0))
+	center.pivot_offset = center.size * 0.5
+	center.scale = Vector2(s, s)
+
 func close_modal(recapture: bool = true) -> void:
 	if _modal != null:
 		_modal.queue_free()
@@ -451,7 +545,8 @@ func close_modal(recapture: bool = true) -> void:
 	_log_pick = null
 	if recapture:
 		player.enabled = true
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if not (touch != null and touch.active):       # touch never locks the pointer
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = false) -> VBoxContainer:
 	var was_pad = _modal_kind == "logs"
@@ -492,12 +587,18 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	var head = _row()
 	head.add_child(_lbl(title, 22, ORANGE))
 	head.add_child(_spacer())
-	head.add_child(_btn("  X  ", close_modal))
+	var xb = _btn("  X  ", close_modal)
+	if touch_u > 0.0:
+		xb.custom_minimum_size = Vector2(touch_u * 1.1, touch_u * 0.9)
+		xb.add_theme_font_size_override("font_size", int(touch_u * 0.3))
+	head.add_child(xb)
 	vb.add_child(head)
 	var body = _col(10)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(body)
 	add_child(_modal)
+	if touch_u > 0.0 and kind != "screen":
+		_fit_modal.call_deferred(center, panel)
 	if sfx != null and not (pad and was_pad):
 		sfx.play("pad" if pad else "click", -12.0)
 	player.enabled = false
@@ -806,10 +907,8 @@ func open_codex() -> void:
 	top.add_child(_spacer())
 	top.add_child(_lbl("The namespace filter also hides other namespaces' machines in the world.", 13, DIM))
 	body.add_child(top)
-	var hd = _row(10)
-	for c in [["KIND", 100], ["NAMESPACE", 130], ["WORKLOAD", 210], ["READY", 70], ["IMAGE", 270]]:
-		hd.add_child(_fixed(_lbl(c[0], 12, DIM), c[1]))
-	body.add_child(hd)
+	body.add_child(_table_head("codex", [["kind", "KIND", 100], ["ns", "NAMESPACE", 130], ["name", "WORKLOAD", 210], ["ready", "READY", 70], ["image", "IMAGE", 270]],
+		func(): _fill_codex(), cluster.state["workloads"].size()))
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sc.custom_minimum_size.y = 520
@@ -836,13 +935,16 @@ func _fill_codex() -> void:
 		if world.ns_filter == "" or w["ns"] == world.ns_filter:
 			rows.append(w)
 	rows.sort_custom(func(a, b): return a["ns"] + "/" + a["name"] < b["ns"] + "/" + b["name"])
+	var total = rows.size()
+	rows = _table_rows("codex", rows, {"kind": func(w): return w["kind"], "ns": func(w): return w["ns"], "name": func(w): return w["name"],
+		"ready": func(w): return float(w["ready"]) / maxf(float(w["replicas"]), 1.0), "image": func(w): return w["image"]})
 	var sig = JSON.stringify(rows) + str(cluster.read_only)
 	if sig == _dyn_sig:
 		return
 	_dyn_sig = sig
 	_clear(_dyn)
 	if rows.is_empty():
-		_dyn.add_child(_lbl("No workloads here yet. Press Q in the world to build one.", 15, DIM))
+		_dyn.add_child(_lbl("No workloads here yet. Press Q in the world to build one." if total == 0 else "No workload contains that.", 15, DIM))
 	for w in rows:
 		var pc = PanelContainer.new()
 		pc.add_theme_stylebox_override("panel", _sb(BG2, Color(0, 0, 0, 0), 0, 6))
@@ -969,9 +1071,19 @@ func open_clusters() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.add_child(list)
 	body.add_child(sc)
-	if cluster.targets.is_empty():
-		list.add_child(_lbl("Still looking for clusters...", 15, DIM))
-	for t in cluster.targets:
+	var cl_get = {"provider": func(t): return t["provider"], "source": func(t): return t["source"], "context": func(t): return t["context"], "profile": func(t): return str(t.get("profile_name", ""))}
+	var cl_fill = func():
+		_clear(list)
+		if cluster.targets.is_empty():
+			list.add_child(_lbl("Still looking for clusters...", 15, DIM))
+		for t in _table_rows("clusters", cluster.targets, cl_get):
+			list.add_child(_cluster_row(t))
+	body.add_child(_table_head("clusters", [["provider", "PROVIDER", 220], ["source", "SOURCE", 100], ["context", "CONTEXT", 300], ["profile", "KUBECONFIG", 140]], cl_fill, cluster.targets.size()))
+	body.move_child(body.get_child(body.get_child_count() - 1), sc.get_index())
+	cl_fill.call()
+
+func _cluster_row(t: Dictionary) -> Control:
+	if true:
 		var active = cluster.backend != null and t["source"] == cluster.backend.label and t["context"] == cluster.backend.context
 		var pc = PanelContainer.new()
 		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if active else Color(0, 0, 0, 0), 1 if active else 0, 6))
@@ -988,7 +1100,8 @@ func open_clusters() -> void:
 				close_modal()
 				target_requested.emit(t), "primary"))
 		pc.add_child(r)
-		list.add_child(pc)
+		return pc
+	return null
 
 # ----- storage: what is behind a machine's service door.
 # A read-only look at the pod's (or container's) mounted volumes: what is mounted
@@ -1135,6 +1248,15 @@ func open_liveview() -> void:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size.x = 930
 		list.add_child(l)
+		if demo_screens != null:
+			list.add_child(_lbl("DEMO SCREENS IN THIS WORLD", 13, ORANGE))
+			for ds in demo_screens.screens():
+				var r = _row(10)
+				r.add_child(_fixed(_lbl(str(ds["name"]), 14), 420))
+				r.add_child(_lbl("simulated dashboard" if ds["kind"] == "grafana" else "simulated stream activity", 12, DIM))
+				r.add_child(_spacer())
+				r.add_child(_btn("View", func(): open_screen(str(ds["uid"])), "primary"))
+				list.add_child(r)
 		return
 	var eps = live.endpoints(cluster.state, src)
 	if eps.is_empty():
@@ -1451,9 +1573,26 @@ func _fill_storage() -> void:
 	sc.add_child(rows)
 	right.add_child(sc)
 	var es = li.get("entries", [])
-	if es.is_empty():
-		rows.add_child(_lbl("This folder is empty.", 13, DIM))
-	for e in es:
+	var st_get = {"name": func(e): return e["name"], "size": func(e): return float(e["size"]) if e["type"] == "file" else -1.0, "mode": func(e): return str(e.get("mode", "")), "mtime": func(e): return str(e.get("mtime", ""))}
+	var st_fill = func():
+		_clear(rows)
+		var shown = _table_rows("storage", es, st_get)
+		if es.is_empty():
+			rows.add_child(_lbl("This folder is empty.", 13, DIM))
+		elif shown.is_empty():
+			rows.add_child(_lbl("Nothing in this folder contains that.", 13, DIM))
+		for e in shown:
+			rows.add_child(_storage_row(e, li))
+		if li.get("truncated", false):
+			rows.add_child(_lbl("Only the first 500 entries are listed.", 12, K.health_color("warn")))
+		if not li.get("readable", true):
+			rows.add_child(_lbl("Names only: the contents of this kind of volume are never shown.", 12, RED))
+	right.add_child(_table_head("storage", [["name", "NAME", 300], ["size", "SIZE", 110], ["mode", "MODE", 96], ["mtime", "CHANGED", 160]], st_fill, es.size()))
+	right.move_child(right.get_child(right.get_child_count() - 1), sc.get_index())
+	st_fill.call()
+
+func _storage_row(e: Dictionary, li: Dictionary) -> Control:
+	if true:
 		var r = _row(8)
 		var sub = (str(_store["path"]) + "/" + str(e["name"])).trim_prefix("/")
 		match str(e["type"]):
@@ -1470,11 +1609,8 @@ func _fill_storage() -> void:
 		r.add_child(_fixed(_lbl(K.fmt_bytes(float(e["size"])) if e["type"] == "file" else ("link, not followed" if e["type"] == "link" else ""), 12, DIM), 110))
 		r.add_child(_fixed(_lbl(str(e.get("mode", "")), 12, DIM), 96))
 		r.add_child(_lbl(str(e.get("mtime", "")), 12, DIM))
-		rows.add_child(r)
-	if li.get("truncated", false):
-		rows.add_child(_lbl("Only the first 500 entries are listed.", 12, K.health_color("warn")))
-	if not li.get("readable", true):
-		rows.add_child(_lbl("Names only: the contents of this kind of volume are never shown.", 12, RED))
+		return r
+	return null
 
 # ----- connecting a cluster from a kubeconfig, without kubectl (native companion)
 
@@ -2056,7 +2192,63 @@ func on_action(a: Dictionary, r: Dictionary) -> void:
 
 const BOB_COL = Color(1.0, 0.8, 0.45)
 
+# A Krew member's portrait as they now are: their own model from the library,
+# lit and slowly turning in a little viewport of its own. Returns null where the
+# library is not used (the browser build), and the drawn portrait is shown instead.
+func _krew_portrait(id: String, bg: Color, head: bool) -> Control:
+	if not Models.available():
+		return null
+	var model = Models.instance(id)
+	if model == null:
+		return null
+	var box = TextureRect.new()
+	box.custom_minimum_size = Vector2(210, 230)
+	box.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	box.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	var vp = SubViewport.new()
+	vp.size = Vector2i(420, 460)
+	vp.own_world_3d = true
+	vp.transparent_bg = false
+	vp.msaa_3d = Viewport.MSAA_4X
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	box.add_child(vp)
+	box.texture = vp.get_texture()
+	var env = Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = bg
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.75, 0.8, 0.9)
+	env.ambient_light_energy = 0.9
+	var we = WorldEnvironment.new()
+	we.environment = env
+	vp.add_child(we)
+	var sun = DirectionalLight3D.new()
+	sun.rotation = Vector3(-0.7, 0.6, 0)
+	sun.light_energy = 1.5
+	vp.add_child(sun)
+	var b: AABB = model.get_meta("bounds")
+	var pivot = Node3D.new()
+	vp.add_child(pivot)
+	model.position = Vector3(-b.get_center().x, 0, -b.get_center().z)     # it turns about its own middle
+	pivot.add_child(model)
+	var cam = Camera3D.new()
+	cam.fov = 32.0
+	# a head-and-shoulders view for a figure, the whole of it for a vehicle
+	var look = Vector3(0, b.position.y + b.size.y * (0.68 if head else 0.5), 0)
+	var dist = b.size.y * 1.25 if head else maxf(b.size.x, maxf(b.size.y, b.size.z)) * 1.55
+	var cam_at = look + Vector3(0.28, 0.12 if head else 0.3, 1.0).normalized() * dist
+	cam.transform = Transform3D(Basis.looking_at(look - cam_at), cam_at)      # set outright: the viewport is not in the tree yet
+	vp.add_child(cam)
+	var tw = pivot.create_tween().set_loops()
+	pivot.rotation.y = -0.45
+	tw.tween_property(pivot, "rotation:y", 0.45, 4.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(pivot, "rotation:y", -0.45, 4.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return box
+
 func _bob_portrait() -> Control:
+	var model_view = _krew_portrait("bob", Color(0.1, 0.085, 0.06), true)
+	if model_view != null:
+		return model_view
 	# an old hand drawn from rectangles: flat cap, white hair and moustache, glasses, green cardigan
 	var c = Control.new()
 	c.custom_minimum_size = Vector2(210, 230)
@@ -2200,7 +2392,7 @@ func open_bob_case(uid: String) -> void:
 	var left = _col(6)
 	left.add_child(_bob_portrait())
 	left.add_child(_lbl("BOB", 18, BOB_COL))
-	left.add_child(_lbl("Reading glasses on", 12, DIM))
+	left.add_child(_lbl("Reading the log", 12, DIM))
 	left.add_child(_spacer())
 	left.add_child(_btn("Back to the fix list", open_bob))
 	left.add_child(_btn("Open the full log", func(): open_pod(uid)))
@@ -2315,6 +2507,9 @@ func _portainer_installed() -> bool:
 	return false
 
 func _portrait() -> Control:
+	var model_view = _krew_portrait("porter", Color(0.05, 0.09, 0.11), false)
+	if model_view != null:
+		return model_view
 	# a little robot face drawn from rectangles: hard hat, visor, blue overalls
 	var c = Control.new()
 	c.custom_minimum_size = Vector2(210, 230)
@@ -2769,6 +2964,25 @@ func open_graphics() -> void:
 func open_pause() -> void:
 	var body = _open_modal("pause", null, "KUBEFACTORY  %s" % version, Vector2(480, 540))
 	body.add_child(_btn("Resume", close_modal, "primary"))
+	if touch != null:
+		body.add_child(_btn("Touch controls:  %s" % ("ON" if touch.allowed else "OFF"), func():
+			touch.set_allowed(not touch.allowed)
+			open_pause()))
+		if touch.active:
+			var sr = _row(8)
+			sr.add_child(_lbl("Look sensitivity  %d%%" % int(round(touch.sensitivity * 100.0)), 14))
+			sr.add_child(_spacer())
+			sr.add_child(_btn("  -  ", func():
+				touch.sensitivity = clampf(touch.sensitivity - 0.2, 0.4, 2.6)
+				open_pause()))
+			sr.add_child(_btn("  +  ", func():
+				touch.sensitivity = clampf(touch.sensitivity + 0.2, 0.4, 2.6)
+				open_pause()))
+			body.add_child(sr)
+			var th = _lbl("Left thumb: move.  Drag the view: look.  ACTION: what the crosshair offers (hold it for a tool's action).  JUMP twice: hoverpack.  AIM: face the nearest machine ahead.", 12, DIM)
+			th.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			th.custom_minimum_size.x = 440
+			body.add_child(th)
 	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
@@ -3013,18 +3227,26 @@ func open_grafana(p: Dictionary, query: String = "") -> void:
 			list.add_child(l)
 			return
 		var ds = r["data"].get("dashboards", [])
-		if ds.is_empty():
-			list.add_child(_lbl("No dashboard matches, or the token may not see any.", 14, DIM))
-		for d in ds:
-			var row = _row(8)
-			row.add_child(_fixed(_lbl(str(d["title"]), 15), 480))
-			row.add_child(_lbl(str(d.get("folder", "")), 12, DIM))
-			row.add_child(_spacer())
-			row.add_child(_btn("Panels", func(): open_grafana_panels(p, d)))
-			row.add_child(_btn("Open dashboard", func(): _grafana_open(p, d, 0, "", {}), "primary"))
-			list.add_child(row)
-		if bool(r["data"].get("more", false)):
-			list.add_child(_lbl("More than 100 match: narrow the search.", 12, DIM)))
+		var more = bool(r["data"].get("more", false))
+		var rows_box = _col(4)
+		var gd_fill = func():
+			_clear(rows_box)
+			var shown = _table_rows("grafana", ds, {"title": func(d): return d["title"], "folder": func(d): return str(d.get("folder", ""))})
+			if shown.is_empty():
+				rows_box.add_child(_lbl("No dashboard matches, or the token may not see any." if ds.is_empty() else "No dashboard here contains that.", 14, DIM))
+			for d in shown:
+				var row = _row(8)
+				row.add_child(_fixed(_lbl(str(d["title"]), 15), 480))
+				row.add_child(_fixed(_lbl(str(d.get("folder", "")), 12, DIM), 220))
+				row.add_child(_spacer())
+				row.add_child(_btn("Panels", func(): open_grafana_panels(p, d)))
+				row.add_child(_btn("Open dashboard", func(): _grafana_open(p, d, 0, "", {}), "primary"))
+				rows_box.add_child(row)
+			if more:
+				rows_box.add_child(_lbl("More than 100 match: narrow the search.", 12, DIM))
+		list.add_child(_table_head("grafana", [["title", "DASHBOARD", 480], ["folder", "FOLDER", 220]], gd_fill, ds.size()))
+		list.add_child(rows_box)
+		gd_fill.call())
 
 const GRAFANA_RANGES = [["the dashboard's own range", ""], ["last hour", "now-1h"], ["last 6 hours", "now-6h"], ["last 24 hours", "now-24h"], ["last 7 days", "now-7d"]]
 
@@ -3087,13 +3309,22 @@ func open_grafana_panels(p: Dictionary, dash: Dictionary) -> void:
 			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			l.custom_minimum_size.x = 940
 			list.add_child(l)
-		for pn in d.get("panels", []):
-			var row = _row(8)
-			row.add_child(_fixed(_lbl(str(pn["title"]) if str(pn["title"]) != "" else "(untitled panel %d)" % int(pn["id"]), 14), 480))
-			row.add_child(_lbl("%s%s" % [str(pn["type"]), ("   ·   " + str(pn["row"])) if str(pn.get("row", "")) != "" else ""], 12, DIM))
-			row.add_child(_spacer())
-			row.add_child(_btn("Open panel", func(): open.call(int(pn["id"]))))
-			list.add_child(row))
+		var pns: Array = d.get("panels", [])
+		var prow_box = _col(4)
+		var gp_fill = func():
+			_clear(prow_box)
+			for pn in _table_rows("grafana-panels", pns, {"title": func(x): return x["title"], "type": func(x): return x["type"], "row": func(x): return str(x.get("row", ""))}):
+				var row = _row(8)
+				row.add_child(_fixed(_lbl(str(pn["title"]) if str(pn["title"]) != "" else "(untitled panel %d)" % int(pn["id"]), 14), 480))
+				row.add_child(_fixed(_lbl(str(pn["type"]), 12, DIM), 140))
+				row.add_child(_fixed(_lbl(str(pn.get("row", "")), 12, DIM), 180))
+				row.add_child(_spacer())
+				row.add_child(_btn("Open panel", func(): open.call(int(pn["id"]))))
+				prow_box.add_child(row)
+		if not pns.is_empty():
+			list.add_child(_table_head("grafana-panels", [["title", "PANEL", 480], ["type", "TYPE", 140], ["row", "ROW", 180]], gp_fill, pns.size()))
+		list.add_child(prow_box)
+		gp_fill.call())
 
 func _grafana_open(p: Dictionary, dash: Dictionary, panel: int, from: String, vars: Dictionary) -> void:
 	var args = {"id": p["id"], "uid": dash["uid"], "panel": panel, "vars": vars}
@@ -3175,3 +3406,107 @@ func _tautulli_fill(r: Dictionary, p: Dictionary) -> void:
 					_tautulli_read(p), "primary", r["ok"]))
 			_dyn.add_child(row)
 		get_tree().create_timer(10.0).timeout.connect(_tautulli_tick.bind(p))
+
+# ----- a machine's screen, opened large (scripts/machine_screens.gd, demo_screens.gd)
+#
+# The same four views the screen itself steps through with R: the application's
+# dashboard, the pod's metrics, its log and its storage. Choosing one here
+# changes what the machine shows too.
+
+const Icons = preload("res://scripts/icons.gd")
+
+var demo_screens: Node = null     # set by main
+var screens: Node = null          # set by main
+
+# A button big enough for a finger, when the touch controls are on.
+func _touch_size(b: Button) -> Button:
+	if touch_u > 0.0:
+		b.custom_minimum_size = Vector2(touch_u * 1.7, touch_u * 0.9)
+		b.add_theme_font_size_override("font_size", int(touch_u * 0.27))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return b
+
+func open_demo_screen(uid: String) -> void:
+	open_screen(uid)
+
+func open_screen(uid: String) -> void:
+	var p = K.find_pod(cluster.state, uid)
+	if p == null or screens == null:
+		open_liveview()
+		return
+	var mode: String = screens.mode_of(uid)
+	var tvp = get_viewport().get_visible_rect().size
+	var body = _open_modal("screen", uid, "SCREEN  //  " + str(p["name"]), Vector2(1180, 860) if touch_u <= 0.0 else Vector2(maxf(tvp.x * 0.94, 600.0), maxf(tvp.y * 0.9, 500.0)))
+	var head = _row(10)
+	var ic = TextureRect.new()
+	ic.texture = Icons.texture(Icons.kind_of(p))
+	ic.custom_minimum_size = Vector2(36, 36)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	head.add_child(ic)
+	head.add_child(_lbl("%s   ·   %s   ·   %s" % [Icons.label_of(Icons.kind_of(p)), p["ns"], p["status"]], 13, DIM))
+	head.add_child(_spacer())
+	var tabs = head
+	if touch_u > 0.0:
+		# on a phone the tabs get a row of their own, each a full finger wide
+		body.add_child(head)
+		tabs = _row(int(touch_u * 0.2))
+	for m in screens.MODES:
+		tabs.add_child(_touch_size(_btn(str(screens.TITLES[m]), func():
+			screens.set_mode(uid, m)
+			open_screen(uid), "primary" if m == mode else "normal")))
+	body.add_child(tabs)
+	if mode != "dashboard":
+		var bar = _row(8)
+		bar.add_child(_lbl({"metrics": "This pod's own state, as the cluster reports it.", "logs": "The end of its log; it refreshes while this view is up.", "storage": "What is mounted into it."}[mode], 13, DIM))
+		bar.add_child(_spacer())
+		if mode == "logs":
+			bar.add_child(_btn("Open the full log", func(): open_logs(uid)))
+		elif mode == "storage":
+			bar.add_child(_btn("Browse the files", func(): storage_requested.emit(uid)))
+		elif mode == "metrics":
+			bar.add_child(_btn("Inspect", func(): open_pod(uid)))
+		body.add_child(bar)
+		var panel: Control = screens.make_panel(uid)
+		panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(tvp.x * 0.9, maxf(tvp.y * 0.9 - touch_u * 3.4, 300.0))
+		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		body.add_child(panel)
+		return
+	# the dashboard: whatever application page is on this screen
+	match screens.dashboard_kind(uid):
+		"demo":
+			var kind = ""
+			for ds in demo_screens.screens():
+				if ds["uid"] == uid:
+					kind = str(ds["kind"])
+			var bar = _row(8)
+			bar.add_child(_lbl("Demo content from this simulated cluster, not a real page.   VIEW", 13, DIM))
+			var views: Array = demo_screens.VIEWS[kind]
+			for i in views.size():
+				bar.add_child(_btn(str(views[i]), func():
+					demo_screens.set_view(uid, i)
+					open_screen(uid), "primary" if demo_screens.view_of(uid) == i else "normal"))
+			bar.add_child(_spacer())
+			bar.add_child(_btn("All LiveView", func(): open_liveview()))
+			body.add_child(bar)
+			var panel: Control = demo_screens.make_panel(uid)
+			panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(tvp.x * 0.9, maxf(tvp.y * 0.9 - touch_u * 3.4, 300.0))
+			panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			body.add_child(panel)
+		"live":
+			for s in live.sessions.values():
+				if str(s.get("mounted", "")) == uid:
+					open_live(s)       # the real page, with mouse and keyboard
+					return
+		"provider":
+			for pr in _prov_list:
+				if str(pr["id"]) == str(providers.pins[uid]["provider"]):
+					open_tautulli(pr)
+					return
+			open_providers()
+		_:
+			var l = _lbl("No application page is on this screen.\n\nLiveView puts a running application's own web page here, and a Grafana or Tautulli provider can pin its dashboard or activity. Until then the screen shows the pod's state.\n\nMetrics, Logs and Storage above work for every machine.", 15, DIM)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 1100
+			body.add_child(l)
+			body.add_child(_btn("Open LiveView", func(): open_liveview(), "primary"))

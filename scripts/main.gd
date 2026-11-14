@@ -14,6 +14,10 @@ const Cluster = preload("res://scripts/cluster.gd")
 const Connections = preload("res://scripts/connections.gd")
 const Providers = preload("res://scripts/providers.gd")
 const DemoScreens = preload("res://scripts/demo_screens.gd")
+const MachineScreens = preload("res://scripts/machine_screens.gd")
+const MobileControls = preload("res://scripts/mobile_controls.gd")
+const Models = preload("res://scripts/models.gd")
+const Icons = preload("res://scripts/icons.gd")
 const World = preload("res://scripts/world.gd")
 const Player = preload("res://scripts/player.gd")
 const Hud = preload("res://scripts/hud.gd")
@@ -70,6 +74,9 @@ var _storage_uid = ""        # the machine whose service door is open
 var live: Node
 var providers: Node
 var demo_screens: Node
+var screens: Node
+var touch: CanvasLayer = null      # touch controls (browser demo only)
+var _touch_forced = false          # --touch: show them on the desktop, for testing
 var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
 
@@ -96,6 +103,17 @@ func _ready() -> void:
 	hud.player = player
 	world.player = player
 	add_child(hud)
+	# touch controls exist only in the browser build (and under --touch, for testing)
+	_touch_forced = "--touch" in OS.get_cmdline_user_args()
+	if OS.has_feature("web") or _touch_forced:
+		touch = MobileControls.new()
+		touch.main = self
+		touch.hud = hud
+		touch.player = player
+		add_child(touch)
+		hud.touch = touch
+		if _touch_forced:
+			touch.set_active.call_deferred(true)
 
 	cluster.state_updated.connect(func(st):
 		world.apply_state(st)
@@ -156,6 +174,21 @@ func _ready() -> void:
 	demo_screens.live = live
 	demo_screens.providers = providers
 	add_child(demo_screens)
+	hud.demo_screens = demo_screens
+	# every machine's screen can step through dashboard, metrics, logs and storage
+	screens = MachineScreens.new()
+	screens.world = world
+	screens.cluster = cluster
+	screens.live = live
+	screens.providers = providers
+	screens.demo_screens = demo_screens
+	add_child(screens)
+	demo_screens.mode_screens = screens
+	hud.screens = screens
+	cluster.logs_ready.connect(screens.on_logs)
+	cluster.data_ready.connect(screens.on_data)
+	cluster.source_changed.connect(func(_l, _n): screens.clear())
+	cluster.state_updated.connect(func(st): screens.sync.call_deferred(st))
 	cluster.source_changed.connect(func(_l, _n): demo_screens.clear())
 	cluster.state_updated.connect(func(st):
 		if cluster.backend != null and cluster.backend.label == "simulation":
@@ -236,6 +269,12 @@ func _ready() -> void:
 			# --providershots=<dir>,<base url of tests/live/mock_providers.py>
 			shots = "-"
 			_run_providershots(a.trim_prefix("--providershots=").get_slice(",", 0), a.trim_prefix("--providershots=").get_slice(",", 1))
+		elif a.begins_with("--screenshots="):
+			shots = "-"
+			_run_screenshots(a.trim_prefix("--screenshots="))
+		elif a.begins_with("--touchshots="):
+			shots = "-"
+			_run_touchshots(a.trim_prefix("--touchshots="))
 		elif a.begins_with("--connectshots="):
 			shots = "-"
 			_run_connectshots(a.trim_prefix("--connectshots="))
@@ -330,6 +369,7 @@ func _setup_input() -> void:
 	_key("logs", [KEY_L])
 	_key("storage", [KEY_F])
 	_key("liveview", [KEY_V])
+	_key("screen_next", [KEY_R])
 	_key("mute", [KEY_M])
 	_key("fullscreen", [KEY_F11])
 	for pair in [["fire", MOUSE_BUTTON_LEFT], ["sample", MOUSE_BUTTON_MIDDLE]]:
@@ -543,16 +583,22 @@ func _process(delta: float) -> void:
 	var h = player.hit
 	var meta = h.get("meta", {})
 	var type = meta.get("type", "")
-	var hold = _hold_action(type, meta)
+	# the screen is for reading and opening: no tool acts through it, whatever is in hand
+	var hold = {} if _on_screen(meta) else _hold_action(type, meta)
 	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc", "bob"] else null,
 		K.tier_color(hud.TOOLS[mode]["mk"]) if not hold.is_empty() else Color(0.98, 0.584, 0.286))
 	if mode == 2 and blueprint != null and type == "platform":
 		world.show_hologram(h["pos"])
 	else:
 		world.hide_hologram()
-	hud.set_target(_tooltip(type, meta, hold))
+	if touch_on():
+		# no keyboard or mouse hints on a touch screen: the name and state only (the ACTION button says what it does)
+		var tip = _tooltip(type, meta, hold).split("\n")
+		hud.set_target("\n".join(tip.slice(0, mini(tip.size(), 2))))
+	else:
+		hud.set_target(("[LMB] open this screen     [R] next view: dashboard, metrics, logs, storage\n" if _on_screen(meta) else "") + _tooltip(type, meta, hold))
 	player.tool_readout(_tool_readout(type, meta, hold))
-	if not hold.is_empty() and Input.is_action_pressed("fire") and not _dis_lock and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or _shots_running):
+	if not hold.is_empty() and Input.is_action_pressed("fire") and not _dis_lock and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or _shots_running or touch_on()):
 		_dis += delta / hold["time"]
 		if _dis >= 1.0:
 			_dis = 0.0
@@ -596,6 +642,57 @@ func _tool_readout(type: String, meta: Dictionary, hold: Dictionary) -> String:
 	if not hold.is_empty():
 		return head + "\n" + target + "\n> " + str(hold["label"])
 	return head + "\n" + target
+
+func touch_on() -> bool:
+	return touch != null and touch.active
+
+# What the touch ACTION button would do right now, as its label ("" = nothing).
+func touch_action_label() -> String:
+	var meta = player.hit.get("meta", {})
+	var type = str(meta.get("type", ""))
+	if _on_screen(meta):
+		return "OPEN\nSCREEN"
+	var hold = _hold_action(type, meta)
+	if not hold.is_empty():
+		return "HOLD\n" + str(hold["label"]).left(18).to_upper()
+	if mode == 0 and type in ["pod", "node", "service", "hub", "logs", "npc", "bob", "cluster"]:
+		return "INSPECT"
+	if mode == 1:
+		return "LOGS"
+	if mode == 2 and blueprint != null and type == "platform":
+		return "BUILD"
+	return ""
+
+# AIM: turn to face the nearest machine roughly ahead. With nothing there, it does nothing:
+# it never picks a target for you to act on.
+func touch_aim() -> void:
+	var eye: Vector3 = player.camera.global_position
+	var fwd: Vector3 = -player.camera.global_transform.basis.z
+	var best = null
+	var best_d = 40.0
+	for m in world.machines.values():
+		var r = m.screen_rect()
+		var at: Vector3 = r["pos"] if not r.is_empty() else m.global_position + Vector3(0, 2.2, 0)
+		var to = at - eye
+		var d = to.length()
+		if d < best_d and d > 0.5 and fwd.dot(to / d) > 0.75:
+			best = at
+			best_d = d
+	if best != null:
+		player.teleport(player.global_position, best)
+
+# Is the crosshair on the screen of the machine it is pointing at?
+func _on_screen(meta: Dictionary) -> bool:
+	if meta.get("type", "") != "pod" or not player.hit.has("pos"):
+		return false
+	var m = world.machines.get(str(meta["uid"]))
+	if m == null:
+		return false
+	var r = m.screen_rect()
+	if r.is_empty():
+		return false
+	var d: Vector3 = player.hit["pos"] - r["pos"]
+	return absf(d.dot(r["right"])) <= r["size"].x * 0.5 and absf(d.dot(r["up"])) <= r["size"].y * 0.5 and absf(d.dot(r["normal"])) < 0.9
 
 func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 	var tool = hud.TOOLS[mode]
@@ -655,7 +752,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 		return
 	if hud.modal_open():
 		return
-	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not touch_on():
 		if ev is InputEventMouseButton and ev.pressed:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		return
@@ -685,7 +782,17 @@ func _unhandled_input(ev: InputEvent) -> void:
 	elif ev.is_action_pressed("interact"):
 		_interact()
 	elif ev.is_action_pressed("liveview"):
-		hud.open_liveview()
+		# V on a machine opens that machine's screen large; anywhere else, the LiveView list
+		var lmeta = player.hit.get("meta", {})
+		if lmeta.get("type", "") == "pod":
+			hud.open_screen(str(lmeta["uid"]))
+		else:
+			hud.open_liveview()
+	elif ev.is_action_pressed("screen_next"):
+		# R: the next view on the machine you are looking at
+		var rmeta = player.hit.get("meta", {})
+		if rmeta.get("type", "") == "pod":
+			hud.notify("Screen: " + screens.TITLES[screens.cycle(str(rmeta["uid"]))], "info")
 	elif ev.is_action_pressed("storage"):
 		var smeta = player.hit.get("meta", {})
 		if smeta.get("type", "") == "pod":
@@ -694,6 +801,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 		_sample()
 	elif ev.is_action_pressed("fire"):
 		var meta = player.hit.get("meta", {})
+		# a click on a machine's screen opens that screen large, whatever tool is in hand
+		if _on_screen(meta):
+			hud.open_screen(str(meta["uid"]))
+			return
 		if mode <= 2:
 			player.tool_kick(0.55)
 		if mode == 0:
@@ -867,6 +978,8 @@ func _run_krewshots(dir: String) -> void:
 	while world.machines.is_empty():
 		await get_tree().process_frame
 	await get_tree().create_timer(5.0).timeout
+	hud.close_modal()            # whatever was open when the run began
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	for v in [["porter_close", world._npc.position + Vector3(0.6, 0.1, 4.2), world._npc.position + Vector3(0, 1.5, 0)],
 			["porter_dock", world._npc.position + Vector3(-2, 0.4, 9), world._npc.position + Vector3(2, 2.0, 0)],
 			["bob_close", world._bob.position + Vector3(0.6, 0.1, 4.2), world._bob.position + Vector3(0, 1.3, 0)],
@@ -895,6 +1008,18 @@ func _run_krewshots(dir: String) -> void:
 				var c = world.machines[p["uid"]].global_position
 				player.teleport(c + Vector3(0.9, 1.3, 4.6), c + Vector3(0.5, 2.6, 0))
 				await _shot(dir, "demo_" + want)
+				player.teleport(c + Vector3(2.5, 0.9, 11.0), c + Vector3(0.5, 2.6, 0))
+				await _shot(dir, "demo_" + want + "_far")
+				hud.open_demo_screen(str(p["uid"]))
+				await get_tree().create_timer(0.8).timeout
+				await _shot(dir, "demo_" + want + "_window")
+				demo_screens.set_view(str(p["uid"]), 1)
+				hud.open_demo_screen(str(p["uid"]))
+				await get_tree().create_timer(0.8).timeout
+				await _shot(dir, "demo_" + want + "_window2")
+				hud.close_modal()
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+				demo_screens.set_view(str(p["uid"]), 0)
 				break
 	print("krew: machine models in this world: ", seen.keys())
 	get_tree().quit()
@@ -967,6 +1092,162 @@ func _run_providershots(dir: String, base: String) -> void:
 	print("prov: left after removal: ", r["data"]["providers"].size())
 	get_tree().quit()
 
+# The screen views, the click-to-open window and the icons, on both kinds of machine.
+func _run_screenshots(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	await get_tree().create_timer(6.0).timeout
+	hud.close_modal()            # whatever was open when the run began
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	player.flying = true
+	var pick = null
+	for p in cluster.state["pods"]:
+		if Models.image_name(str(p["containers"][0]["image"])) in ["postgres", "plex", "pms-docker"] and world.machines.has(p["uid"]):
+			pick = p
+			break
+	if pick == null:
+		pick = cluster.state["pods"][0]
+	var m = world.machines[pick["uid"]]
+	var r = m.screen_rect()
+	player.teleport(r["pos"] + r["normal"] * 4.2 + Vector3(0.5, -1.55, 0), r["pos"])
+	await get_tree().create_timer(0.6).timeout
+	print("screens: aiming at the screen -> on_screen=", _on_screen(player.hit.get("meta", {})), "  icon=", Icons.kind_of(pick))
+	await _shot(dir, "scr_0_dashboard")
+	for i in 3:
+		var mode = screens.cycle(m.uid)
+		await get_tree().create_timer(2.5).timeout
+		print("screens: view ", mode, " rows=", screens.rows_of(m.uid).size(), " first=", str(screens.rows_of(m.uid)[0][0]).left(60))
+		await _shot(dir, "scr_%d_%s" % [i + 1, mode])
+	hud.open_screen(m.uid)
+	await get_tree().create_timer(0.8).timeout
+	await _shot(dir, "scr_4_window_storage")
+	screens.set_mode(m.uid, "logs")
+	hud.open_screen(m.uid)
+	await get_tree().create_timer(2.5).timeout
+	await _shot(dir, "scr_5_window_logs")
+	screens.set_mode(m.uid, "dashboard")
+	hud.open_screen(m.uid)
+	await get_tree().create_timer(0.8).timeout
+	await _shot(dir, "scr_6_window_dashboard")
+	hud.close_modal()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	print("screens: back on dashboard -> holds=", screens.holds(m.uid), " kind=", screens.dashboard_kind(m.uid))
+	player.teleport(m.global_position + Vector3(2.8, 1.0, 9.5), m.global_position + Vector3(0, 2.4, 0))
+	await _shot(dir, "scr_7_row")
+	get_tree().quit()
+
+# The touch controls, driven by real touch events (run with --touch).
+func _run_touchshots(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	await get_tree().create_timer(6.0).timeout
+	hud.close_modal()
+	var touch_ev = func(idx: int, pos: Vector2, down: bool):
+		var e = InputEventScreenTouch.new()
+		e.index = idx
+		e.position = pos * touch._css      # events arrive in window pixels
+		e.pressed = down
+		Input.parse_input_event(e)
+	var drag_ev = func(idx: int, pos: Vector2, rel: Vector2):
+		var e = InputEventScreenDrag.new()
+		e.index = idx
+		e.position = pos * touch._css
+		e.relative = rel * touch._css
+		Input.parse_input_event(e)
+	var wait = func(n: int):
+		for i in n:
+			await get_tree().process_frame
+	print("touch: active=", touch.active, " unit=", int(touch._u), " css px per unit=", int(round(touch._u * touch._css)), " mouse captured=", Input.mouse_mode == Input.MOUSE_MODE_CAPTURED)
+	await _shot(dir, "touch_1_idle")
+	# left thumb: push the stick up and right
+	var st: Vector2 = touch._stick_at
+	touch_ev.call(0, st, true)
+	drag_ev.call(0, st + Vector2(touch._u * 0.9, -touch._u * 1.0), Vector2.ZERO)
+	await wait.call(3)
+	var v1 = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	# right thumb: drag the view while still moving
+	var yaw0 = player.rotation.y
+	var vp = get_viewport().get_visible_rect().size
+	touch_ev.call(1, vp * Vector2(0.6, 0.4), true)
+	drag_ev.call(1, vp * Vector2(0.6, 0.4) + Vector2(60, 0), Vector2(60, 0))
+	await wait.call(3)
+	print("touch: stick -> move vector ", v1.snapped(Vector2(0.01, 0.01)), "  look drag turned the view: ", absf(player.rotation.y - yaw0) > 0.01, "  still moving: ", Input.get_vector("move_left", "move_right", "move_forward", "move_back").length() > 0.3)
+	await _shot(dir, "touch_2_two_thumbs")
+	touch_ev.call(0, st, false)      # lift the left thumb only
+	await wait.call(3)
+	var yaw1 = player.rotation.y
+	drag_ev.call(1, vp * Vector2(0.6, 0.4) + Vector2(120, 0), Vector2(60, 0))
+	await wait.call(3)
+	print("touch: left thumb lifted -> stopped: ", Input.get_vector("move_left", "move_right", "move_forward", "move_back").length() < 0.01, "  right thumb still looks: ", absf(player.rotation.y - yaw1) > 0.01)
+	touch_ev.call(1, vp * Vector2(0.6, 0.4), false)
+	# a small push inside the dead zone does nothing
+	touch_ev.call(0, st, true)
+	drag_ev.call(0, st + Vector2(touch._u * 0.1, 0), Vector2.ZERO)
+	await wait.call(3)
+	print("touch: inside the dead zone -> ", Input.get_vector("move_left", "move_right", "move_forward", "move_back").length() < 0.01)
+	touch_ev.call(0, st, false)
+	# choosing a destructive tool does nothing by itself
+	var before = cluster.state["pods"].size()
+	var bar3: Rect2 = touch._buttons["bar3"]["rect"]
+	touch_ev.call(0, bar3.get_center(), true)
+	touch_ev.call(0, bar3.get_center(), false)
+	await wait.call(3)
+	await _shot(dir, "touch_3_all_tools")
+	var t5: Rect2 = touch._buttons["tool5"]["rect"]
+	touch_ev.call(0, t5.get_center(), true)
+	touch_ev.call(0, t5.get_center(), false)
+	await wait.call(3)
+	print("touch: picked tool ", mode + 1, " (", hud.TOOLS[mode]["name"], ")  modal opened: ", hud.modal_open(), "  pods unchanged: ", cluster.state["pods"].size() == before)
+	# aim at a machine's screen: ACTION opens it, even with the Demolisher in hand, and nothing is destroyed
+	var pick = null
+	for p in cluster.state["pods"]:
+		if world.machines.has(p["uid"]) and not world.machines[p["uid"]].screen_rect().is_empty():
+			pick = p
+			break
+	var r = world.machines[pick["uid"]].screen_rect()
+	player.flying = true
+	player.teleport(r["pos"] + r["normal"] * 4.0 + Vector3(0, -1.55, 0), r["pos"])
+	await get_tree().create_timer(0.6).timeout
+	player.look_by(Vector2.ZERO)
+	print("touch: on a screen -> action label '", touch_action_label().replace("\n", " "), "'")
+	await _shot(dir, "touch_4_at_screen")
+	var act: Rect2 = touch._buttons["action"]["rect"]
+	touch_ev.call(0, st, true)                    # a movement finger is down while the action is tapped
+	drag_ev.call(0, st + Vector2(0, -touch._u), Vector2.ZERO)
+	touch_ev.call(1, act.get_center(), true)
+	await wait.call(3)
+	touch_ev.call(1, act.get_center(), false)
+	await wait.call(6)
+	print("touch: ACTION on a screen opened '", hud._modal_kind, "'  movement cleared: ", Input.get_vector("move_left", "move_right", "move_forward", "move_back").length() < 0.01,
+		"  fire released: ", not Input.is_action_pressed("fire"), "  pods unchanged: ", cluster.state["pods"].size() == before)
+	await get_tree().create_timer(0.8).timeout
+	await _shot(dir, "touch_5_screen_open")
+	screens.set_mode(pick["uid"], "metrics")
+	hud.open_screen(pick["uid"])
+	await get_tree().create_timer(6.5).timeout
+	await _shot(dir, "touch_6_screen_metrics")
+	screens.set_mode(pick["uid"], "dashboard")
+	hud.close_modal()
+	await wait.call(3)
+	print("touch: after closing -> controls back: ", touch._pad.visible, "  mouse captured: ", Input.mouse_mode == Input.MOUSE_MODE_CAPTURED, "  player enabled: ", player.enabled)
+	# the menu, and switching the controls off
+	var mb: Rect2 = touch._buttons["menu"]["rect"]
+	touch_ev.call(0, mb.get_center(), true)
+	touch_ev.call(0, mb.get_center(), false)
+	await wait.call(6)
+	await _shot(dir, "touch_7_menu")
+	print("touch: menu opened '", hud._modal_kind, "'")
+	hud.close_modal()
+	touch.set_allowed(false)
+	await wait.call(3)
+	print("touch: switched off -> active=", touch.active, "  keyboard ribbon back: ", hud._help.visible)
+	get_tree().quit()
+
 func _run_storageshots(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	_shots_running = true
@@ -974,6 +1255,8 @@ func _run_storageshots(dir: String) -> void:
 	while world.machines.is_empty():
 		await get_tree().process_frame
 	await get_tree().create_timer(7.0).timeout
+	hud.close_modal()            # whatever was open when the run began
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var picks = {}
 	for m in world.machines.values():
 		if m.has_door() and not picks.has(m.model_id) and m.pod["health"] == "ok":

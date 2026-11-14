@@ -190,6 +190,61 @@ line2\" injected: true"]])
 	check.call("simulated streams always add up", consistent, true)
 	var fg = DS.cluster_figures({"nodes": [{"name": "a", "cpu": 8.0, "cpu_req": 2.0, "mem": 16.0, "mem_req": 12.0}], "pods": [{"health": "ok"}, {"health": "bad"}, {"health": "warn"}, {"health": "done"}]})
 	check.call("dashboard figures come from the simulated cluster", "%.2f %.2f %d %d %d" % [fg["cpu"], fg["mem"], fg["running"], fg["pending"], fg["failing"]], "0.25 0.75 2 1 1")
+	# ---- application icons and screen views
+	var Ic = load("res://scripts/icons.gd")
+	check.call("icon kind by image", Ic.kind_of({"containers": [{"image": "postgres:16"}]}) + " " + Ic.kind_of({"containers": [{"image": "plexinc/pms-docker"}]}) + " " + Ic.kind_of({"containers": [{"image": "linuxserver/sonarr"}]}) + " " + Ic.kind_of({"containers": [{"image": "registry.k8s.io/coredns/coredns:v1"}]}) + " " + Ic.kind_of({"containers": [{"image": "example/thing"}]}), "database media download network app")
+	var drawn = true
+	for ik in Ic.KINDS:
+		var tx = Ic.texture(ik)
+		drawn = drawn and tx != null and tx.get_width() == 64 and tx.get_image().get_pixel(32, 4).a > 0.9 and tx.get_image().get_pixel(1, 1).a < 0.1
+	check.call("every icon draws: a tile with clear corners", drawn, true)
+	var MS = load("res://scripts/machine_screens.gd")
+	var mrows = MS.metrics_rows({"status": "Running", "health": "ok", "ns": "shop", "node": "n1", "wkind": "Deployment", "wname": "cart", "restarts": 3, "created": 0.0, "ip": "10.0.0.4",
+		"containers": [{"name": "cart", "state": "running", "ready": true, "reason": "", "restarts": 3}, {"name": "sidecar", "state": "waiting", "ready": false, "reason": "CrashLoopBackOff", "restarts": 0}]})
+	var mtext = ""
+	for mr in mrows:
+		mtext += str(mr[0]) + "|"
+	check.call("metrics view lists the pod and each container", mtext.contains("Running   ·   shop   ·   n1|") and mtext.contains("owner Deployment/cart   ·   restarts 3") and mtext.contains("cart  running  x3") and mtext.contains("sidecar  CrashLoopBackOff"), true)
+	# usage: a cluster that reports CPU and memory only
+	var uk = MS.add_usage({}, {"ok": true, "data": {"cpu_cores": 0.42, "mem_bytes": 268435456.0, "source": "metrics.k8s.io"}}, 10.0)
+	uk = MS.add_usage(uk, {"ok": true, "data": {"cpu_cores": 1.5, "mem_bytes": 268435456.0, "source": "metrics.k8s.io"}}, 15.0)
+	var tk = MS.usage_tiles(uk)
+	check.call("usage: cpu and memory from the metrics API", tk[0]["value"] + " | " + tk[1]["value"] + " | " + str(tk[0]["values"].size()), "1.50 cores | 256.0 MiB | 2")
+	check.call("usage: network is unavailable there, and says why", tk[2]["value"] + " | " + tk[2]["note"], "unavailable | not reported by the cluster's metrics API")
+	check.call("millicores", MS.fmt_cpu(0.42), "420 m")
+	# usage: totals become rates only with a second reading
+	var ud = MS.add_usage({}, {"ok": true, "data": {"cpu_cores": 0.1, "mem_bytes": 1048576.0, "net_rx_bytes": 1000.0, "net_tx_bytes": 0.0, "disk_read_bytes": 0.0, "disk_write_bytes": 0.0, "source": "docker stats"}}, 100.0)
+	check.call("usage: one reading of a total is not a rate yet", MS.usage_tiles(ud)[2]["value"], "measuring...")
+	ud = MS.add_usage(ud, {"ok": true, "data": {"cpu_cores": 0.1, "mem_bytes": 1048576.0, "net_rx_bytes": 11240.0, "net_tx_bytes": 5120.0, "disk_read_bytes": 0.0, "disk_write_bytes": 0.0, "source": "docker stats"}}, 105.0)
+	check.call("usage: rate from two totals", MS.usage_tiles(ud)[2]["value"] + " | " + MS.usage_tiles(ud)[3]["value"], "3.0 KiB/s | 0 B/s")
+	# usage: a refusal is shown, and nothing is put in its place
+	var uf = MS.add_usage({}, {"ok": false, "msg": "no usage figures for this pod"}, 1.0)
+	check.call("usage: refused -> unavailable on every tile", [MS.usage_tiles(uf)[0]["value"], MS.usage_tiles(uf)[1]["value"], MS.usage_tiles(uf)[2]["value"], uf["error"]], ["unavailable", "unavailable", "unavailable", "no usage figures for this pod"])
+	check.call("storage view: nothing mounted", MS.storage_rows([])[0][0], "Nothing is mounted into this workload.")
+	check.call("storage view: a refusal is shown as such", MS.storage_rows("not permitted")[0][0], "not permitted")
+	var srows = MS.storage_rows([{"path": "/var/lib/data", "type": "pvc", "claim": "data-0", "read_only": false, "readable": true}, {"path": "/var/run/secrets", "type": "projected", "claim": "", "read_only": true, "readable": false}])
+	check.call("storage view: mounts, with what is never shown", srows[1][0].strip_edges() + " / " + srows[3][0].strip_edges(), "data-0 / projected   read-only   contents never shown")
+	check.call("four views in order", MS.MODES, ["dashboard", "metrics", "logs", "storage"])
+	# ---- tables: contains and sort by column
+	var trows = [{"n": "web", "r": 3, "i": "nginx:1.27"}, {"n": "Cart", "r": 12, "i": "shop/cart"}, {"n": "api", "r": 2, "i": "shop/api"}, {"n": "db", "r": 12, "i": "postgres:16"}]
+	var tget = {"n": func(x): return x["n"], "r": func(x): return x["r"], "i": func(x): return x["i"]}
+	var tnames = func(a): return ",".join(a.map(func(x): return x["n"]))
+	check.call("table: untouched without a sort or a filter", tnames.call(K.table_rows(trows, "", false, "", tget)), "web,Cart,api,db")
+	check.call("table: text sorts without regard to case", tnames.call(K.table_rows(trows, "n", false, "", tget)), "api,Cart,db,web")
+	check.call("table: numbers sort as numbers, ties keep their order", tnames.call(K.table_rows(trows, "r", false, "", tget)), "api,web,Cart,db")
+	check.call("table: reversed", tnames.call(K.table_rows(trows, "r", true, "", tget)), "Cart,db,web,api")
+	check.call("table: contains looks in every column, any case", tnames.call(K.table_rows(trows, "", false, "SHOP", tget)), "Cart,api")
+	check.call("table: contains then sort", tnames.call(K.table_rows(trows, "n", true, "1", tget)), "web,db,Cart")
+	check.call("table: nothing contains it", K.table_rows(trows, "n", false, "zzz", tget).size(), 0)
+	var big = []
+	for bi in K.TABLE_LIMIT:
+		big.append({"n": str(K.TABLE_LIMIT - bi), "r": bi, "i": ""})
+	check.call("table: 10000 rows are handed back untouched", K.table_rows(big, "n", false, "5", tget).size() == K.TABLE_LIMIT and K.table_rows(big, "n", false, "", tget)[0]["n"] == str(K.TABLE_LIMIT), true)
+	big.pop_back()
+	var t0 = Time.get_ticks_msec()
+	var sorted_big = K.table_rows(big, "r", true, "", tget)
+	check.call("table: 9999 rows sort", sorted_big[0]["r"], K.TABLE_LIMIT - 2)
+	print("NOTE sorting 9999 rows took ", Time.get_ticks_msec() - t0, " ms")
 	# ---- LiveView endpoint discovery
 	var Live = load("res://scripts/liveview.gd")
 	var eps = Live.endpoints({"pods": [{"name": "grafana", "ns": "mon", "ip": "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:9443->9443/tcp, 5432/tcp"}]}, "docker")

@@ -169,6 +169,13 @@ func _file_action(a: Dictionary) -> Dictionary:
 			if c.code != 0 or not ln.begins_with("d"):
 				return {"ok": false, "kind": "invalid", "msg": "That path goes through a link, which is not followed.", "data": {}}
 	if a["op"] == "file_list":
+		# the folder itself must be a real folder: a link here could point anywhere in the container
+		if full != str(a["root"]).rstrip("/") and full != a["root"]:
+			var self_ls = _run(["exec", a["name"], "ls", "-ldn", "--", full], false)
+			if self_ls.code != 0:
+				return {"ok": false, "kind": "notfound", "msg": "There is no such folder in this volume.", "data": {}}
+			if not self_ls.out.begins_with("d"):
+				return {"ok": false, "kind": "invalid", "msg": "That is a link, which is not followed: it may point outside the volume.", "data": {}}
 		var r = _run(["exec", a["name"], "ls", "-la", "--", full + "/."])
 		if r.code != 0:
 			var kind = "unsupported" if r.out.contains("executable file not found") else ("rbac" if r.out.contains("Permission denied") else "notfound")
@@ -195,7 +202,40 @@ func _file_action(a: Dictionary) -> Dictionary:
 	return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "size": size, "page": page, "pages": mini(int(ceil(size / 65536.0)), 256),
 		"data": Marshalls.utf8_to_base64(text), "text_only": true}}
 
+# "12.5MiB", "1.2kB", "3GB" -> bytes (docker stats mixes binary and decimal units)
+static func _size(s: String) -> float:
+	var t = s.strip_edges()
+	var units = {"kib": 1024.0, "mib": 1048576.0, "gib": 1073741824.0, "tib": 1099511627776.0, "kb": 1000.0, "mb": 1000000.0, "gb": 1000000000.0, "tb": 1000000000000.0, "b": 1.0}
+	for u in units:
+		if t.to_lower().ends_with(u):
+			return t.left(t.length() - u.length()).to_float() * units[u]
+	return t.to_float()
+
+# What a container is using right now, as the engine itself reports it.
+func _metrics(container: String) -> Dictionary:
+	var r = _run(["stats", "--no-stream", "--format", "{{json .}}", container], false)
+	var d = JSON.parse_string(r.out.strip_edges()) if r.code == 0 else null
+	if typeof(d) != TYPE_DICTIONARY:
+		return {"ok": false, "kind": "unsupported", "msg": "The engine gave no usage figures for this container (is it running?).", "data": {}}
+	# a container that is not running is reported by the engine as all zeros: that is not a measurement
+	if str(d.get("PIDs", "")) == "0" or str(d.get("MemUsage", "")).replace(" ", "").begins_with("0B/0B"):
+		return {"ok": false, "kind": "unsupported", "msg": "This container is not running, so it is using nothing.", "data": {}}
+	var net = str(d.get("NetIO", "")).split("/")
+	var blk = str(d.get("BlockIO", "")).split("/")
+	var data = {"cpu_cores": str(d.get("CPUPerc", "0")).trim_suffix("%").to_float() / 100.0,
+		"mem_bytes": _size(str(d.get("MemUsage", "0")).get_slice("/", 0)),
+		"at": Time.get_datetime_string_from_system(true) + "Z", "source": "docker stats"}
+	if net.size() == 2:
+		data["net_rx_bytes"] = _size(net[0])
+		data["net_tx_bytes"] = _size(net[1])
+	if blk.size() == 2:
+		data["disk_read_bytes"] = _size(blk[0])
+		data["disk_write_bytes"] = _size(blk[1])
+	return {"ok": true, "msg": "", "kind": "", "data": data}
+
 func _app_action(a: Dictionary) -> Dictionary:
+	if a["op"] == "pod_metrics":
+		return _metrics(a["name"])
 	if a["op"] in ["file_mounts", "file_list", "file_read"]:
 		return _file_action(a)
 	match a["op"]:

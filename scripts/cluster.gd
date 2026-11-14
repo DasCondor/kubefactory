@@ -26,7 +26,7 @@ const Demo = preload("res://scripts/backend_demo.gd")
 const LogSources = preload("res://scripts/log_sources.gd")
 const VIEW_OPS = ["logs", "events", "cluster_events", "templates"]
 # read-only operations that hand back data (not text): storage inspection and loopback forwards
-const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward"]
+const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics"]
 const APP_OPS = ["apply_app", "remove_app", "portainer_install", "portainer_open", "deploy_template", "remove_template"]
 
 var backend = null
@@ -75,7 +75,8 @@ func _ready() -> void:
 const DEMO_USER = "DasCondor"   # who you are in the simulated worlds, whatever your OS login is
 
 func user_name() -> String:
-	if backend != null and backend.label == "simulation":
+	# the browser build is always the simulation, even before a world has loaded
+	if OS.has_feature("web") or (backend != null and backend.label == "simulation"):
 		return DEMO_USER
 	if backend != null and backend.get("user") != null and str(backend.user) != "":
 		return K.short_user(str(backend.user))

@@ -487,7 +487,35 @@ func _sim_files(a: Dictionary) -> Dictionary:
 	return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "size": int(found[2]), "page": page, "pages": mini(int(ceil(int(found[2]) / 65536.0)), 256),
 		"data": Marshalls.raw_to_base64(bytes), "simulated": true}}
 
+# Simulated usage for one pod: it wanders around a share of what the pod asks
+# for, and its counters only ever go up, as real ones do.
+func _sim_metrics(a: Dictionary) -> Dictionary:
+	for p in _pods:
+		if p["name"] == a["name"] and p["wl"]["ns"] == a["ns"]:
+			if p["st"] != "Running":
+				return {"ok": false, "kind": "unsupported", "msg": "This pod is not running, so it is using nothing.", "data": {}}
+			var t = Time.get_ticks_msec() / 1000.0
+			var seed = float(hash(p["name"]) % 1000) / 37.0
+			var busy = 0.42 + 0.22 * sin(t / 9.0 + seed) + 0.1 * sin(t / 2.3 + seed * 2.0)
+			var c = p.get("_ctr", {"rx": 0.0, "tx": 0.0, "rd": 0.0, "wr": 0.0, "t": t})
+			var dt = maxf(t - float(c["t"]), 0.0)
+			c["rx"] += dt * (60000.0 + 240000.0 * busy)
+			c["tx"] += dt * (25000.0 + 90000.0 * busy)
+			c["rd"] += dt * 12000.0 * busy
+			c["wr"] += dt * (8000.0 + 30000.0 * busy)
+			c["t"] = t
+			p["_ctr"] = c
+			return {"ok": true, "msg": "", "kind": "", "data": {"cpu_cores": float(p["cpu"]) * busy, "mem_bytes": float(p["mem"]) * (0.55 + 0.12 * sin(t / 31.0 + seed)),
+				"net_rx_bytes": c["rx"], "net_tx_bytes": c["tx"], "disk_read_bytes": c["rd"], "disk_write_bytes": c["wr"],
+				"at": Time.get_datetime_string_from_system(true) + "Z", "source": "simulation", "simulated": true}}
+	return {"ok": false, "kind": "notfound", "msg": "pod not found", "data": {}}
+
 func run_action(a: Dictionary) -> Dictionary:
+	if a["op"] == "pod_metrics":
+		_mx.lock()
+		var mres = _sim_metrics(a)
+		_mx.unlock()
+		return mres
 	if a["op"] in ["file_mounts", "file_list", "file_read"]:
 		_mx.lock()
 		var fr = _sim_files(a)

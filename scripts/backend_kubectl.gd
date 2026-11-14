@@ -321,6 +321,8 @@ static func _first_image(spec: Dictionary) -> String:
 
 func run_action(a: Dictionary) -> Dictionary:
 	var special = _app_action(a)
+	if special.is_empty() and a["op"] == "pod_metrics":
+		return {"ok": false, "kind": "unsupported", "msg": "Usage figures need the built-in Kubernetes connection, not the kubectl mode.", "data": {}}
 	if not special.is_empty():
 		return special
 	if a["op"] == "logs" and a.get("provider", "kube") != "kube":

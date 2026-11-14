@@ -21,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -624,6 +625,52 @@ func registerKube() {
 	}
 
 	// Events as the same table kubectl prints (LAST, [NAMESPACE,] TYPE, REASON, [OBJECT,] MESSAGE).
+	// What a pod is using right now, from the cluster's metrics API
+	// (metrics.k8s.io, served by metrics-server). That API reports CPU and
+	// memory only: network and disk are not in it, and are not made up here.
+	ops["kube.pod_metrics"] = func(raw json.RawMessage) (any, error) {
+		a, err := decode[struct {
+			sessArgs
+			Namespace, Pod string
+		}](raw)
+		if err != nil {
+			return nil, err
+		}
+		s, err := getSession(a.Session)
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		body, err := s.cs.CoreV1().RESTClient().Get().AbsPath("/apis/metrics.k8s.io/v1beta1/namespaces", a.Namespace, "pods", a.Pod).DoRaw(ctx)
+		if err != nil {
+			if apierrors.IsNotFound(err) || apierrors.IsServiceUnavailable(err) {
+				return nil, fail("unsupported", "no usage figures for this pod: the cluster has no metrics API (metrics-server), or the pod has only just started")
+			}
+			return nil, classify(err)
+		}
+		var m struct {
+			Timestamp  string `json:"timestamp"`
+			Window     string `json:"window"`
+			Containers []struct {
+				Usage map[string]string `json:"usage"`
+			} `json:"containers"`
+		}
+		if json.Unmarshal(body, &m) != nil {
+			return nil, fail("unsupported", "the metrics API answered in a form this version does not read")
+		}
+		cpu, mem := 0.0, 0.0
+		for _, c := range m.Containers {
+			if q, e := resource.ParseQuantity(c.Usage["cpu"]); e == nil {
+				cpu += q.AsApproximateFloat64()
+			}
+			if q, e := resource.ParseQuantity(c.Usage["memory"]); e == nil {
+				mem += q.AsApproximateFloat64()
+			}
+		}
+		return map[string]any{"cpu_cores": cpu, "mem_bytes": mem, "at": m.Timestamp, "window": m.Window, "source": "metrics.k8s.io"}, nil
+	}
+
 	ops["kube.events"] = func(raw json.RawMessage) (any, error) {
 		a, err := decode[struct {
 			sessArgs
