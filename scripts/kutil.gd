@@ -21,6 +21,124 @@ static func fit_label(l: Label3D, w: float, h: float, pixel: float = 0.01) -> vo
 		return
 	l.pixel_size = minf(pixel, minf(w / sz.x, h / sz.y))
 
+# Bob's patter. He greets you with one of these and mutters them as you walk up.
+const BOB_ZINGERS = [
+	"CrashLoopBackOff? Back in my day we called that Monday.",
+	"That pod has restarted more times than my hip.",
+	"It is always DNS. Except when it is the image tag. Today it is the image tag.",
+	"You deploy on Fridays, don't you? I can tell by the eyes.",
+	"Have you tried turning it off and on again? That will be forty years of experience, please.",
+	"Somebody typed 'latest' and prayed. I can smell it from here.",
+	"I have seen YAML that would make a grown operator weep. Yours is... getting there.",
+	"Your indentation is doing things to me that my doctor warned about.",
+	"That is not a cluster, that is a cry for help with a load balancer.",
+	"I have fixed worse with a paperclip. Not much worse, mind.",
+]
+const BOB_RIZZ = [
+	"Are you a liveness probe? You checked on me and my heart restarted.",
+	"You must be a LoadBalancer, because you just got an external IP straight to my heart.",
+	"If you were a pod, I would never set a memory limit on you.",
+	"Are you a ConfigMap? Because you have got everything I need.",
+	"You and me are like a Service and its endpoints: I would be nothing without you.",
+	"I would give you five nines of uptime, and I do not say that to every operator.",
+	"You have got more replicas of charm than this cluster has of frontend.",
+	"Is your name kubectl? Because you have got me under control.",
+	"I would never drain you, sweetheart. You are staying scheduled.",
+	"They say nothing is highly available. Then you walked up to my stand.",
+]
+const BOB_IDLE = [
+	"Nothing broken. Either you are very good, or nobody has deployed yet.",
+	"All green. Enjoy it. It will not last, it never does.",
+	"A quiet cluster. I have not been this relaxed since they invented rollbacks.",
+	"No alarms, no smoke. Did you break the monitoring instead?",
+]
+# One dry remark per kind of failure, shown on its card in his fix list.
+const BOB_QUIPS = {
+	"CrashLoopBackOff": "Up, down, up, down. It is doing more squats than I ever did.",
+	"ImagePullBackOff": "You cannot pull what is not there. Believe me, I have tried.",
+	"ErrImagePull": "You cannot pull what is not there. Believe me, I have tried.",
+	"OOMKilled": "Ate until it burst. I had an uncle like that.",
+	"Unschedulable": "All dressed up and no node to go to.",
+	"Error": "It says 'Error'. Very helpful. Thank you, pod.",
+	"Evicted": "Thrown out for hogging the place. Happens to the best of us.",
+	"CreateContainerConfigError": "It wants a Secret nobody told it. Relatable.",
+	"NotReady": "This node has gone for a lie-down and did not say when it is back.",
+	"Cordoned": "Somebody put the rope up and forgot to take it down.",
+	"Restarting": "Still standing, but it flinches every few minutes.",
+}
+
+# A random line of Bob's: a zinger or some rizz when there is work, relief when there is none.
+static func bob_line(has_jobs: bool) -> String:
+	if not has_jobs and randf() < 0.6:
+		return BOB_IDLE[randi() % BOB_IDLE.size()]
+	var pool = BOB_RIZZ if randf() < 0.5 else BOB_ZINGERS
+	return pool[randi() % pool.size()]
+
+# Bob's diagnosis for a pod status: [what is wrong, what he would do, action].
+# The action is "" (nothing to press), "restart", "delete_pod" or "uncordon".
+static func diagnose(status: String) -> Array:
+	match status:
+		"ImagePullBackOff", "ErrImagePull", "InvalidImageName":
+			return ["The image cannot be pulled: the name or tag is wrong, or the registry wants a login.",
+				"Fix the image in the workload's spec (or add an imagePullSecret). Restarting will not help until then - read the events for the exact pull error.", ""]
+		"CrashLoopBackOff":
+			return ["The container starts, falls over, and gets restarted again and again.",
+				"Read its logs for the crash reason. If it was waiting on something that is back now, a rolling restart clears it.", "restart"]
+		"OOMKilled":
+			return ["It ran out of memory and the kernel killed it.",
+				"Raise its memory limit, or find the leak. A restart only buys time.", "restart"]
+		"CreateContainerConfigError", "CreateContainerError":
+			return ["It is pointing at a ConfigMap or Secret that is not there, or has a bad key.",
+				"Create the missing ConfigMap / Secret, or fix the reference. The events name the missing piece.", ""]
+		"Unschedulable":
+			return ["No node will take it: nothing has room, or every node that fits is cordoned.",
+				"Free up capacity, or uncordon a node so the scheduler can place it.", "uncordon"]
+		"Evicted":
+			return ["The node was short on disk or memory and threw it out.",
+				"Dismantle the leftover pod; its workload has already built a replacement elsewhere.", "delete_pod"]
+		"Error":
+			return ["The container exited with an error.",
+				"Read the logs for the last lines before it died. Rebuilding the pod gives it a clean start.", "delete_pod"]
+		"Restarting":
+			return ["It is running now, but it keeps getting restarted.",
+				"Something is intermittently killing it. Check the logs and its memory limit before it gets worse.", ""]
+	return ["It is not healthy (%s)." % status,
+		"Start with its events and logs. If nothing stands out, rebuild the pod.", "delete_pod"]
+
+# Everything in the cluster that needs fixing, worst first: unhealthy nodes,
+# failing and unschedulable pods, and pods that keep restarting. Each entry
+# carries Bob's diagnosis. Used by his stand's board and his fix list.
+static func issues(st: Dictionary) -> Array:
+	var out = []
+	for n in st.get("nodes", []):
+		if not n["ready"]:
+			out.append({"kind": "node", "sev": "bad", "name": n["name"], "node": n["name"], "status": "NotReady",
+				"why": "The node has stopped reporting in: its kubelet is down, or it lost the network.",
+				"fix": "Check the machine itself. Its pods are rescheduled elsewhere after a few minutes; drain it if it is not coming back.", "action": ""})
+		elif n["cordoned"]:
+			out.append({"kind": "node", "sev": "warn", "name": n["name"], "node": n["name"], "status": "Cordoned",
+				"why": "Scheduling is switched off here, so no new pods can land on it.",
+				"fix": "If the maintenance is done, uncordon it.", "action": "uncordon"})
+	for p in st.get("pods", []):
+		var status = ""
+		var sev = "bad"
+		if p["node"] == "":
+			status = "Unschedulable"
+			sev = "warn" if p["health"] != "bad" else "bad"
+		elif p["health"] == "bad":
+			status = str(p["status"])
+		elif p["health"] == "ok" and int(p["restarts"]) >= 5:
+			status = "Restarting"
+			sev = "warn"
+		if status == "":
+			continue
+		var d = diagnose(status)
+		out.append({"kind": "pod", "sev": sev, "name": p["name"], "uid": p["uid"], "ns": p["ns"], "node": p["node"],
+			"wkind": p["wkind"], "wname": p["wname"], "restarts": int(p["restarts"]), "status": status,
+			"why": d[0], "fix": d[1], "action": d[2]})
+	out.sort_custom(func(a, b): return ("0" if a["sev"] == "bad" else "1") + a["name"] < ("0" if b["sev"] == "bad" else "1") + b["name"])
+	return out
+
 static func health_color(h: String) -> Color:
 	match h:
 		"ok":

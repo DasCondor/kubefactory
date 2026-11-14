@@ -75,6 +75,15 @@ var _npc: Node3D
 var _avatars = {}   # peer id -> {node, target, label, body}
 var _npc_body: Node3D
 var _npc_hook: Node3D
+var _bob: Node3D
+var _bob_body: Node3D
+var _bob_head: Node3D
+var _bob_wrench: Node3D
+var _bob_label: Label3D
+var _bob_tag: Label3D
+var _bob_say_t = 0.0      # seconds until his next remark
+var _bob_near = false
+var _bob_jobs = 0
 var _select: Node3D
 var _select_mat: StandardMaterial3D
 var _select_size = Vector3.ZERO
@@ -87,6 +96,7 @@ func _ready() -> void:
 	_build_hub()
 	_build_log_station()
 	_build_npc()
+	_build_bob()
 	_belt_mm = _make_mm(Vector3.ONE, Tex.mat(Color.WHITE, 0.6, 0.4))
 	_item_mm = _make_mm(Vector3(0.5, 0.5, 0.5), Tex.mat(Color.WHITE, 0.5, 0.1))
 	_build_hologram()
@@ -402,6 +412,143 @@ func _build_npc() -> void:
 	tag.visibility_range_end = 60.0
 	_npc.add_child(tag)
 
+# Bob, the pod fixer: an old hand in a flat cap who keeps a repair stand across
+# the yard from Porter. His board lists what is broken; talk to him for the
+# diagnosis and the fix for each job.
+func _build_bob() -> void:
+	var dark = Tex.shared("dark")
+	var steel = Tex.shared("steel")
+	var wood = Tex.mat(Color(0.5, 0.36, 0.22), 0.85)
+	var wood_dark = Tex.mat(Color(0.33, 0.23, 0.15), 0.9)
+	var cream = Tex.mat(Color(0.93, 0.89, 0.78), 0.8)
+	var base = Vector3(-10.5, 0, 9.0)
+	var c = base + Vector3(-3.5, 0, -1.5)    # centre of the stall; Bob stands out in front of it
+	# the stall: pallet floor, four posts, a striped awning, pegboard back wall
+	_box(Vector3(6.0, 0.2, 4.0), dark, c + Vector3(0, 0.1, 0))
+	for px in [-2.3, 2.3]:
+		_box(Vector3(0.16, 3.9, 0.16), wood_dark, c + Vector3(px, 1.95, -1.15))
+		_box(Vector3(0.16, 3.4, 0.16), wood_dark, c + Vector3(px, 1.7, 1.25))
+	for i in 6:
+		var slat = _box(Vector3(0.8, 0.1, 2.9), Tex.shared("orange") if i % 2 == 0 else cream, c + Vector3(-2.0 + i * 0.8, 3.72, 0.05))
+		slat.rotation.x = 0.17
+	_box(Vector3(4.8, 0.3, 0.08), Tex.shared("orange"), c + Vector3(0, 3.33, 1.5))
+	_box(Vector3(4.2, 2.1, 0.1), Tex.shared("board"), c + Vector3(0, 2.35, -1.15))
+	_bob_label = Label3D.new()
+	_bob_label.font_size = 52
+	_bob_label.position = c + Vector3(0, 2.35, -1.09)
+	_bob_label.text = "FIX LIST"
+	add_child(_bob_label)
+	_box(Vector3(3.6, 0.7, 0.1), Tex.shared("board"), c + Vector3(0, 4.45, 1.3))
+	for px in [-1.6, 1.6]:
+		_box(Vector3(0.08, 0.75, 0.08), wood_dark, c + Vector3(px, 3.85, 1.3))
+	var stand_sign = Label3D.new()
+	stand_sign.text = "BOB'S REPAIRS"
+	stand_sign.font_size = 44
+	stand_sign.modulate = Color(1.0, 0.82, 0.5)
+	stand_sign.position = c + Vector3(0, 4.45, 1.36)
+	K.fit_label(stand_sign, 3.3, 0.55)
+	add_child(stand_sign)
+	# the workbench and what is on it: toolbox, vice, a gear, a little broken machine
+	_box(Vector3(3.8, 0.14, 1.2), wood, c + Vector3(0, 1.0, 0.25))
+	_box(Vector3(3.6, 0.08, 1.0), wood_dark, c + Vector3(0, 0.4, 0.25))
+	for px in [-1.75, 1.75]:
+		for pz in [-0.25, 0.75]:
+			_box(Vector3(0.14, 0.95, 0.14), wood_dark, c + Vector3(px, 0.5, pz))
+	_box(Vector3(0.75, 0.34, 0.36), Tex.mat(Color(0.75, 0.16, 0.13), 0.5, 0.3), c + Vector3(-1.2, 1.24, 0.2))
+	_box(Vector3(0.5, 0.05, 0.06), steel, c + Vector3(-1.2, 1.47, 0.2))
+	_box(Vector3(0.3, 0.26, 0.4), dark, c + Vector3(1.45, 1.2, 0.5))
+	_box(Vector3(0.34, 0.1, 0.12), steel, c + Vector3(1.45, 1.38, 0.62))
+	var gear = MeshInstance3D.new()
+	var gm = CylinderMesh.new()
+	gm.top_radius = 0.26
+	gm.bottom_radius = 0.26
+	gm.height = 0.08
+	gm.radial_segments = 10
+	gear.mesh = gm
+	gear.material_override = steel
+	gear.position = c + Vector3(-0.3, 1.11, 0.55)
+	add_child(gear)
+	_box(Vector3(0.55, 0.45, 0.55), Tex.body(Color(0.85, 0.75, 0.2)), c + Vector3(0.5, 1.3, 0.15))
+	_box(Vector3(0.58, 0.07, 0.58), dark, c + Vector3(0.5, 1.1, 0.15))
+	_box(Vector3(0.12, 0.12, 0.12), Tex.status_glow("bad"), c + Vector3(0.68, 1.6, 0.0))
+	# tools hung on the pegboard edge
+	for i in 3:
+		var tool = _box(Vector3(0.07, 0.6 - i * 0.1, 0.04), steel, c + Vector3(-2.02 + i * 0.001, 1.1 + i * 0.02, -0.6 + i * 0.3))
+		tool.rotation.x = 0.1
+	_solid(Vector3(4.6, 2.6, 2.6), c + Vector3(0, 1.3, 0.05), {"type": "bob"})
+	# Bob himself, a little stooped, cane in one hand and a wrench in the other
+	var skin = Tex.mat(Color(0.89, 0.72, 0.6), 0.8)
+	var white = Tex.mat(Color(0.93, 0.93, 0.9), 0.9)
+	var green = Tex.mat(Color(0.34, 0.44, 0.3), 0.85)
+	var brown = Tex.mat(Color(0.3, 0.23, 0.19), 0.85)
+	var tweed = Tex.mat(Color(0.45, 0.42, 0.38), 0.95)
+	_bob = Node3D.new()
+	_bob.position = base
+	add_child(_bob)
+	_solid(Vector3(1.4, 2.6, 1.4), Vector3(0, 1.3, 0), {"type": "bob"}, _bob)
+	_bob_body = Node3D.new()
+	_bob.add_child(_bob_body)
+	for lx in [-0.2, 0.2]:
+		_box(Vector3(0.26, 0.12, 0.42), dark, Vector3(lx, 0.06, 0.06), _bob_body)
+		_box(Vector3(0.24, 0.8, 0.26), brown, Vector3(lx, 0.5, 0), _bob_body)
+	var torso = Node3D.new()
+	torso.position = Vector3(0, 0.9, 0)
+	torso.rotation.x = 0.17
+	_bob_body.add_child(torso)
+	_box(Vector3(0.86, 0.86, 0.5), green, Vector3(0, 0.45, 0), torso)
+	_box(Vector3(0.52, 0.72, 0.04), Tex.mat(Color(0.42, 0.29, 0.18), 0.8), Vector3(0, 0.4, 0.27), torso)   # leather apron
+	_box(Vector3(0.2, 0.1, 0.05), steel, Vector3(0.1, 0.34, 0.3), torso)                                   # pocket spanner
+	for ax in [-0.54, 0.54]:
+		_box(Vector3(0.2, 0.76, 0.22), green, Vector3(ax, 0.46, 0.03), torso)
+		_box(Vector3(0.18, 0.16, 0.2), skin, Vector3(ax, 0.02, 0.05), torso)
+	_bob_head = Node3D.new()
+	_bob_head.position = Vector3(0, 0.9, 0.04)
+	torso.add_child(_bob_head)
+	_box(Vector3(0.5, 0.5, 0.48), skin, Vector3(0, 0.26, 0), _bob_head)
+	for hx in [-0.265, 0.265]:
+		_box(Vector3(0.05, 0.26, 0.36), white, Vector3(hx, 0.27, -0.04), _bob_head)
+	_box(Vector3(0.5, 0.34, 0.05), white, Vector3(0, 0.3, -0.25), _bob_head)
+	_box(Vector3(0.58, 0.1, 0.58), tweed, Vector3(0, 0.55, 0.0), _bob_head)
+	_box(Vector3(0.52, 0.05, 0.22), tweed, Vector3(0, 0.51, 0.36), _bob_head)
+	for gx in [-0.12, 0.12]:
+		_box(Vector3(0.17, 0.13, 0.03), dark, Vector3(gx, 0.31, 0.25), _bob_head)
+		_box(Vector3(0.13, 0.09, 0.03), Tex.glow(Color(0.75, 0.92, 1.0), 0.9), Vector3(gx, 0.31, 0.262), _bob_head)
+		_box(Vector3(0.16, 0.035, 0.04), white, Vector3(gx, 0.41, 0.25), _bob_head)   # eyebrows
+	_box(Vector3(0.08, 0.1, 0.09), Tex.mat(Color(0.82, 0.62, 0.52), 0.8), Vector3(0, 0.22, 0.27), _bob_head)
+	_box(Vector3(0.32, 0.08, 0.06), white, Vector3(0, 0.14, 0.26), _bob_head)
+	_box(Vector3(0.36, 0.13, 0.07), white, Vector3(0, 0.04, 0.24), _bob_head)
+	# cane, planted beside him
+	_box(Vector3(0.05, 1.02, 0.05), wood_dark, Vector3(0.6, 0.51, 0.3), _bob_body)
+	_box(Vector3(0.05, 0.05, 0.2), wood_dark, Vector3(0.6, 1.02, 0.24), _bob_body)
+	# wrench in the other hand
+	_bob_wrench = Node3D.new()
+	_bob_wrench.position = Vector3(-0.54, 0.0, 0.1)
+	torso.add_child(_bob_wrench)
+	_box(Vector3(0.05, 0.5, 0.03), steel, Vector3(0, 0.2, 0), _bob_wrench)
+	_box(Vector3(0.16, 0.1, 0.035), steel, Vector3(0, 0.48, 0), _bob_wrench)
+	_box(Vector3(0.05, 0.08, 0.04), dark, Vector3(0, 0.53, 0), _bob_wrench)
+	var tag = Label3D.new()
+	tag.text = "BOB\n[E] fix list"
+	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	tag.font_size = 40
+	tag.pixel_size = 0.0055
+	tag.outline_size = 10
+	tag.modulate = Color(1.0, 0.86, 0.6)
+	tag.position = Vector3(0, 2.75, 0)
+	tag.visibility_range_end = 60.0
+	tag.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM   # so a spoken line grows upward, off his cap
+	tag.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tag.width = 560.0
+	_bob.add_child(tag)
+	_bob_tag = tag
+
+# Where to stand to look at a node's sign, as [pos, look_at].
+func node_spot(node_name: String) -> Variant:
+	var pf = platforms.get(node_name)
+	if pf == null:
+		return null
+	return [pf.position + Vector3(0, 0.3, 16), pf.position + Vector3(0, 8.0, 1.2)]
+
 # Other players on this cluster, drawn as small robots in their tool's tier colour.
 func set_peers(peers: Array, tool_names: Array) -> void:
 	var seen = {}
@@ -716,6 +863,22 @@ func _update_hub(st: Dictionary) -> void:
 	else:
 		_log_label.text = "ACTIVE ALERTS\n" + "\n".join(PackedStringArray(bad)) + "\n[E] open"
 	_log_label.modulate = K.health_color("ok") if bad.is_empty() else Color(1.0, 0.45, 0.38)
+	# Bob's job board: the top of his fix list, worst first
+	var jobs = K.issues(st)
+	_bob_jobs = jobs.size()
+	if jobs.is_empty():
+		_bob_label.text = "FIX LIST\n\nnothing on the bench\nevery machine is humming"
+		_bob_label.modulate = K.health_color("ok")
+	else:
+		var rows = ["FIX LIST  (%d)" % jobs.size(), ""]
+		for j in jobs.slice(0, 5):
+			rows.append("%s  %s" % [str(j["name"]).left(20), j["status"]])
+		if jobs.size() > 5:
+			rows.append("+ %d more" % (jobs.size() - 5))
+		rows.append("[E] ask Bob")
+		_bob_label.text = "\n".join(PackedStringArray(rows))
+		_bob_label.modulate = Color(1.0, 0.82, 0.5)
+	K.fit_label(_bob_label, 3.9, 1.85)
 	_hub_label.text = "%s  ·  %s\n\nNODES  %d / %d ready\nPODS   %d running  ·  %d pending  ·  %d failing\nWORKLOADS  %d   ·   SERVICES  %d\n\n[E]  open the cluster codex" % [
 		str(st.get("provider", st["source"])).to_upper() if str(st.get("provider", "")) != "" else str(st["source"]).to_upper(), st["context"], ready, st["nodes"].size(),
 		c["ok"], c["warn"], c["bad"], st["workloads"].size(), st["services"].size()]
@@ -842,6 +1005,23 @@ func _process(delta: float) -> void:
 	# Porter idles: bobs, sways his hook, and turns to face you when you are near
 	_npc_body.position.y = sin(_t * 2.0) * 0.03
 	_npc_hook.rotation.x = sin(_t * 1.7) * 0.25
+	# Bob: slow breathing, a nod now and then, the wrench ticking in his hand
+	_bob_body.position.y = sin(_t * 1.2) * 0.015
+	_bob_head.rotation.x = 0.06 + sin(_t * 0.7) * 0.05
+	_bob_wrench.rotation.z = 0.5 + sin(_t * 2.1) * 0.22
+	if player != null:
+		var bd = player.global_position - _bob.global_position
+		var bwant = atan2(bd.x, bd.z) if bd.length() < 30.0 else 0.0
+		_bob.rotation.y = lerp_angle(_bob.rotation.y, bwant, clampf(delta * 2.5, 0.0, 1.0))
+		# walk up to him and he has something to say: a fresh zinger every few seconds
+		var near = bd.length() < 9.0
+		_bob_say_t -= delta
+		if near and (not _bob_near or _bob_say_t <= 0.0):
+			_bob_tag.text = "\"%s\"\n\nBOB  ·  [E] fix list" % K.bob_line(_bob_jobs > 0)
+			_bob_say_t = 7.0
+		elif not near and _bob_near:
+			_bob_tag.text = "BOB\n[E] fix list"
+		_bob_near = near
 	if player != null:
 		var d = player.global_position - _npc.global_position
 		var want = atan2(d.x, d.z) if d.length() < 30.0 else 0.0

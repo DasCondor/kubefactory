@@ -372,7 +372,7 @@ func _process(delta: float) -> void:
 	var meta = h.get("meta", {})
 	var type = meta.get("type", "")
 	var hold = _hold_action(type, meta)
-	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc"] else null,
+	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc", "bob"] else null,
 		K.tier_color(hud.TOOLS[mode]["mk"]) if not hold.is_empty() else Color(0.98, 0.584, 0.286))
 	if mode == 2 and blueprint != null and type == "platform":
 		world.show_hologram(h["pos"])
@@ -427,6 +427,8 @@ func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 			return "Service %s / %s\n[E] details" % [meta["ns"], meta["name"]]
 		"hub":
 			return "THE HUB\n[E] cluster codex"
+		"bob":
+			return "BOB  ·  repair stand\n[E] fix list: what is broken, why, and what to do about it"
 		"npc":
 			return "PORTER  ·  Portainer dock\n[E] talk: complete app setups, Portainer templates"
 		"logs":
@@ -515,6 +517,8 @@ func _interact() -> void:
 			hud.open_logs()
 		"npc":
 			hud.open_talk()
+		"bob":
+			hud.open_bob()
 		"cluster":
 			if meta["index"] < cluster.targets.size():
 				_connect_target(cluster.targets[meta["index"]])
@@ -608,6 +612,14 @@ func _run_toolshots(dir: String) -> void:
 	for v in views:
 		player.teleport(v[1], v[2])
 		await _shot(dir, v[0])
+	# Bob's repair stand, close up and from the spawn, then his fix list
+	player.teleport(Vector3(-9.5, 0.4, 16.5), Vector3(-12.6, 2.3, 8.5))
+	await _shot(dir, "bob_stand")
+	player.teleport(Vector3(0, 0.4, 17), Vector3(0, 3.5, 0))
+	await _shot(dir, "bob_from_spawn")
+	hud.open_bob()
+	await get_tree().create_timer(1.4).timeout
+	await _shot(dir, "bob_list")
 	get_tree().quit()
 
 func _run_shots(dir: String) -> void:
@@ -965,9 +977,18 @@ func _run_trailer() -> void:
 	await get_tree().create_timer(2.5).timeout
 	hud.close_modal()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# back to the yard: Bob's repair stand and his fix list, then Porter's dock
+	var high = [Vector3(-30, 14, 6), Vector3(-12, 2, 2)]
+	var bob = [Vector3(-8.6, 0.6, 15.6), Vector3(-12.2, 2.3, 8.6)]
+	await _glide(last, high, 3.0)
+	await _glide(high, bob, 3.0)
+	await get_tree().create_timer(3.2).timeout
+	hud.open_bob()
+	await get_tree().create_timer(4.0).timeout
+	hud.close_modal()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var dock = [Vector3(12.5, 0.6, 17.5), Vector3(11.5, 2.2, 9)]
-	await _glide(last, [Vector3(30, 14, 4), Vector3(12, 2, 0)], 3.0)
-	await _glide([Vector3(30, 14, 4), Vector3(12, 2, 0)], dock, 3.0)
+	await _glide(bob, dock, 3.5)
 	await get_tree().create_timer(1.8).timeout
 	get_tree().quit()
 
