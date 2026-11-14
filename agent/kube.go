@@ -21,7 +21,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -649,26 +648,7 @@ func registerKube() {
 			}
 			return nil, classify(err)
 		}
-		var m struct {
-			Timestamp  string `json:"timestamp"`
-			Window     string `json:"window"`
-			Containers []struct {
-				Usage map[string]string `json:"usage"`
-			} `json:"containers"`
-		}
-		if json.Unmarshal(body, &m) != nil {
-			return nil, fail("unsupported", "the metrics API answered in a form this version does not read")
-		}
-		cpu, mem := 0.0, 0.0
-		for _, c := range m.Containers {
-			if q, e := resource.ParseQuantity(c.Usage["cpu"]); e == nil {
-				cpu += q.AsApproximateFloat64()
-			}
-			if q, e := resource.ParseQuantity(c.Usage["memory"]); e == nil {
-				mem += q.AsApproximateFloat64()
-			}
-		}
-		return map[string]any{"cpu_cores": cpu, "mem_bytes": mem, "at": m.Timestamp, "window": m.Window, "source": "metrics.k8s.io"}, nil
+		return parsePodMetrics(body)
 	}
 
 	ops["kube.events"] = func(raw json.RawMessage) (any, error) {

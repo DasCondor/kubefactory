@@ -95,6 +95,7 @@ func _ready() -> void:
 	world = World.new()
 	world.sun = world_sun
 	add_child(world)
+	world.set_gauge_visible(bool(settings.get("gauge_visible", true)))
 	player = Player.new()
 	add_child(player)
 	sfx = Sfx.new()
@@ -192,6 +193,9 @@ func _ready() -> void:
 	cluster.logs_ready.connect(screens.on_logs)
 	cluster.data_ready.connect(screens.on_data)
 	cluster.source_changed.connect(func(_l, _n): screens.clear())
+	cluster.source_changed.connect(func(_l, _n):
+		if hud._modal_kind == "gauge":
+			hud.open_gauge())
 	cluster.state_updated.connect(func(st): screens.sync.call_deferred(st))
 	cluster.source_changed.connect(func(_l, _n): demo_screens.clear())
 	cluster.state_updated.connect(func(st):
@@ -591,7 +595,7 @@ func _process(delta: float) -> void:
 	var type = meta.get("type", "")
 	# the screen is for reading and opening: no tool acts through it, whatever is in hand
 	var hold = {} if _on_screen(meta) else _hold_action(type, meta)
-	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc", "bob"] else null,
+	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc", "bob", "gauge"] else null,
 		K.tier_color(hud.TOOLS[mode]["mk"]) if not hold.is_empty() else Color(0.98, 0.584, 0.286))
 	if mode == 2 and blueprint != null and type == "platform":
 		world.show_hologram(h["pos"])
@@ -661,7 +665,7 @@ func touch_action_label() -> String:
 	var hold = _hold_action(type, meta)
 	if not hold.is_empty():
 		return "HOLD\n" + str(hold["label"]).left(18).to_upper()
-	if mode == 0 and type in ["pod", "node", "service", "hub", "logs", "npc", "bob", "cluster"]:
+	if mode == 0 and type in ["pod", "node", "service", "hub", "logs", "npc", "bob", "gauge", "cluster"]:
 		return "INSPECT"
 	if mode == 1:
 		return "LOGS"
@@ -729,6 +733,8 @@ func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 			return "THE HUB\n[E] cluster codex"
 		"bob":
 			return "BOB  ·  repair stand\n[E] fix list: what is broken, why, and what to do about it"
+		"gauge":
+			return "GAUGE  ·  resource desk\n[E] inspect requests and read workload usage"
 		"npc":
 			return "PORTER  ·  Portainer dock\n[E] talk: complete app setups, Portainer templates"
 		"logs":
@@ -839,6 +845,8 @@ func _interact() -> void:
 			hud.open_talk()
 		"bob":
 			hud.open_bob()
+		"gauge":
+			hud.open_gauge()
 		"cluster":
 			if meta["index"] < cluster.targets.size():
 				_connect_target(cluster.targets[meta["index"]])

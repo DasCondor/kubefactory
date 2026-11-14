@@ -6,6 +6,9 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Gauge's resource desk**: inspect node capacity and visible requests, or
+  read a selected workload's usage. Its sortable, filterable node table is
+  read-only and distinguishes missing data from zero. Gauge can be hidden.
 - **Native Kubernetes connectivity.** A small companion program (`kf-agent`)
   reads your kubeconfig and talks to the cluster directly. `kubectl` is no
   longer needed. A connection wizard lists kubeconfig files and contexts,
