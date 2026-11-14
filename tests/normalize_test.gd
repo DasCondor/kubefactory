@@ -181,6 +181,25 @@ line2\" injected: true"]])
 		check.call("database image -> database server", Models.machine_for({"wkind": "Deployment", "containers": [{"image": "postgres:16"}]}), "database_server")
 		check.call("statefulset kind", Models.machine_for({"wkind": "StatefulSet", "containers": [{"image": "example/app:1"}]}), "statefulset")
 		check.call("bare pod", Models.machine_for({"wkind": "Pod", "containers": [{"image": "example/app:1"}]}), "pod_machine")
+		# every file is the one the catalog describes (a changed file must be re-reviewed)
+		var wrong = []
+		for id in Models.ids():
+			for tier in Models.TIERS:
+				var v = Models.entry(id)["variants"][tier]
+				if FileAccess.get_sha256(Models.root().path_join(str(v["path"]).trim_prefix("assets/"))) != str(v["sha256"]):
+					wrong.append(id + ":" + tier)
+		check.call("every file matches its catalog hash", wrong, [])
+		# the machine contract the game binds to
+		var doors = 0
+		for id in Models.ids("machines"):
+			var tp = Models.template(id, "standard")
+			if not (tp.has("screen") and tp.has("name_surface") and tp.has("type_label") and tp.get("core") != null):
+				fails.append("machine model lacks a display surface or type label: " + id)
+			if tp.has("door"):
+				doors += 1
+				if not tp["cavity"].has_volume() or tp.get("door_mesh") == null:
+					fails.append("machine door without a bay: " + id)
+		check.call("machines with a storage door", doors, 22)
 		for id in Models.ids("machines"):
 			var scene = Models._load_scene(id, "standard")
 			if scene == null:

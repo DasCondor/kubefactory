@@ -44,7 +44,10 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Watches instead of polling | verified on a real API server |
 | | Clean Windows machine acceptance test | not tested |
 | 00A Assets | Model library integrated at three tiers | verified in simulation |
-| | Clipping corrected (StatefulSet, database server display) | verified in simulation; audit in `MODEL_AUDIT.md` |
+| | Clipping: V6 library, every display ray-tested clear | verified in simulation; audit in `MODEL_AUDIT.md`. Solid-on-solid overlap: not tested |
+| | Type plate, real resource name and container list on the model's own surfaces | verified in simulation |
+| | V6 handheld tools with operator-facing displays; Krew display surfaces; rigging | unsupported |
+| | Asset reviewer hosted at `model-viewer/` | unsupported |
 | | Opening storage doors, stopped by obstacles | verified in simulation |
 | | Read-only storage browser | verified in simulation; **not tested live** |
 | | Porter V3 as minimum standard | machines, Porter and Bob use V3; V2 models are not placed |

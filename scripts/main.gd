@@ -812,6 +812,22 @@ func _run_krewshots(dir: String) -> void:
 			["bob_stand", world._bob.position + Vector3(1, 0.4, 8), world._bob.position + Vector3(-2.2, 2.0, -0.5)]]:
 		player.teleport(v[1], v[2])
 		await _shot(dir, v[0])
+	# one machine of each library model, from the front, door shut then open
+	var seen = {}
+	player.flying = true
+	for m in world.machines.values():
+		if m.model_id == "" or seen.has(m.model_id):
+			continue
+		seen[m.model_id] = true
+		var c = m.global_position
+		player.teleport(c + Vector3(1.6, 1.6, 5.4), c + Vector3(0, 2.3, 0))
+		await _shot(dir, "m_" + m.model_id)
+		if m.has_door():
+			m.set_door(true)
+			await get_tree().create_timer(0.9).timeout
+			await _shot(dir, "m_" + m.model_id + "_open")
+			m.set_door(false)
+	print("krew: machine models in this world: ", seen.keys())
 	get_tree().quit()
 
 func _run_storageshots(dir: String) -> void:
