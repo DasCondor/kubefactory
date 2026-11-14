@@ -1660,7 +1660,7 @@ func open_connect(focus_profile: String = "", failure: Dictionary = {}) -> void:
 		pc.add_child(v)
 		var head = _row(10)
 		head.add_child(_lbl(str(pr["name"]), 17, ORANGE))
-		head.add_child(_lbl("pasted, kept in the game's user folder" if pr.get("pasted", false) else str(pr["path"]), 12, DIM))
+		head.add_child(_lbl("pasted, kept in the game's user folder" if pr.get("pasted", false) else K.tidy_path(str(pr["path"])), 12, DIM))
 		head.add_child(_spacer())
 		if not pr.get("implicit", false):
 			head.add_child(_btn("Forget", func():
@@ -1946,7 +1946,7 @@ func open_logs(pod_uid: String = "") -> void:
 			_ls["warnings"] = on
 			_ls_fetch()))
 	else:
-		ctl.add_child(_lbl("Every action taken through KubeFactory. Also written to  " + cluster.log_dir, 13, DIM))
+		ctl.add_child(_lbl("Every action taken through KubeFactory. Also written to  " + K.tidy_path(cluster.log_dir), 13, DIM))
 	body.add_child(ctl)
 	var fr = _row(10)
 	fr.add_child(_lbl("FILTER", 12, DIM))

@@ -3,7 +3,10 @@
 #
 #   engine\Godot_v4.3-stable_win64.exe --path . --write-movie out.avi --fixed-fps 60 --resolution 1920x1080 -- --demo --trailer
 #   powershell -ExecutionPolicy Bypass -File tools\to_mp4.ps1 out.avi docs\kubefactory.mp4
-param([Parameter(Mandatory)][string]$In, [Parameter(Mandatory)][string]$Out, [int]$Mbps = 12, [int]$Fps = 60)
+#
+# A small silent copy for posting (Reddit, a phone): -Quality HD720p -Mbps 3.5 -Fps 30 -NoAudio
+param([Parameter(Mandatory)][string]$In, [Parameter(Mandatory)][string]$Out, [double]$Mbps = 12, [int]$Fps = 60,
+    [ValidateSet("HD1080p", "HD720p")][string]$Quality = "HD1080p", [switch]$NoAudio)
 $ErrorActionPreference = "Stop"
 $In = (Resolve-Path $In).Path
 $Out = [IO.Path]::GetFullPath($Out)
@@ -22,8 +25,9 @@ $src = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($In)) ([Window
 $dir = Await ([Windows.Storage.StorageFolder]::GetFolderFromPathAsync((Split-Path $Out))) ([Windows.Storage.StorageFolder])
 $dst = Await ($dir.CreateFileAsync((Split-Path $Out -Leaf), [Windows.Storage.CreationCollisionOption]::ReplaceExisting)) ([Windows.Storage.StorageFile])
 
-$mp4 = [Windows.Media.MediaProperties.MediaEncodingProfile]::CreateMp4([Windows.Media.MediaProperties.VideoEncodingQuality]::HD1080p)
-$mp4.Video.Bitrate = $Mbps * 1000000
+$mp4 = [Windows.Media.MediaProperties.MediaEncodingProfile]::CreateMp4([Windows.Media.MediaProperties.VideoEncodingQuality]::$Quality)
+$mp4.Video.Bitrate = [uint32]($Mbps * 1000000)
+if ($NoAudio) { $mp4.Audio = $null }      # no sound track at all, not a silent one
 $mp4.Video.FrameRate.Numerator = $Fps
 $mp4.Video.FrameRate.Denominator = 1
 

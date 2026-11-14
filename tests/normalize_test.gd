@@ -225,6 +225,11 @@ line2\" injected: true"]])
 	var srows = MS.storage_rows([{"path": "/var/lib/data", "type": "pvc", "claim": "data-0", "read_only": false, "readable": true}, {"path": "/var/run/secrets", "type": "projected", "claim": "", "read_only": true, "readable": false}])
 	check.call("storage view: mounts, with what is never shown", srows[1][0].strip_edges() + " / " + srows[3][0].strip_edges(), "data-0 / projected   read-only   contents never shown")
 	check.call("four views in order", MS.MODES, ["dashboard", "metrics", "logs", "storage"])
+	# ---- paths on screen never show the account's folder
+	check.call("home folder shown as ~ (Windows)", K.tidy_path("C:\\Users\\someone\\.kube\\config", "C:\\Users\\someone"), "~/.kube/config")
+	check.call("home folder shown as ~ (any case, either slash)", K.tidy_path("c:/users/Someone/AppData/Roaming/x", "C:\\Users\\someone"), "~/AppData/Roaming/x")
+	check.call("a path elsewhere is left alone", K.tidy_path("D:\\clusters\\prod.yaml", "C:\\Users\\someone"), "D:\\clusters\\prod.yaml")
+	check.call("a folder that only starts the same is not the home folder", K.tidy_path("C:/Users/someone-else/x", "C:/Users/someone"), "C:/Users/someone-else/x")
 	# ---- tables: contains and sort by column
 	var trows = [{"n": "web", "r": 3, "i": "nginx:1.27"}, {"n": "Cart", "r": 12, "i": "shop/cart"}, {"n": "api", "r": 2, "i": "shop/api"}, {"n": "db", "r": 12, "i": "postgres:16"}]
 	var tget = {"n": func(x): return x["n"], "r": func(x): return x["r"], "i": func(x): return x["i"]}
