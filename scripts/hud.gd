@@ -1131,7 +1131,7 @@ func open_liveview() -> void:
 			list.add_child(r)
 	list.add_child(_lbl("DISCOVERED ENDPOINTS", 13, ORANGE))
 	if src == "simulation":
-		var l = _lbl("This is a simulated cluster. Its services have no real application behind them, so there is nothing to show: LiveView never draws a stand-in. Connect Docker or a Kubernetes cluster, or type an address above.", 14, K.health_color("warn"))
+		var l = _lbl("This is a simulated cluster. Its services have no real application behind them, so LiveView has no page to open here. The Grafana and media machines in this world show demo content on their screens instead, each marked SIMULATED. Connect Docker or a Kubernetes cluster, or type an address above, for the real thing.", 14, K.health_color("warn"))
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size.x = 930
 		list.add_child(l)

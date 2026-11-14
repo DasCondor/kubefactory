@@ -179,8 +179,11 @@ you can use Grafana, Portainer or Sonarr from inside the factory.
 - Docker: published ports are offered straight away.
 - Kubernetes: Services are offered and reached through a private port-forward
   on this computer only.
-- Simulated worlds have no real application behind them, so LiveView says so.
-  It never draws a stand-in picture.
+- Simulated worlds have no real application behind them, so LiveView has no
+  page to open there. Instead, the demo's Grafana machines show a dashboard of
+  the simulated cluster's own figures, and its Plex and Tautulli machines show
+  simulated streams. Every such screen carries a SIMULATED banner, and none of
+  it appears on a real cluster.
 
 ### Grafana and Tautulli
 

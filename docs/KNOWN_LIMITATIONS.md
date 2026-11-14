@@ -115,6 +115,14 @@ exactly that: the code exists and has not been run against the real thing.
   module per real volume instead.
 - 10 models reach 7-70 mm below the ground (`MODEL_AUDIT.md`); none of them is
   placed in the world.
+- **Demo screens are simulated, and say so.** In the simulated worlds (and so
+  in the browser demo) a Grafana machine shows a hand-drawn dashboard of the
+  simulated cluster's own figures and a Plex or Tautulli machine shows
+  invented stream activity, each under a SIMULATED banner. They are not
+  Grafana or Tautulli pages and cannot be clicked. On a real cluster or Docker
+  engine these screens stay neutral until a real page or provider is put on
+  them. Checked on the desktop renderer and on the Compatibility renderer the
+  browser build uses; the exported browser build itself was not run.
 - The asset reviewer that came with the library is added to the Pages build at
   `model-viewer/`. It was checked locally (loads, no external requests, no
   console errors); it goes live only when this branch is merged and Pages

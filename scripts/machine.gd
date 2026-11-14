@@ -44,6 +44,7 @@ var _live = false
 var _live_mat: StandardMaterial3D = null
 var _name_plate: Label3D = null     # the model's resource-name display
 var _list_plate: Label3D = null     # the model's container list display
+var _screen_quad: MeshInstance3D = null   # code-drawn machines: where a picture goes, over the screen box
 var _status_plate: Label3D = null   # the pod's state, on the LiveView glass while it shows no page
 
 static func _box(key: String, size: Vector3) -> BoxMesh:
@@ -404,6 +405,25 @@ func set_door(open: bool, blocker = null) -> float:
 # Show a live texture on the machine's screen (LiveView), or go back to the status colour.
 func set_screen_texture(tex: Texture2D) -> void:
 	if _screen == null or _screen.mesh == null:
+		return
+	if model_id == "":
+		if _screen_quad == null:
+			if tex == null:
+				return
+			var q = QuadMesh.new()
+			q.size = Vector2(1.26, 0.86)
+			_screen_quad = MeshInstance3D.new()
+			_screen_quad.mesh = q
+			_screen_quad.position = _screen.position + Vector3(0, 0, 0.034)
+			_screen_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_screen.get_parent().add_child(_screen_quad)
+		_screen_quad.visible = tex != null
+		if tex != null:
+			if _live_mat == null:
+				_live_mat = StandardMaterial3D.new()
+				_live_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			_live_mat.albedo_texture = tex
+			_screen_quad.material_override = _live_mat
 		return
 	if tex == null:
 		_live = false

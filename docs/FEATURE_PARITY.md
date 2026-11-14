@@ -61,7 +61,8 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | 05 LiveView | Real page on an in-game screen, mouse and keyboard | verified in simulation (local test page) |
 | | Endpoint discovery (Docker published ports, Kubernetes Services) | verified in simulation (unit tests) |
 | | Port-forward for cluster Services | not tested |
-| | Host allowlist, isolated profile, no stand-in pictures | verified in simulation |
+| | Host allowlist, isolated profile | verified in simulation |
+| | Demo worlds: simulated Grafana dashboard and stream activity on machine screens, marked SIMULATED; nothing of the kind on a real cluster | verified in simulation (desktop and Compatibility renderers) |
 | | Bundled browser engine (CEF), display builder, audio | unsupported: uses installed Edge or Chrome |
 | V8 providers | Provider registry (Grafana, Tautulli), protected token storage, test connection | **verified live**: Grafana OSS 10.4.10, 11.2.0, 12.3.0, 13.0.0 (`tools\live-test.ps1 -Grafana`) and Tautulli 2.19.1 (`-Tautulli`) |
 | | Grafana: dashboard search, panel list, time range, variables, credential-free links, sub-path | **verified live** on Grafana OSS 10.4.10, 11.2.0, 12.3.0 and 13.0.0; not Enterprise or Cloud |
