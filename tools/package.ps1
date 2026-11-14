@@ -49,6 +49,13 @@ $ErrorActionPreference = "Continue"
 & $godot --headless --path $root -s tests/normalize_test.gd 2>$null | Select-Object -Last 1 | Tee-Object -Variable testResult
 if ($testResult -notmatch "ALL CHECKS PASSED") { Write-Host "Tests failed; not packaging." -ForegroundColor Red; exit 1 }
 
+# the native companion (kubeconfig connectivity without kubectl, file inspection, LiveView).
+# It is unsigned: nothing here signs it, and nothing should claim it is signed.
+Write-Host "Building the native companion..."
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "tools\build-agent.ps1") | Select-Object -Last 1
+$agent = Join-Path $root "agent\bin\kf-agent.exe"
+if (-not (Test-Path $agent)) { Write-Host "The native companion did not build (is Go installed? tools\build-agent.ps1 -Fetch gets a private copy). Not packaging." -ForegroundColor Red; exit 1 }
+
 Write-Host "Exporting KubeFactory.exe..."
 & $godot --headless --path $root --export-release $preset (Join-Path $stage "KubeFactory.exe") 2>&1 | Out-Null
 $ErrorActionPreference = "Stop"
@@ -62,6 +69,7 @@ foreach ($d in @("apps", "deploy")) {
     Copy-Item -Recurse (Join-Path $root $d) (Join-Path $stage $d)
 }
 Get-ChildItem $stage -Recurse -Force -Filter ".gdignore" | Remove-Item -Force
+Copy-Item $agent $stage
 Copy-Item (Join-Path $root "tools\release\install.ps1") $stage
 Copy-Item (Join-Path $root "tools\release\uninstall.ps1") $stage
 Copy-Item (Join-Path $root "tools\setup.ps1") (Join-Path $stage "check-requirements.ps1")

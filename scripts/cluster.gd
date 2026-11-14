@@ -11,20 +11,33 @@ signal feed_event(user, msg, ok)
 signal logs_ready(key, text)
 signal source_changed(label, note)
 signal targets_changed()
+signal agent_event(event)            # browser nav / blocked, forward closed
+signal data_ready(key, result)       # the answer to a DATA_OPS request
+signal connect_failed(error)         # {kind, msg, extra, context, profile}: shown by the connection wizard
 
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
 const Kube = preload("res://scripts/backend_kubectl.gd")
+const Native = preload("res://scripts/backend_native.gd")
+const Agent = preload("res://scripts/agent.gd")
+const Connections = preload("res://scripts/connections.gd")
 const Docker = preload("res://scripts/backend_docker.gd")
 const Demo = preload("res://scripts/backend_demo.gd")
 const LogSources = preload("res://scripts/log_sources.gd")
 const VIEW_OPS = ["logs", "events", "cluster_events", "templates"]
+# read-only operations that hand back data (not text): storage inspection and loopback forwards
+const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward"]
 const APP_OPS = ["apply_app", "remove_app", "portainer_install", "portainer_open", "deploy_template", "remove_template"]
 
 var backend = null
 var state = {"source": "", "context": "", "provider": "", "error": "", "nodes": [], "pods": [], "workloads": [], "services": []}
 var read_only = false
 var edition = ""        # "" full game, "docker" local engine only, "demo" simulations only
+# Kubernetes goes through the native companion (kubeconfig, no kubectl). The old
+# kubectl mode is kept as an explicit fallback: --kubectl-cli, or when the
+# companion is missing.
+var legacy_kubectl = false
+var last_connect_error = {}
 var detecting = false
 # Every cluster we know how to reach: [{source, context, provider}]
 var targets = []
@@ -146,20 +159,31 @@ static func describe(a: Dictionary) -> String:
 			return "scale %s %s/%s by %+d" % [a["kind"], a["ns"], a["name"], int(a["delta"])]
 		"cluster_events":
 			return "view cluster events %s" % (a.get("ns", "") if a.get("ns", "") != "" else "(all namespaces)")
+		"file_mounts":
+			return "inspect storage of %s/%s" % [a["ns"], a["name"]]
+		"file_list":
+			return "list files %s/%s:%s%s" % [a["ns"], a["name"], a["root"], ("/" + str(a["path"])) if str(a.get("path", "")) != "" else ""]
+		"file_read":
+			return "preview file %s/%s:%s/%s (page %d)" % [a["ns"], a["name"], a["root"], a["path"], int(a.get("page", 0))]
+		"forward":
+			return "port-forward %s/%s:%d to loopback" % [a["ns"], a["service"], int(a["port"])]
 	return str(a["op"])
 
 # ---- connecting
 
-func start(mode: String, ctx: String = "") -> void:
+func start(mode: String, ctx: String = "", profile: String = "") -> void:
 	_gen += 1
 	if backend != null and backend.has_method("cleanup"):
-		backend.cleanup()
+		_spawn(backend.cleanup)   # closes its session and forwards; off the main thread
 	backend = null
 	detecting = true
-	_spawn(_detect.bind(mode, ctx, _gen))
+	_spawn(_detect.bind(mode, ctx, _gen, profile))
 
 func connect_target(t: Dictionary) -> void:
-	start(t["source"], t["context"])
+	start(t["source"], t["context"], str(t.get("profile", "")))
+
+func native_kube() -> bool:
+	return Agent.available() and not legacy_kubectl
 
 func _spawn(c: Callable) -> void:
 	if OS.has_feature("web"):
@@ -169,17 +193,29 @@ func _spawn(c: Callable) -> void:
 	t.start(c)
 	_threads.append(t)
 
-func _detect(mode: String, ctx: String, gen: int) -> void:
+func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
 	var b = null
 	var note = ""
 	var list = []
+	var failure = {}
 	# the browser build and the demo edition run the simulations only; the docker
 	# edition offers the local engine (and the simulations, to have somewhere to
 	# go when the engine is off) but never runs kubectl
 	var sim_only = OS.has_feature("web") or edition == "demo"
 	var use_kube = not sim_only and edition != "docker"
-	for c in (Kube.list_contexts() if use_kube else []):
-		list.append({"source": "kubernetes", "context": c["context"], "provider": c["provider"]})
+	var native = use_kube and native_kube()
+	var profs = Connections.profiles() if native else []
+	if native:
+		# every context of every kubeconfig the player has added (plus the default one)
+		for pr in profs:
+			for c in Native.contexts_of(Connections.source_of(pr)):
+				c["source"] = "kubernetes"
+				c["profile"] = str(pr["id"])
+				c["profile_name"] = str(pr["name"])
+				list.append(c)
+	elif use_kube:
+		for c in Kube.list_contexts():
+			list.append({"source": "kubernetes", "context": c["context"], "provider": c["provider"]})
 	var d = Docker.new()
 	var dr = {"ok": false, "msg": "not available in this edition"} if sim_only else d.probe()
 	if dr.ok:
@@ -189,13 +225,47 @@ func _detect(mode: String, ctx: String, gen: int) -> void:
 	if sim_only and mode != "simulation":
 		mode = "simulation"
 		ctx = ""
-	if use_kube and (mode == "kubernetes" or mode == "auto"):
+	if native and (mode == "kubernetes" or mode == "auto"):
+		# which context: the one asked for, else the current context of the first kubeconfig
+		var pick = {}
+		for c in list:
+			if c["source"] != "kubernetes":
+				continue
+			if (ctx != "" and c["context"] == ctx and (profile == "" or c["profile"] == profile)) or (ctx == "" and c["current"] and pick.is_empty()):
+				pick = c
+				if ctx != "":
+					break
+		if pick.is_empty():
+			if ctx != "":
+				note += "Kubernetes: no saved kubeconfig has a context named %s. " % ctx
+			elif mode == "kubernetes":
+				note += "Kubernetes: no kubeconfig added yet (Esc > Clusters > Add a kubeconfig). "
+		else:
+			var prof = Connections.find(str(pick["profile"]))
+			var k = Native.new()
+			k.profile = Connections.source_of(prof)
+			k.profile["id"] = str(prof["id"])
+			# a credential helper runs only if this exact one was approved for this context
+			k.profile["allow_exec"] = Connections.exec_trusted(prof, str(pick["context"]), str(pick.get("exec", "")))
+			k.ctx = str(pick["context"])
+			k.log_cfg = log_cfg
+			var r = k.probe()
+			if r.ok:
+				b = k
+			else:
+				note += "Kubernetes (%s): %s. " % [pick["context"], r.msg]
+				failure = k.last_error.duplicate()
+				failure["context"] = str(pick["context"])
+				failure["profile"] = str(prof["id"])
+	elif use_kube and (mode == "kubernetes" or mode == "auto"):
 		var k = Kube.new()
 		k.ctx = ctx
 		k.log_cfg = log_cfg
 		var r = k.probe()
 		if r.ok:
 			b = k
+			if not legacy_kubectl:
+				note += "The native companion is missing, so this is the kubectl mode. "
 		else:
 			note += "Kubernetes: %s. " % r.msg
 	if b == null and (mode == "docker" or mode == "auto"):
@@ -207,11 +277,12 @@ func _detect(mode: String, ctx: String, gen: int) -> void:
 		b = Demo.new(ctx if mode == "simulation" else "helmsman-sim")
 		if mode != "simulation":
 			note += "Running the built-in simulation."
-	_detected.call_deferred(b, gen, note, list)
+	_detected.call_deferred(b, gen, note, list, failure)
 
-func _detected(b, gen: int, note: String, list: Array) -> void:
+func _detected(b, gen: int, note: String, list: Array, failure: Dictionary = {}) -> void:
 	if gen != _gen:
 		return
+	last_connect_error = failure
 	backend = b
 	detecting = false
 	targets = list
@@ -232,6 +303,8 @@ func _detected(b, gen: int, note: String, list: Array) -> void:
 	audit("connected to %s %s. %s" % [b.label, b.context, note])
 	source_changed.emit(b.label, note)
 	targets_changed.emit()
+	if not failure.is_empty():
+		connect_failed.emit(failure)
 
 func cap(op: String) -> bool:
 	if op == "scale_by":
@@ -245,6 +318,12 @@ func _process(delta: float) -> void:
 		if not _threads[i].is_alive():
 			_threads[i].wait_to_finish()
 			_threads.remove_at(i)
+	# what the native companion reports on its own
+	if Agent.running():
+		for e in Agent.poll_events():
+			if e.get("event") == "forward_closed" and backend != null and backend.has_method("forward_closed"):
+				backend.forward_closed(str(e.get("forward", "")))
+			agent_event.emit(e)
 	if backend == null:
 		return
 	_timer += delta
@@ -314,7 +393,7 @@ func act(a: Dictionary) -> void:
 	if backend == null:
 		action_done.emit(false, "No data source connected yet")
 		return
-	var view = a["op"] in VIEW_OPS
+	var view = a["op"] in VIEW_OPS or a["op"] in DATA_OPS
 	if not view:
 		if read_only:
 			audit("BLOCKED (read-only): " + describe(a))
@@ -354,6 +433,11 @@ func _run_action(b, a: Dictionary, gen: int) -> void:
 
 func _action_finished(a: Dictionary, r: Dictionary, gen: int) -> void:
 	if gen != _gen:
+		return
+	if a["op"] in DATA_OPS:
+		if not r.has("data"):
+			r["data"] = {}
+		data_ready.emit(a.get("key", ""), r)
 		return
 	if a["op"] in VIEW_OPS:
 		last_link = {"provider": a.get("provider", "kube"), "ok": r.ok, "ms": r["ms"]}

@@ -284,7 +284,7 @@ static func selects(selector: Dictionary, labels: Dictionary) -> bool:
 # How dangerous an action is (1 safe .. 5 critical). Matches the tool tiers.
 static func tier_of(a: Dictionary, state: Dictionary) -> int:
 	match a["op"]:
-		"logs", "events", "cluster_events", "templates", "portainer_open":
+		"logs", "events", "cluster_events", "templates", "portainer_open", "file_mounts", "file_list", "file_read", "forward":
 			return 1
 		"create", "apply_app", "deploy_template", "portainer_install":
 			return 2

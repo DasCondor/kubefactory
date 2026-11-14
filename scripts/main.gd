@@ -123,6 +123,13 @@ func _ready() -> void:
 		_set_mode(2))
 	hud.target_requested.connect(_connect_target)
 	hud.graphics_requested.connect(set_graphics)
+	# connection wizard: how an attempt ended, and kubeconfig files dropped on the window
+	cluster.source_changed.connect(func(_label, _note): hud.on_connect_result(cluster.last_connect_error))
+	get_window().files_dropped.connect(func(files):
+		if files.size() > 0 and cluster.native_kube() and not OS.has_feature("web"):
+			var p = hud.Connections.add_file(str(files[0]))
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			hud.open_connect(str(p.get("id", ""))))
 	cluster.targets_changed.connect(func():
 		world.set_targets(cluster.targets, cluster.backend.label, cluster.backend.context))
 
@@ -147,6 +154,10 @@ func _ready() -> void:
 			ctx = Demo.demo_flavor(a.trim_prefix("--demo="))
 		elif a == "--kubectl":
 			source = "kubernetes"
+		elif a == "--kubectl-cli":
+			# legacy: reach Kubernetes through the kubectl on PATH instead of the native companion
+			source = "kubernetes"
+			cluster.legacy_kubectl = true
 		elif a == "--docker":
 			source = "docker"
 		elif a.begins_with("--context="):
@@ -164,6 +175,9 @@ func _ready() -> void:
 		elif a.begins_with("--bench="):
 			shots = "-"
 			Bench.run(self, a.trim_prefix("--bench="), Gfx.id_of(Gfx.level))
+		elif a.begins_with("--connectshots="):
+			shots = "-"
+			_run_connectshots(a.trim_prefix("--connectshots="))
 		elif a.begins_with("--gfxshots="):
 			shots = "-"
 			_run_gfxshots(a.trim_prefix("--gfxshots="))
@@ -627,6 +641,31 @@ func _shot(dir: String, name_: String) -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(dir.path_join(name_ + ".png"))
 	print("shot ", name_)
+
+# The connection wizard: the kubeconfig list, then an attempt on each context
+# of the first kubeconfig so every kind of result is on screen once.
+func _run_connectshots(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await get_tree().create_timer(6.0).timeout
+	hud.open_connect()
+	await _shot(dir, "connect_list")
+	var profs = hud.Connections.profiles()
+	if not profs.is_empty():
+		var n = 0
+		for c in hud.Native.contexts_of(hud.Connections.source_of(profs[0])):
+			hud._connect_wait(profs[0], c)
+			var t = 0.0
+			while hud._modal_kind == "connecting" and t < 40.0:
+				await get_tree().create_timer(0.5).timeout
+				t += 0.5
+			await _shot(dir, "connect_result_%d" % n)
+			print("connect ", c["context"], " -> ", cluster.backend.label if cluster.backend != null else "none", " ", cluster.backend.context if cluster.backend != null else "", "  error=", cluster.last_connect_error.get("kind", ""))
+			n += 1
+			if n >= 2:
+				break
+	get_tree().quit()
 
 # The same views under each graphics preset, switching live, then one panel on
 # each to show the interface does not depend on the preset.

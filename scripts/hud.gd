@@ -11,6 +11,9 @@ const Apps = preload("res://scripts/apps.gd")
 const Bob = preload("res://scripts/bob.gd")
 const DemoSim = preload("res://scripts/backend_demo.gd")
 const Gfx = preload("res://scripts/gfx.gd")
+const Agent = preload("res://scripts/agent.gd")
+const Native = preload("res://scripts/backend_native.gd")
+const Connections = preload("res://scripts/connections.gd")
 const ORANGE = Color(0.98, 0.584, 0.286)
 const BG = Color(0.075, 0.085, 0.095, 0.95)
 const BG2 = Color(0.15, 0.16, 0.18, 1.0)
@@ -951,7 +954,11 @@ func _choose(bp: Dictionary) -> void:
 
 func open_clusters() -> void:
 	var body = _open_modal("clusters", null, "CLUSTERS", Vector2(980, 600))
-	body.add_child(_lbl("Every context in your kubeconfig (EKS, AKS, GKE, Rancher, on-prem ...), the local Docker engine, and the built-in simulations.", 13, DIM))
+	var top = _row(10)
+	top.add_child(_lbl("Every context of the kubeconfigs you have added, the local Docker engine, and the built-in simulations.", 13, DIM))
+	top.add_child(_spacer())
+	top.add_child(_btn("Add or manage kubeconfigs...", func(): open_connect(), "primary"))
+	body.add_child(top)
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sc.custom_minimum_size.y = 460
@@ -969,7 +976,8 @@ func open_clusters() -> void:
 		var r = _row(10)
 		r.add_child(_fixed(_lbl("■ " + t["provider"], 15, K.provider_color(t["provider"]).lightened(0.3)), 220))
 		r.add_child(_fixed(_lbl(t["source"], 13, DIM), 100))
-		r.add_child(_fixed(_lbl(t["context"], 15), 440))
+		r.add_child(_fixed(_lbl(t["context"], 15), 300))
+		r.add_child(_fixed(_lbl(str(t.get("profile_name", "")), 12, DIM), 140))
 		r.add_child(_spacer())
 		if active:
 			r.add_child(_lbl("ACTIVE   ", 14, K.health_color("ok")))
@@ -979,6 +987,183 @@ func open_clusters() -> void:
 				target_requested.emit(t), "primary"))
 		pc.add_child(r)
 		list.add_child(pc)
+
+# ----- connecting a cluster from a kubeconfig, without kubectl (native companion)
+
+const AUTH_WORDS = {"token": "bearer token", "client-cert": "client certificate", "exec": "credential helper",
+	"auth-provider": "auth provider plugin", "basic": "username and password", "none": "no credentials"}
+
+func open_connect(focus_profile: String = "", failure: Dictionary = {}) -> void:
+	var body = _open_modal("connect", focus_profile, "CONNECT A CLUSTER", Vector2(1040, 660))
+	if not Agent.available():
+		var l = _lbl(Agent.why_unavailable() + "\n\nWithout it, Kubernetes is reached the old way: through a kubectl on PATH and whatever kubeconfig kubectl is set up with (start with --kubectl-cli).", 15, K.health_color("warn"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 980
+		body.add_child(l)
+		return
+	var intro = _lbl("Add a kubeconfig and pick a context. No kubectl, WSL or Docker is needed: the game talks to the cluster's API itself. The file is only read to connect; its contents are never logged or copied anywhere.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 990
+	body.add_child(intro)
+	var add = _row(10)
+	add.add_child(_btn("Choose a kubeconfig file...", func():
+		DisplayServer.file_dialog_show("Choose a kubeconfig", OS.get_environment("USERPROFILE").path_join(".kube"), "", true,
+			DisplayServer.FILE_DIALOG_MODE_OPEN_FILE, PackedStringArray(["*.yaml,*.yml,*.conf,*.config;Kubeconfig", "*;All files"]),
+			func(ok, paths, _i):
+				if ok and paths.size() > 0:
+					var p = Connections.add_file(str(paths[0]))
+					open_connect.call_deferred(str(p.get("id", "")))), "primary"))
+	add.add_child(_btn("Paste a kubeconfig...", _open_connect_paste))
+	add.add_child(_lbl("or drop a kubeconfig file onto this window", 13, DIM))
+	body.add_child(add)
+	if not failure.is_empty():
+		body.add_child(_connect_failure(failure))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(8)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	var profs = Connections.profiles()
+	if profs.is_empty():
+		list.add_child(_lbl("No kubeconfig yet. Nothing was found in the default place (%s)." % OS.get_environment("USERPROFILE").path_join(".kube\\config"), 15, DIM))
+	for pr in profs:
+		var pc = PanelContainer.new()
+		var focus = str(pr["id"]) == focus_profile
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if focus else Color(0, 0, 0, 0), 1 if focus else 0, 10))
+		var v = _col(6)
+		pc.add_child(v)
+		var head = _row(10)
+		head.add_child(_lbl(str(pr["name"]), 17, ORANGE))
+		head.add_child(_lbl("pasted, kept in the game's user folder" if pr.get("pasted", false) else str(pr["path"]), 12, DIM))
+		head.add_child(_spacer())
+		if not pr.get("implicit", false):
+			head.add_child(_btn("Forget", func():
+				Connections.remove(str(pr["id"]))
+				open_connect()))
+		v.add_child(head)
+		var ctxs = Native.contexts_of(Connections.source_of(pr))
+		if ctxs.is_empty():
+			v.add_child(_lbl("This file could not be read as a kubeconfig.", 14, RED))
+		for c in ctxs:
+			var r = _row(10)
+			var active = cluster.backend != null and cluster.backend.label == "kubernetes" and cluster.backend.context == c["context"]
+			r.add_child(_fixed(_lbl(("● " if active else "") + str(c["context"]), 15, K.health_color("ok") if active else TXT), 250))
+			r.add_child(_fixed(_lbl(str(c["provider"]), 13, K.provider_color(c["provider"]).lightened(0.3)), 120))
+			var detail = "%s  ·  %s" % [str(c["server"]).trim_prefix("https://"), AUTH_WORDS.get(c["auth"], c["auth"])]
+			if c["auth"] in ["exec", "auth-provider"]:
+				detail += ": " + str(c["exec"])
+			if c["insecure"]:
+				detail += "  ·  TLS verification is switched off in this file"
+			var dl = _lbl(detail if c["problem"] == "" else c["problem"], 12, DIM if c["problem"] == "" else K.health_color("warn"))
+			dl.clip_text = true
+			dl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			r.add_child(dl)
+			if active:
+				r.add_child(_lbl("CONNECTED  ", 13, K.health_color("ok")))
+			else:
+				r.add_child(_btn("Connect", func():
+					_connect_wait(pr, c), "primary"))
+			v.add_child(r)
+		list.add_child(pc)
+
+func _connect_wait(pr: Dictionary, c: Dictionary) -> void:
+	var t = c.duplicate()
+	t["source"] = "kubernetes"
+	t["profile"] = str(pr["id"])
+	var body = _open_modal("connecting", t, "CONNECTING", Vector2(640, 200))
+	body.add_child(_lbl("%s\n%s" % [c["context"], str(c["server"])], 16))
+	body.add_child(_lbl("Checking the certificate, signing in, reading what this account may do...", 13, DIM))
+	target_requested.emit(t)
+
+# The cluster manager reports how a connection attempt ended.
+func on_connect_result(failure: Dictionary) -> void:
+	if _modal_kind != "connecting":
+		return
+	if failure.is_empty():
+		close_modal()
+	else:
+		open_connect(str(failure.get("profile", "")), failure)
+
+# Each kind of failure is shown as what it is, with the one thing that fixes it.
+func _connect_failure(f: Dictionary) -> Control:
+	var kind = str(f.get("kind", "other"))
+	var pc = PanelContainer.new()
+	var sb = _sb(Color(0.2, 0.07, 0.06), RED, 0, 12)
+	sb.border_width_left = 4
+	pc.add_theme_stylebox_override("panel", sb)
+	var v = _col(6)
+	pc.add_child(v)
+	v.add_child(_lbl("%s  -  could not connect to %s" % [Agent.kind_title(kind), f.get("context", "")], 15, RED))
+	var why = {"auth": "The cluster did not accept these credentials. They may have expired: get a fresh kubeconfig or token.",
+		"tls": "The cluster's certificate does not match the authority in this kubeconfig, so the connection was refused. Nothing was sent.",
+		"rbac": "You are signed in, but this account is not allowed to do that.",
+		"timeout": "The cluster did not answer in time. Check the network or VPN.",
+		"unreachable": "Nothing answered at the cluster's address. Check the network, VPN, or whether the cluster is running.",
+		"needs_base_dir": "The pasted kubeconfig points at certificate or token files by relative path. Choose the folder they are in.",
+		"exec_untrusted": "This context gets its credentials by running a program on this computer. A kubeconfig can name any program, so it is not run until you approve it."}.get(kind, "")
+	for line in [why, str(f.get("msg", ""))]:
+		if line == "":
+			continue
+		var l = _lbl(line, 13, TXT if line == why else DIM)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 960
+		v.add_child(l)
+	var prof = Connections.find(str(f.get("profile", "")))
+	var retry = func():
+		for c in Native.contexts_of(Connections.source_of(prof)):
+			if c["context"] == f.get("context", ""):
+				_connect_wait(prof, c)
+	if kind == "exec_untrusted" and not prof.is_empty():
+		var cmd = str(f.get("extra", {}).get("command", ""))
+		v.add_child(_lbl("Program:  " + cmd, 15, K.health_color("warn")))
+		v.add_child(_btn("I trust this kubeconfig: allow \"%s\" for this context and connect" % cmd, func():
+			Connections.trust_exec(prof, str(f.get("context", "")), cmd)
+			retry.call(), "mk3"))
+	elif kind == "needs_base_dir" and not prof.is_empty():
+		v.add_child(_btn("Choose the folder...", func():
+			DisplayServer.file_dialog_show("Folder holding the certificate files", "", "", true, DisplayServer.FILE_DIALOG_MODE_OPEN_DIR, PackedStringArray(),
+				func(ok, paths, _i):
+					if ok and paths.size() > 0:
+						Connections.set_base_dir(str(prof["id"]), str(paths[0]))
+						open_connect.call_deferred(str(prof["id"]))), "primary"))
+	elif not prof.is_empty():
+		v.add_child(_btn("Try again", retry))
+	return pc
+
+func _open_connect_paste() -> void:
+	var body = _open_modal("connect_paste", null, "PASTE A KUBECONFIG", Vector2(900, 620))
+	body.add_child(_lbl("Paste the whole file. It is saved in the game's own user folder so the connection can be reused, and nowhere else.", 13, DIM))
+	var nr = _row(10)
+	nr.add_child(_lbl("NAME", 12, DIM))
+	var name_edit = LineEdit.new()
+	name_edit.placeholder_text = "e.g. homelab"
+	name_edit.custom_minimum_size.x = 300
+	nr.add_child(name_edit)
+	body.add_child(nr)
+	var te = TextEdit.new()
+	te.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	te.custom_minimum_size.y = 380
+	te.add_theme_font_override("font", _mono)
+	te.add_theme_font_size_override("font_size", 12)
+	te.placeholder_text = "apiVersion: v1\nkind: Config\n..."
+	body.add_child(te)
+	var warn = _lbl("", 13, RED)
+	body.add_child(warn)
+	var r = _row()
+	r.add_child(_btn("Paste from clipboard", func(): te.text = DisplayServer.clipboard_get()))
+	r.add_child(_spacer())
+	r.add_child(_btn("Back", func(): open_connect()))
+	r.add_child(_btn("Read it", func():
+		var chk = Agent.request("kubeconfig.inspect", {"content": te.text, "base_dir": "."}, 15.0)
+		if not chk["ok"]:
+			warn.text = chk["msg"]
+			return
+		var p = Connections.add_pasted(te.text, name_edit.text.strip_edges())
+		open_connect(str(p.get("id", ""))), "primary"))
+	body.add_child(r)
+	te.grab_focus.call_deferred()
 
 # ----- demo worlds: the simulated clusters you can try without connecting to anything
 
