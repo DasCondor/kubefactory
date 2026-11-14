@@ -199,6 +199,18 @@ static func tidy_path(p: String, home: String = "") -> String:
 # handed back untouched: it is too long to sort and filter on every keystroke.
 const TABLE_LIMIT = 10000
 
+# Intersect the crosshair ray with the display, not the machine's oversized collision box.
+static func ray_hits_screen(origin: Vector3, direction: Vector3, rect: Dictionary, reach: float) -> bool:
+	var normal: Vector3 = rect["normal"]
+	var facing = direction.dot(normal)
+	if facing >= -0.001:
+		return false
+	var distance = (rect["pos"] - origin).dot(normal) / facing
+	if distance < 0.0 or distance > reach:
+		return false
+	var offset: Vector3 = origin + direction * distance - rect["pos"]
+	return absf(offset.dot(rect["right"])) <= rect["size"].x * 0.5 and absf(offset.dot(rect["up"])) <= rect["size"].y * 0.5
+
 static func table_rows(rows: Array, col: String, desc: bool, filter: String, getters: Dictionary) -> Array:
 	if rows.size() >= TABLE_LIMIT:
 		return rows

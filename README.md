@@ -228,7 +228,8 @@ Every machine has a screen, and it can show four things:
 
 Lists with columns (workloads, clusters, files in a volume, Grafana dashboards
 and panels) have a **CONTAINS** box and clickable headings: click once to sort,
-again to reverse, a third time to go back to the original order.
+again to reverse, a third time to go back to the original order. Sorting and
+filtering work on tables with fewer than 10,000 rows.
 
 ## 📺 LiveView: the application's own page (key `V`)
 

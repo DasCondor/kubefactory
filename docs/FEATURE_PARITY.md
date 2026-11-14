@@ -22,8 +22,8 @@ Status words, used the same way everywhere:
 |---|---|---|
 | Simulated clusters, four demo worlds, browser demo | unchanged | verified in simulation |
 | Tools 1-6, tiers, typed confirmations, protected namespaces | unchanged; same code path on every backend | verified in simulation |
-| Scale, restart, delete, deploy, cordon, drain | kubectl path unchanged; native path added | native path: verified on a real API server (40-step companion run, and the game's own action tour: create, scale, restart, cordon, uncordon, delete). Drain: only on an empty node. kubectl path: not re-tested this cycle |
-| Logs and events | native path added | events: verified on a real API server. Logs: **not tested** (no running container to produce any) |
+| Scale, restart, delete, deploy, cordon, drain | kubectl path unchanged; native path added | native path: verified on a real API server; scale, restart, delete and drain with pods also verified on a kind cluster with running containers (29/29). kubectl path: not re-tested this cycle |
+| Logs and events | native path added | events: verified on a real API server. Logs: verified on a kind cluster with running containers |
 | Porter: app setups, Portainer templates | unchanged; applies through server-side apply on the native path | native apply: verified on a real API server (the game deployed and removed the postgres setup and a Portainer template) |
 | Bob and Bob 2.0 log reading | unchanged | verified in simulation |
 | Multi-user presence and action feed | native path added | verified on a real API server (one player; two players at once not tested) |
@@ -39,7 +39,7 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 |---|---|---|
 | 00 Native connectivity | Kubeconfig discovery, import by file / drop / paste, context list | verified in simulation (real kubeconfig file, fake API server) |
 | | Live on a real cluster with running containers (kind 1.37): logs, storage, port-forward, scale, restart, drain with pods | **verified live** (`tools\live-test.ps1 -Kind`, 29/29; the game also run on it) |
-| | Connect without kubectl (client-go) | verified on a real API server, from the companion and from the game; **not tested** on a cluster with working nodes or on any cloud provider |
+| | Connect without kubectl (client-go) | verified on a real API server and on kind with working nodes; **not tested** on any cloud provider |
 | | Plain failure screens (unreachable, TLS, auth, RBAC, timeout) | RBAC and unreachable: verified on a real API server; TLS, auth: verified in simulation |
 | | Explicit trust for exec auth helpers | verified in simulation |
 | | Watches instead of polling | verified on a real API server |
@@ -55,7 +55,7 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Porter V3 as minimum standard | machines, Porter and Bob use V3; V2 models are not placed |
 | 02 Docker | Native Docker Engine API | unsupported (docker CLI kept) |
 | 02 Kubernetes | Server-side apply, cordon, scale, rollout restart | verified on a real API server |
-| | Drain with pods to evict | **not tested** |
+| | Drain with pods to evict | **verified live** on the disposable kind cluster |
 | | Exec / terminal, ephemeral debug containers, Helm, CRD browsing | unsupported |
 | 03 World and graphics | Non-regression presets | verified in simulation (`BENCHMARK.md`) |
 | 04 Assets and operator experience | Control center, accessibility options | unsupported beyond what 1.0.1 had |
@@ -83,15 +83,14 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | 11 Security | No credentials in logs, Git or shipped files; browser demo isolated | verified by review and by two tests (`TestInspectListsContextsWithoutSecrets`, `TestBadKubeconfigErrorsDoNotEchoContents`) |
 | | Multiplayer beyond 1.0.1 presence | unsupported |
 | 12 Verification | Unit tests (GDScript, Go), model audit, screenshot runs | done; see the PR description for results |
-| | Live acceptance tests, large-scale benchmarks | not tested |
+| | Live acceptance tests, large-scale benchmarks | kind and Docker tests completed; clean-machine, cloud and large-scale tests not completed |
 | 13 Distribution | Windows zips with companion and models | built locally; not published |
 | | Linux / macOS builds, signing | unsupported |
 
 ## What has to happen before this is called a release
 
-1. Run the native path against a cluster that runs containers (kind is enough
-   to start): logs, drain with pods, a pod reaching Running, and at least one
-   cloud provider with its sign-in helper.
+1. Test a cloud provider and its sign-in helper. The native path has been run
+   against kind with running containers, including logs and drain with pods.
 2. Open a storage door on a real pod with a volume; try a distroless image.
 3. Open Grafana through LiveView on Docker and through a port-forward.
 4. Install the zip on a Windows machine that has never had kubectl or Go.
