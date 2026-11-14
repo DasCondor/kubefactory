@@ -936,8 +936,12 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 		for i in svcs.size():
 			var s = svcs[i]
 			var d = _depots[s["ns"] + "/" + s["name"]]
-			var h = 12.0 + (i % 6) * 0.75
-			var lz = YARD_Z - 3.0 - (i % 6) * 1.0
+			# every service rides its own track: its own height, its own lane back from
+			# the depots, and its own offset on the run down to a machine. Tracks only
+			# meet where the routing really does, i.e. two services selecting one pod.
+			var h = 12.0 + i * 0.7
+			var lz = YARD_Z - 3.0 - i * 1.4
+			var lane = Vector3(((i % 5) - 2) * 0.55, 0, (int(i / 5.0) % 3 - 1) * 0.55)
 			var col = K.hue_color("svc:" + s["ns"] + "/" + s["name"], 0.6, 0.85)
 			for p in pods:
 				if p["ns"] != s["ns"] or not K.selects(s["selector"], p["labels"]):
@@ -945,7 +949,7 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 				var m = machines.get(p["uid"])
 				if m == null:
 					continue
-				var mp = m.get_parent().position + m.position + Vector3(-0.5, 0, 0.3)
+				var mp = m.get_parent().position + m.position + Vector3(-0.5, 0, 0.3) + lane
 				var sx = d.position.x
 				var pts = [Vector3(sx, 3.1, YARD_Z), Vector3(sx, h, YARD_Z), Vector3(sx, h, lz),
 					Vector3(mp.x, h, lz), Vector3(mp.x, h, mp.z), Vector3(mp.x, mp.y + 4.3, mp.z)]
