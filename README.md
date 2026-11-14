@@ -199,8 +199,9 @@ run (any address, including one behind a reverse-proxy sub-path).
 - **Tokens** go to the companion once, are sealed with Windows' own per-user
   protection, and are never shown again, sent to the game, or put in a link.
 
-Grafana is verified against a real Grafana OSS 11.2.0; Tautulli against a
-stand-in only so far. See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+Verified against real Grafana OSS 10.4.10, 11.2.0, 12.3.0 and 13.0.0, and a
+real Tautulli 2.19.1 (without a Plex server, so real stream counts are not yet
+tested). See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
 The page is drawn by the Edge or Chrome already on your computer, in a private
 profile that is deleted when you close the display. Links to other hosts are
@@ -504,6 +505,8 @@ More tests and checks:
 
     powershell -ExecutionPolicy Bypass -File tools\build-agent.ps1 -Test                                          companion tests (Go)
     powershell -ExecutionPolicy Bypass -File tools\live-test.ps1                                                  companion against a real, disposable kube-apiserver (no Docker)
+    powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Grafana [-GrafanaVersion 13.0.0]               Grafana provider against a real, disposable Grafana
+    powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Tautulli                                       Tautulli provider against a real, disposable Tautulli
     engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tools/model_audit.gd                        audits every model, writes docs/MODEL_AUDIT.md
 
 The model library can be inspected in a browser with the asset reviewer

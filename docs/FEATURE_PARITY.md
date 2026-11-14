@@ -63,10 +63,11 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Port-forward for cluster Services | not tested |
 | | Host allowlist, isolated profile, no stand-in pictures | verified in simulation |
 | | Bundled browser engine (CEF), display builder, audio | unsupported: uses installed Edge or Chrome |
-| V8 providers | Provider registry (Grafana, Tautulli), protected token storage, test connection | Grafana: **verified live** against Grafana OSS 11.2.0 (`tools\live-test.ps1 -Grafana`, 18/18). Tautulli: verified in simulation |
-| | Grafana: dashboard search, panel list, time range, variables, credential-free links, sub-path | **verified live** (Grafana OSS 11.2.0 only; not 10, 12, Enterprise or Cloud) |
+| V8 providers | Provider registry (Grafana, Tautulli), protected token storage, test connection | **verified live**: Grafana OSS 10.4.10, 11.2.0, 12.3.0, 13.0.0 (`tools\live-test.ps1 -Grafana`) and Tautulli 2.19.1 (`-Tautulli`) |
+| | Grafana: dashboard search, panel list, time range, variables, credential-free links, sub-path | **verified live** on Grafana OSS 10.4.10, 11.2.0, 12.3.0 and 13.0.0; not Enterprise or Cloud |
 | | Grafana: newer dashboard API and layouts, native charts from a data source | unsupported |
-| | Tautulli: aggregate activity panel, pinned to a machine, missing values shown as unavailable | verified in simulation; **not tested live** |
+| | Tautulli: key handling, failures, missing values shown as unavailable | **verified live** on Tautulli 2.19.1 (no Plex behind it) |
+| | Tautulli: real stream counts and bandwidth; the panel pinned to a machine | verified in simulation (stand-in server); needs a Plex server to test live |
 | | Tautulli: history, home stats, libraries; control-room wall; Datapad pin | unsupported |
 | 06-08 Krew | Porter and Bob with V3 models | verified in simulation |
 | | The other Krew roles, shared framework, operations center, incident coordination | unsupported |
