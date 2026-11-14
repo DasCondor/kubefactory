@@ -26,6 +26,7 @@ against live infrastructure.
 - `tools/live-test.ps1`: runs the companion against a real, disposable
   kube-apiserver without Docker.
 - `KUBECONFIG` is honoured the way kubectl does.
+- `KubeFactory.exe --kubeconfig <file>`: one step from download to a cluster.
 - `docs/ARCHITECTURE.md`, `FEATURE_PARITY.md`, `KNOWN_LIMITATIONS.md`.
 
 ### Changed

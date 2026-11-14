@@ -231,6 +231,11 @@ func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
 		for c in list:
 			if c["source"] != "kubernetes":
 				continue
+			if profile != "" and ctx == "":
+				# a kubeconfig named outright: its current context, else its first
+				if c["profile"] == profile and (pick.is_empty() or (c["current"] and not pick["current"])):
+					pick = c
+				continue
 			if (ctx != "" and c["context"] == ctx and (profile == "" or c["profile"] == profile)) or (ctx == "" and c["current"] and pick.is_empty()):
 				pick = c
 				if ctx != "":
@@ -238,6 +243,9 @@ func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
 		if pick.is_empty():
 			if ctx != "":
 				note += "Kubernetes: no saved kubeconfig has a context named %s. " % ctx
+			elif profile == "cli":
+				var cp = Connections.cli_path
+				note += "Kubernetes: %s. " % (("%s was not found" % cp) if not FileAccess.file_exists(cp) else ("%s is not a kubeconfig with a context in it" % cp))
 			elif mode == "kubernetes":
 				note += "Kubernetes: no kubeconfig added yet (Esc > Clusters > Add a kubeconfig). "
 		else:

@@ -11,6 +11,7 @@ extends Node3D
 
 const K = preload("res://scripts/kutil.gd")
 const Cluster = preload("res://scripts/cluster.gd")
+const Connections = preload("res://scripts/connections.gd")
 const World = preload("res://scripts/world.gd")
 const Player = preload("res://scripts/player.gd")
 const Hud = preload("res://scripts/hud.gd")
@@ -160,6 +161,11 @@ func _ready() -> void:
 	#   docker  opens on the local Docker engine and never touches kubectl
 	#   demo    the full game on the built-in simulated clusters only
 	var edition = "docker" if OS.has_feature("docker_edition") else ("demo" if OS.has_feature("demo_edition") else "")
+	# KubeFactory.exe --kubeconfig <file>: connect to that cluster, nothing else to set up
+	var kubeconfig = Connections.cli_kubeconfig(Array(OS.get_cmdline_args()) + Array(OS.get_cmdline_user_args()))
+	if kubeconfig != "":
+		Connections.cli_path = kubeconfig
+		source = "kubernetes"
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--edition="):
 			edition = a.trim_prefix("--edition=")
@@ -250,7 +256,7 @@ func _ready() -> void:
 			hud.open_welcome.call_deferred()
 		elif hud.offer_demos:
 			hud.open_demos.call_deferred()
-	cluster.start(source, ctx)
+	cluster.start(source, ctx, "cli" if kubeconfig != "" else "")
 	if shots != "" and shots != "-":
 		_run_shots(shots)
 	if mptest != "":
