@@ -1,8 +1,8 @@
 # Changelog
 
-## 2.0.0-dev (unreleased)
+## 2.0.0-beta.1 (2026-11-14)
 
-Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
+A beta: not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added

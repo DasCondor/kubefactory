@@ -1,4 +1,4 @@
-# Known limitations (2.0.0-dev)
+# Known limitations (2.0.0-beta.1)
 
 Stated plainly so nobody has to find them the hard way. "Not tested" means
 exactly that: the code exists and has not been run against the real thing.
