@@ -268,6 +268,7 @@ level. The board exports to Markdown or JSON in the log folder. Demo findings
 are marked **SIMULATED**.
 
 ![The Krew's stations](docs/krew-stations.png)
+![The same stations as the browser build draws them](docs/krew-stations-browser.png)
 ![Sentinel's findings in the operations center](docs/krew-panel.png)
 ![Scrappy's cleanup awaiting approval](docs/krew-scrappy.png)
 

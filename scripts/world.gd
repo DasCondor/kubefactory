@@ -470,12 +470,7 @@ func _build_krew_stations() -> void:
 		_solid(Vector3(1.6, 2.6, 1.6), Vector3(0, 1.3, 0), {"type": "krew", "worker": s[0]}, root)
 		var figure = Node3D.new()
 		root.add_child(figure)
-		var fallback = _krew(s[0], figure, 2.3)
-		_box(Vector3(0.8, 1.0, 0.55), accent, Vector3(0, 1.1, 0), fallback)
-		_box(Vector3(0.6, 0.5, 0.5), Tex.shared("steel"), Vector3(0, 1.85, 0), fallback)
-		_box(Vector3(0.44, 0.16, 0.05), Tex.glow(s[3], 1.6), Vector3(0, 1.88, 0.27), fallback)
-		for x in [-0.22, 0.22]:
-			_box(Vector3(0.22, 0.6, 0.26), Tex.shared("dark"), Vector3(x, 0.3, 0), fallback)
+		_drawn_krew(s[0], _krew(s[0], figure, 2.3), accent, s[3])
 		var tag = Label3D.new()
 		tag.text = "%s  ·  %s\n[E] findings" % [s[1], s[2]]
 		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -487,6 +482,73 @@ func _build_krew_stations() -> void:
 		tag.visibility_range_end = 60.0
 		root.add_child(tag)
 		_krew_tags[s[0]] = tag
+
+func _cyl(radius: float, height: float, material: Material, pos: Vector3, parent: Node3D, rot = Vector3.ZERO) -> MeshInstance3D:
+	var mi = MeshInstance3D.new()
+	var c = CylinderMesh.new()
+	c.top_radius = radius
+	c.bottom_radius = radius
+	c.height = height
+	c.radial_segments = 16
+	mi.mesh = c
+	mi.material_override = material
+	mi.position = pos
+	mi.rotation = rot
+	parent.add_child(mi)
+	return mi
+
+# The code-drawn figures for the browser build and the Compatibility renderer,
+# each shaped like its library model: Sentinel a guard robot with a shield,
+# Scout a four-rotor drone, Scrappy a tracked sweeper with a roller brush.
+func _drawn_krew(id: String, p: Node3D, accent: Material, colour: Color) -> void:
+	var dark = Tex.shared("dark")
+	var steel = Tex.shared("steel")
+	var eyes = Tex.glow(colour.lightened(0.3), 1.6)
+	match id:
+		"sentinel":
+			for x in [-0.22, 0.22]:
+				_box(Vector3(0.24, 0.62, 0.3), dark, Vector3(x, 0.31, 0), p)
+			_box(Vector3(0.84, 0.86, 0.56), accent, Vector3(0, 1.05, 0), p)
+			_box(Vector3(0.36, 0.3, 0.06), steel, Vector3(0, 1.12, 0.29), p)
+			_box(Vector3(0.66, 0.52, 0.52), steel, Vector3(0, 1.78, 0), p)
+			_box(Vector3(0.48, 0.18, 0.05), eyes, Vector3(0, 1.8, 0.27), p)
+			_cyl(0.035, 0.3, steel, Vector3(0.2, 2.18, 0), p)
+			for x in [-0.55, 0.55]:
+				_box(Vector3(0.2, 0.66, 0.24), accent, Vector3(x, 1.0, 0), p)
+			# the shield on the left arm
+			_box(Vector3(0.12, 0.66, 0.54), steel, Vector3(-0.72, 0.95, 0.12), p)
+			_box(Vector3(0.04, 0.3, 0.2), eyes, Vector3(-0.79, 0.98, 0.12), p)
+		"scout":
+			_cyl(0.05, 0.62, steel, Vector3(0, 0.31, 0), p)
+			_box(Vector3(0.9, 0.5, 0.7), accent, Vector3(0, 0.95, 0), p)
+			_box(Vector3(0.5, 0.26, 0.05), steel, Vector3(0, 1.0, 0.36), p)
+			_box(Vector3(0.36, 0.1, 0.04), eyes, Vector3(0, 1.0, 0.39), p)
+			_cyl(0.16, 0.2, steel, Vector3(0, 0.62, 0.2), p, Vector3(PI / 2, 0, 0))
+			for x in [-1.0, 1.0]:
+				for z in [-1.0, 1.0]:
+					var at = Vector3(x * 0.78, 1.12, z * 0.62)
+					_box(Vector3(absf(at.x) * 1.1, 0.08, 0.1), dark, Vector3(at.x * 0.5, 1.08, at.z), p)
+					_cyl(0.07, 0.18, steel, at, p)
+					_cyl(0.36, 0.04, accent, at + Vector3(0, 0.1, 0), p)
+			_cyl(0.025, 0.34, steel, Vector3(0, 1.36, 0), p)
+		"scrappy":
+			# built along +x, turned so the brush faces the yard like the model
+			var turn = Node3D.new()
+			turn.rotation.y = -PI / 2
+			p.add_child(turn)
+			p = turn
+			for z in [-0.42, 0.42]:
+				_box(Vector3(1.3, 0.34, 0.26), dark, Vector3(-0.1, 0.17, z), p)
+				for x in [-0.6, -0.1, 0.4]:
+					_cyl(0.13, 0.28, steel, Vector3(x, 0.17, z), p, Vector3(PI / 2, 0, 0))
+			_box(Vector3(1.05, 0.62, 0.8), accent, Vector3(-0.15, 0.68, 0), p)
+			_box(Vector3(0.5, 0.42, 0.55), accent, Vector3(-0.35, 1.18, 0), p)
+			# its face looks forward, toward the brush
+			_box(Vector3(0.06, 0.34, 0.46), steel, Vector3(0.4, 1.12, 0), p)
+			_box(Vector3(0.04, 0.12, 0.32), eyes, Vector3(0.44, 1.14, 0), p)
+			_cyl(0.32, 0.9, Tex.mat(colour.darkened(0.15), 0.8, 0.0), Vector3(0.78, 0.32, 0), p, Vector3(PI / 2, 0, 0))
+			for z in [-0.4, 0.4]:
+				_box(Vector3(0.5, 0.08, 0.06), steel, Vector3(0.52, 0.55, z), p)
 
 # What a station shows: the worker's state, and its lamp in the colour of its worst finding.
 func set_krew_status(id: String, text: String, worst: String) -> void:
