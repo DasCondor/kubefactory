@@ -504,6 +504,8 @@ func _refresh_modal() -> void:
 			_fill_node()
 		"service":
 			_fill_service()
+		"bob":
+			_fill_bob()
 
 func _kv(grid: GridContainer, k: String, v: String, color: Color = TXT) -> void:
 	grid.add_child(_fixed(_lbl(k, 13, DIM), 110))
@@ -1324,6 +1326,144 @@ func on_action(a: Dictionary, r: Dictionary) -> void:
 	all.append(e)
 	Apps.save_installed(all)
 
+# ----- Bob, the pod fixer: a fix list with a diagnosis and a remedy per job
+
+const BOB_COL = Color(1.0, 0.8, 0.45)
+
+func _bob_portrait() -> Control:
+	# an old hand drawn from rectangles: flat cap, white hair and moustache, glasses, green cardigan
+	var c = Control.new()
+	c.custom_minimum_size = Vector2(210, 230)
+	var skin = Color(0.89, 0.72, 0.6)
+	var white = Color(0.93, 0.93, 0.9)
+	var tweed = Color(0.45, 0.42, 0.38)
+	var parts = [[Rect2(0, 0, 210, 230), Color(0.1, 0.085, 0.06)], [Rect2(30, 158, 150, 72), Color(0.34, 0.44, 0.3)],
+		[Rect2(78, 170, 54, 60), Color(0.42, 0.29, 0.18)], [Rect2(58, 60, 94, 96), skin],
+		[Rect2(48, 70, 12, 56), white], [Rect2(150, 70, 12, 56), white],
+		[Rect2(46, 38, 118, 26), tweed], [Rect2(40, 60, 96, 10), tweed],
+		[Rect2(66, 80, 34, 8), white], [Rect2(110, 80, 34, 8), white],
+		[Rect2(64, 90, 36, 24), Color(0.15, 0.15, 0.17)], [Rect2(110, 90, 36, 24), Color(0.15, 0.15, 0.17)],
+		[Rect2(68, 94, 28, 16), Color(0.75, 0.92, 1.0)], [Rect2(114, 94, 28, 16), Color(0.75, 0.92, 1.0)],
+		[Rect2(100, 98, 10, 4), Color(0.15, 0.15, 0.17)], [Rect2(98, 110, 14, 18), Color(0.82, 0.62, 0.52)],
+		[Rect2(74, 128, 62, 12), white], [Rect2(84, 140, 42, 14), white]]
+	for p in parts:
+		var r = ColorRect.new()
+		r.color = p[1]
+		r.position = p[0].position
+		r.size = p[0].size
+		c.add_child(r)
+	return c
+
+func open_bob() -> void:
+	var body = _open_modal("bob", null, "BOB  //  REPAIR STAND", Vector2(1080, 660))
+	var h = _row(18)
+	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var left = _col(6)
+	left.add_child(_bob_portrait())
+	left.add_child(_lbl("BOB", 18, BOB_COL))
+	left.add_child(_lbl("Pod fixer", 12, DIM))
+	left.add_child(_lbl("Forty years on the floor", 12, DIM))
+	h.add_child(left)
+	var box = _col(10)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(box)
+	body.add_child(h)
+	var n = K.issues(cluster.state).size()
+	# he opens with a zinger or some rizz, then gets down to business
+	var opener = K.bob_line(n > 0)
+	if n == 0:
+		_say(box, opener + "\n\nNothing on my bench and every machine is humming. Come back when something starts smoking.", BOB_COL)
+	else:
+		_say(box, opener + "\n\nRight. I have %d %s on the list, worst first. I will tell you what is wrong and what I would do about it. You hold the tools, mind - I only point." % [n, "job" if n == 1 else "jobs"], BOB_COL)
+	var chat = _row()
+	chat.add_child(_btn("Got another one, Bob?", open_bob))
+	chat.add_child(_spacer())
+	box.add_child(chat)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_dyn = _col(8)
+	_dyn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(_dyn)
+	box.add_child(sc)
+	_dyn_sig = ""
+	_fill_bob()
+
+func _fill_bob() -> void:
+	var jobs = K.issues(cluster.state)
+	var sig = JSON.stringify(jobs) + str(cluster.read_only)
+	if sig == _dyn_sig:
+		return
+	_dyn_sig = sig
+	_clear(_dyn)
+	if jobs.is_empty():
+		_dyn.add_child(_lbl("FIX LIST  -  empty", 15, K.health_color("ok")))
+		_dyn.add_child(_lbl("No failing pods, no stuck pods, no unhealthy nodes.", 14, DIM))
+		return
+	_dyn.add_child(_lbl("FIX LIST  (%d)" % jobs.size(), 15, BOB_COL))
+	var docker = cluster.backend != null and cluster.backend.label == "docker"
+	for j in jobs:
+		var col = K.health_color(j["sev"])
+		var pc = PanelContainer.new()
+		var sb = _sb(BG2, col, 0, 10)
+		sb.border_width_left = 4
+		pc.add_theme_stylebox_override("panel", sb)
+		var v = _col(4)
+		pc.add_child(v)
+		var top = _row(12)
+		top.add_child(_lbl(("NODE  " if j["kind"] == "node" else "") + str(j["name"]), 16))
+		top.add_child(_lbl(str(j["status"]), 15, col))
+		top.add_child(_spacer())
+		if j["kind"] == "pod":
+			var where = "%s  ·  %s" % [j["ns"], j["node"] if j["node"] != "" else "not on any node"]
+			if j["restarts"] > 0:
+				where += "  ·  %d restarts" % j["restarts"]
+			top.add_child(_lbl(where, 12, DIM))
+		v.add_child(top)
+		var lines = [[j["why"], TXT], ["Bob:  " + j["fix"], BOB_COL]]
+		if K.BOB_QUIPS.has(j["status"]):
+			lines.insert(1, ["\"" + K.BOB_QUIPS[j["status"]] + "\"", DIM])
+		for line in lines:
+			var l = _lbl(line[0], 14, line[1])
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 740
+			v.add_child(l)
+		var b = _row()
+		if j["kind"] == "node":
+			b.add_child(_btn("Go there", func(): _bob_goto(world.node_spot(j["node"]))))
+			b.add_child(_btn("Node terminal", func(): open_node(j["node"])))
+			if j["action"] == "uncordon" and cluster.cap("cordon"):
+				b.add_child(_spacer())
+				b.add_child(_btn("Uncordon", func(): cluster.act({"op": "cordon", "node": j["node"], "on": false}), "mk2"))
+		else:
+			b.add_child(_btn("Go there", func(): _bob_goto(world.machine_spot(j["uid"]))))
+			b.add_child(_btn("Logs and events", func(): open_pod(j["uid"])))
+			b.add_child(_spacer())
+			var w = K.find_workload(cluster.state, j["ns"], j["wkind"], j["wname"])
+			match j["action"]:
+				"restart":
+					if docker:
+						b.add_child(_btn("Restart container", func(): cluster.act({"op": "restart", "ns": j["ns"], "kind": j["wkind"], "name": j["wname"], "pod": j["name"]}), "mk3"))
+					elif w != null and cluster.cap("restart"):
+						b.add_child(_btn("Rolling restart", func(): cluster.act({"op": "restart", "ns": w["ns"], "kind": w["kind"], "name": w["name"]}), "mk3"))
+				"delete_pod":
+					b.add_child(_btn("Rebuild pod" if w != null else "Dismantle pod", func(): cluster.act({"op": "delete_pod", "ns": j["ns"], "name": j["name"]}), "mk4"))
+				"uncordon":
+					for n in cluster.state["nodes"]:
+						if n["cordoned"] and cluster.cap("cordon"):
+							b.add_child(_btn("Uncordon " + str(n["name"]).left(24), func(): cluster.act({"op": "cordon", "node": n["name"], "on": false}), "mk2"))
+							break
+		v.add_child(b)
+		_dyn.add_child(pc)
+	_dyn.add_child(_tier_legend())
+
+func _bob_goto(spot) -> void:
+	if spot == null:
+		notify("Nothing to walk to for that one", "warn")
+		return
+	close_modal()
+	player.teleport(spot[0], spot[1])
+
 func _portainer_installed() -> bool:
 	for p in cluster.state["pods"]:
 		if p["ns"] == "portainer" or p["name"] == "portainer":
@@ -1349,9 +1489,9 @@ func _portrait() -> Control:
 		c.add_child(r)
 	return c
 
-func _say(box: VBoxContainer, text: String) -> void:
+func _say(box: VBoxContainer, text: String, accent: Color = Color(0.075, 0.745, 0.976)) -> void:
 	var pc = PanelContainer.new()
-	var sb = _sb(Color(0.06, 0.11, 0.13), Color(0.075, 0.745, 0.976), 0, 14)
+	var sb = _sb(accent.darkened(0.86), accent, 0, 14)
 	sb.border_width_left = 4
 	pc.add_theme_stylebox_override("panel", sb)
 	var l = _lbl(text, 16)

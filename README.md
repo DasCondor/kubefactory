@@ -1,20 +1,56 @@
-# KubeFactory
+<div align="center">
 
-A first-person factory-builder game whose factory is your container cluster.
-Walk around your Kubernetes clusters (or local Docker engine), see what is
-broken from across the map, and operate it with a belt of tools.
+# 🏭 KubeFactory
 
-Built with Godot 4.3. No art assets: everything is generated in code.
+### Your cluster is the factory. Go fix it.
+
+A first-person factory game where the factory **is** your container cluster.
+Walk your Kubernetes clusters or your local Docker engine, spot what is broken
+from across the yard, and put it right with a belt of six tools.
+
+[![Play in your browser](https://img.shields.io/badge/▶_Play_in_your_browser-f99549?style=for-the-badge)](https://dascondor.github.io/kubefactory/)
+[![Download for Windows](https://img.shields.io/badge/⬇_Download_for_Windows-2b2f36?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases/latest)
+
+[![Release](https://img.shields.io/github/v/release/DasCondor/kubefactory?color=f99549)](https://github.com/DasCondor/kubefactory/releases/latest)
+[![Web demo](https://img.shields.io/github/actions/workflow/status/DasCondor/kubefactory/pages.yml?label=web%20demo)](https://github.com/DasCondor/kubefactory/actions/workflows/pages.yml)
+[![Made with Godot 4.3](https://img.shields.io/badge/Godot-4.3-478cbf?logo=godotengine&logoColor=white)](https://godotengine.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
+![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20browser-8b949e)
 
 ![Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service belts and a failing pod's alarm](docs/flythrough.gif)
 
+[Play](#-play-in-the-browser-sandbox-demo) ·
+[Download](#-download) ·
+[Editions](#-editions) ·
+[The world](#-what-you-see) ·
+[Tools](#-tools-keys-1-6-or-mouse-wheel) ·
+[Porter](#-porter-the-portainer-dock-worker) ·
+[Bob](#-bob-the-pod-fixer) ·
+[Teams](#-teams-multi-user)
+
+</div>
+
+## ✨ Why play it
+
+- 🗺️ **See the whole cluster at a glance.** Nodes are platforms, pods are machines, services are conveyor belts. A failing pod throws a red light column you can see from anywhere.
+- 🔧 **Six tools, five tiers.** From a harmless scanner to the Mk.5 Demolisher. Stronger actions take a longer hold, and the worst ones make you type the target's name.
+- 👴 **Bob, the pod fixer.** An old hand with a repair stand, a live fix list, a diagnosis for every failure, and a zinger for every operator.
+- 🤖 **Porter, the dock worker.** Asks what you want built and cranes a complete app setup onto the cluster.
+- 👥 **Play it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows.
+- 🧪 **Nothing to break.** The built-in simulated clusters let you try every tool without touching anything real.
+- 🎨 **No art assets.** Every model, texture and sound is generated in code. Built with Godot 4.3.
+
+## 📸 Screenshots
+
 | | |
 |---|---|
-| ![Overview of a real 3-node cluster with alarm beams over failing pods](docs/overview.png) Nodes are platforms, pods are machines; red beams mark failing pods | ![Holding the Mk.4 Dismantler on a pod](docs/dismantler.png) Tiered tools: stronger actions take a longer hold |
-| ![The datapad showing cluster warning events as a ledger](docs/datapad.png) The datapad: pod logs, cluster events, audit trail | ![Porter, the Portainer dock robot](docs/porter.png) Porter builds complete app setups and installs from app lists |
-| ![Two other players shown as robot avatars](docs/multiuser.png) Other people on the cluster appear as avatars | ![Typed confirmation before deleting a workload](docs/confirm.png) Mk.5 actions ask you to type the target's name |
+| ![Overview of a simulated cluster with an alarm beam over a failing pod](docs/overview.png) Nodes are platforms, pods are machines; red beams mark failing pods | ![Holding the Mk.4 Dismantler on a pod](docs/dismantler.png) Tiered tools: stronger actions take a longer hold |
+| ![The six handheld tools](docs/tools.png) Six tools, each its own model: scanner, datapad, build gun, wrench, dismantler, demolisher | ![The datapad showing cluster warning events as a ledger](docs/datapad.png) The datapad: pod logs, cluster events, audit trail |
+| ![Bob at his repair stand, with the fix list on the board behind him](docs/bob-stand.png) Bob's repair stand: the board lists what is broken, and he has something to say about it | ![Bob's fix list: each failing pod with a diagnosis, his advice and a fix button](docs/bob.png) Bob's fix list: what is wrong, why, and what to do |
+| ![Porter, the Portainer dock robot](docs/porter.png) Porter builds complete app setups and installs from app lists | ![Typed confirmation before deleting a workload](docs/confirm.png) Mk.5 actions ask you to type the target's name |
+| ![Two other players shown as robot avatars](docs/multiuser.png) Other people on the cluster appear as avatars | |
 
-## Play in the browser (sandbox demo)
+## 🌐 Play in the browser (sandbox demo)
 
 **https://dascondor.github.io/kubefactory/**
 
@@ -27,14 +63,14 @@ details). Needs a desktop browser with keyboard and mouse; click the page to
 capture the mouse. It is rebuilt and redeployed on every push to `main` by
 `.github/workflows/pages.yml`.
 
-## Download
+## 📥 Download
 
 Get the latest Windows build from
 **https://github.com/DasCondor/kubefactory/releases/latest**
 (`KubeFactory-<version>-win64.zip` plus its `.sha256` checksum). The executable
 is not code-signed, so Windows SmartScreen asks for confirmation on first run.
 
-## Install (release build)
+## 📦 Install (release build)
 
 Unzip `KubeFactory-<version>-win64.zip`, then:
 
@@ -62,9 +98,9 @@ optional cloud CLIs.
 The files next to the exe are yours to edit: `policy.json`, `catalogs.json`,
 `log-providers.json`, `portainer.json` and the app setups in `apps\`.
 Per-user settings, audit logs and saved logs live in
-`%APPDATA%\Godotpp_userdata\KubeFactory`.
+`%APPDATA%\Godot\app_userdata\KubeFactory`.
 
-## Editions
+## 🎮 Editions
 
 The same game also comes in two narrower builds. They install side by side with
 the full game (`KubeFactory Docker`, `KubeFactory Demo`).
@@ -78,7 +114,7 @@ The Docker edition falls back to the simulation while the Docker engine is not
 running. Build them with `package.ps1 -Edition docker` / `-Edition demo`, or
 run them from source with `play-docker.bat` / `play-demo.bat`.
 
-## Run from source
+## 💻 Run from source
 
     setup.ps1          checks / installs the software below (including the engine)
     play.bat           same options as above, without the leading --
@@ -90,7 +126,7 @@ run them from source with `play-docker.bat` / `play-demo.bat`.
     dev-cluster.ps1 -Delete    remove it
     dev-users.ps1              multi-user setup + two test logins on that cluster
 
-## Software
+## 🧰 Software
 
 | Software | Needed for | Install |
 |---|---|---|
@@ -106,7 +142,7 @@ run them from source with `play-docker.bat` / `play-demo.bat`.
 Rancher needs nothing extra: download the cluster's kubeconfig from the Rancher UI.
 `setup.ps1 -Cloud` installs the three cloud CLIs.
 
-## What you see
+## 👀 What you see
 
 | In the game | In the cluster |
 |---|---|
@@ -118,8 +154,14 @@ Rancher needs nothing extra: download the cluster's kubeconfig from the Rancher 
 | Depot + conveyor belts | Service and the pods it routes to |
 | Cluster gates beside the HUB | kubeconfig contexts, Docker, simulations (provider-coloured) |
 | Logging Station (dish + light column) | Log providers; column is green when linked, red on no signal |
+| Porter's dock (right of the HUB) | Complete app setups and Portainer app lists |
+| Bob's repair stand (left of the HUB) | Everything that needs fixing, with a diagnosis for each |
 
-## Tools (keys 1-6 or mouse wheel)
+The tool in your hand is its own first-person model (scanner dish, datapad,
+build gun, wrench, saw-bladed dismantler, twin-barrel demolisher). Hold actions
+make it rattle, glow and spin up before they fire.
+
+## 🔧 Tools (keys 1-6 or mouse wheel)
 
 Stronger tools have a higher Mk, a hotter colour and a longer hold. The same
 tier colours mark every button in the panels.
@@ -137,7 +179,7 @@ Other keys: WASD, Shift sprint, Space jump (double-tap for hoverpack, Ctrl to
 descend), E inspect, MMB copy a machine as blueprint, Tab cluster codex,
 L datapad, G jump to next problem, B belts, F11 fullscreen, Esc menu.
 
-## Teams (multi-user)
+## 👥 Teams (multi-user)
 
 Several people can work on the same cluster at once, each with their own login.
 They see each other as avatars, share an action feed, and are held to a tool-tier
@@ -147,7 +189,7 @@ require typing the target's name. See **ADMIN.md** for setup; `dev-users.ps1`
 creates two test logins on the dev cluster so you can try it in three windows.
 `package.ps1` builds a zip to hand out.
 
-## Porter, the Portainer dock worker
+## 🤖 Porter, the Portainer dock worker
 
 Beside the HUB stands Porter, a crane-backed robot. Press E to talk. He can:
 
@@ -166,13 +208,44 @@ Beside the HUB stands Porter, a crane-backed robot. Press E to talk. He can:
   Portainer address and an API key in `portainer.json` and its own template
   list shows up as "My Portainer server".
 
-## Sound
+## 👴 Bob, the pod fixer
+
+Across the yard from Porter, an old hand in a flat cap keeps a repair stand.
+The board behind him is the cluster's **fix list**: the worst problems, live.
+Press E on Bob (or his stall) for the full list. For every job he gives:
+
+- **What is wrong**, in plain words, worked out from the pod or node status.
+- **What he would do about it**, and the button for it when there is one.
+- **Go there** (jump to the machine or node sign) and **Logs and events**.
+
+| On the list | Bob's remedy |
+|---|---|
+| CrashLoopBackOff, OOMKilled | read the logs; Mk.3 rolling restart (restart container on Docker) |
+| ImagePullBackOff, ErrImagePull | fix the image or pull secret: no button, a restart will not help |
+| CreateContainerConfigError | create the missing ConfigMap / Secret: no button |
+| Error, Evicted, anything unrecognised | Mk.4 rebuild the pod |
+| Unschedulable pod | Mk.2 uncordon a cordoned node, if there is one |
+| Node NotReady | open the node terminal |
+| Node cordoned | Mk.2 uncordon |
+| Pod running but restarted 5+ times | a warning to look at before it gets worse |
+
+He also has opinions. Walk up to him and he greets you with a zinger about your
+cluster or a Kubernetes pick-up line, with a fresh one every few seconds; each
+job on the list gets a dry remark of its own, and "Got another one, Bob?" asks
+for more. The lines are the `BOB_*` lists at the top of `scripts/kutil.gd`.
+
+Bob only points: his buttons are the same tiered actions as your tools, so the
+cluster policy and your permissions apply to them exactly as they do elsewhere.
+The diagnoses live in `diagnose()` in `scripts/kutil.gd`; add a status there to
+teach him a new one.
+
+## 🔊 Sound
 
 All sounds are synthesised at startup (tool switch, build, dismantle, charge-up
 while holding, footsteps, datapad, a positional alarm on failing machines).
 M mutes.
 
-## Logs
+## 📜 Logs
 
 The datapad (L) has three ledgers: pod logs, cluster events, and an audit trail
 of everything done through the game. The audit trail and saved logs are written
@@ -189,12 +262,14 @@ them in `log-providers.json`:
 | Azure Monitor | az CLI; `azure.workspace_id` (ContainerLogV2) |
 | Google Cloud Logging | gcloud CLI |
 
-## Layout
+## 📁 Layout
 
     scripts/main.gd             game loop, tools, input
     scripts/world.gd            cluster state -> 3D world
     scripts/platform.gd         node platform        scripts/machine.gd   pod machine
-    scripts/hud.gd              HUD, panels, datapad
+    scripts/hud.gd              HUD, panels, datapad, Porter's and Bob's conversations
+    scripts/viewmodel.gd        the first-person tool in your hand
+    scripts/kutil.gd            shared helpers, Bob's diagnoses, sign text fitting
     scripts/cluster.gd          polling, actions, audit log
     scripts/backend_kubectl.gd  real clusters        scripts/backend_docker.gd   Docker engine
     scripts/backend_demo.gd     simulated clusters   scripts/log_sources.gd      log providers
@@ -207,7 +282,15 @@ Against a real context or Docker engine it also deploys and removes throwaway
 `kf-*` apps, scales `shop/frontend`, deletes one of its pods and, on Docker,
 installs Portainer. Only point it at a dev cluster.
 
-## Security
+Two more dev aids, both read-only: `play.bat --demo --toolshots=<folder>`
+captures each handheld tool, the signs and Bob's stand, and `--trailer` plays a
+scripted 55-second tour for a video. Record it with Godot's movie writer and
+convert it with Windows' own encoder:
+
+    engine\Godot_v4.3-stable_win64.exe --path . --write-movie out.avi --fixed-fps 60 --resolution 1920x1080 -- --demo --trailer
+    powershell -ExecutionPolicy Bypass -File tools\to_mp4.ps1 out.avi kubefactory.mp4
+
+## 🔒 Security
 
 KubeFactory has no server and stores no credentials: it runs your own `kubectl`
 and `docker`, as you. Your cluster permissions are the security boundary; the
@@ -215,7 +298,7 @@ in-game tiers and confirmations are guard rails. App lists are treated as
 untrusted input. See [SECURITY.md](SECURITY.md) for the details and for how to
 report a problem.
 
-## License
+## 📄 License
 
 MIT, see [LICENSE](LICENSE). KubeFactory is built with the Godot Engine (MIT);
 notices for it and for the third-party names used are in
