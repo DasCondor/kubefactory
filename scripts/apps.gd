@@ -21,6 +21,20 @@ const APPS = [
 		"parts": ["Secret  app-db  (generated password)", "PersistentVolumeClaim  mysql-data  1Gi", "Deployment  mysql", "Service  mysql  :3306",
 			"Deployment  wordpress", "Service  wordpress  :80 (NodePort)"], "secret": true,
 		"sim": [["Deployment", "mysql", "mysql:8.4", 1, "3306/TCP"], ["Deployment", "wordpress", "wordpress:6-apache", 1, "80/TCP"]]},
+	{"id": "media", "name": "Media server suite", "desc": "A home media server: Plex to watch, Overseerr to request, Sonarr / Radarr / Lidarr / Bazarr to organise TV, films, music and subtitles, Jackett as the indexer proxy they search through (Prowlarr is there as the alternative), qBittorrent as the download client and Tautulli for Plex statistics. They share one media and one downloads volume.",
+		"parts": ["Plex  :32400", "Overseerr  :5055  (requests)", "Sonarr  :8989  (TV)", "Radarr  :7878  (films)", "Lidarr  :8686  (music)",
+			"Bazarr  :6767  (subtitles)", "Jackett  :9117  (indexer proxy)", "Prowlarr  :9696  (indexer manager)", "qBittorrent  :8080  (downloads)", "Tautulli  :8181  (Plex stats)",
+			"Volumes  media, downloads + one config volume each"], "secret": false,
+		"sim": [["Deployment", "plex", "lscr.io/linuxserver/plex:latest", 1, "32400/TCP"], ["Deployment", "overseerr", "lscr.io/linuxserver/overseerr:latest", 1, "5055/TCP"],
+			["Deployment", "sonarr", "lscr.io/linuxserver/sonarr:latest", 1, "8989/TCP"], ["Deployment", "radarr", "lscr.io/linuxserver/radarr:latest", 1, "7878/TCP"],
+			["Deployment", "lidarr", "lscr.io/linuxserver/lidarr:latest", 1, "8686/TCP"], ["Deployment", "bazarr", "lscr.io/linuxserver/bazarr:latest", 1, "6767/TCP"],
+			["Deployment", "jackett", "lscr.io/linuxserver/jackett:latest", 1, "9117/TCP"],
+			["Deployment", "prowlarr", "lscr.io/linuxserver/prowlarr:latest", 1, "9696/TCP"], ["Deployment", "qbittorrent", "lscr.io/linuxserver/qbittorrent:latest", 1, "8080/TCP"],
+			["Deployment", "tautulli", "lscr.io/linuxserver/tautulli:latest", 1, "8181/TCP"]]},
+	{"id": "monitoring", "name": "Monitoring dashboard", "desc": "Grafana with a ready-made container dashboard, fed by Prometheus, which scrapes cAdvisor (per-container CPU, memory, network) and node-exporter (the host). Grafana's admin password is generated.",
+		"parts": ["Secret  app-db  (generated Grafana admin password)", "Grafana  :3000  (dashboard: Containers)", "Prometheus  :9090", "cAdvisor  (container metrics)", "node-exporter  (host metrics)"], "secret": true,
+		"sim": [["Deployment", "grafana", "grafana/grafana:11.2.0", 1, "3000/TCP"], ["Deployment", "prometheus", "prom/prometheus:v2.54.1", 1, "9090/TCP"],
+			["DaemonSet", "cadvisor", "gcr.io/cadvisor/cadvisor:v0.49.1", 0, "8080/TCP"], ["DaemonSet", "node-exporter", "prom/node-exporter:v1.8.2", 0, "9100/TCP"]]},
 ]
 
 const PORTAINER_MANIFEST = "https://downloads.portainer.io/ce-lts/portainer.yaml"

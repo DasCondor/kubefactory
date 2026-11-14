@@ -1,0 +1,8 @@
+{
+  "log_review": true,
+  "tail": 200,
+  "previous": true,
+  "max_findings": 6,
+  "ignore": [],
+  "rules": []
+}

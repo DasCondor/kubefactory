@@ -35,7 +35,36 @@ const FLAVORS = {
 		"nodes": ["gke-analytics-default-pool-5f2a1c3e-x7kq", "gke-analytics-default-pool-5f2a1c3e-m2wd", "gke-analytics-default-pool-9b1e77a0-c4hz"], "cp": ""},
 	"rancher-edge": {"provider": "Rancher · RKE2", "version": "v1.30.5+rke2r1", "itype": "edge-box",
 		"zones": ["site-berlin", "site-berlin", "site-lyon"], "nodes": ["edge-worker-1", "edge-worker-2"], "cp": "edge-cp-1"},
+	# a home media server: Plex, the *arr apps and a Grafana monitoring stack, all healthy
+	"homelab-media": {"provider": "Homelab (k3s)", "version": "v1.31.2+k3s1", "itype": "mini-pc",
+		"zones": ["garage", "garage", "office"], "nodes": ["nas-01", "nuc-01"], "cp": "pi-cp-01"},
+	# a smart home: Home Assistant and the services around it, with a Zigbee stick gone missing
+	"home-assistant": {"provider": "Home Assistant (k3s)", "version": "v1.31.2+k3s1", "itype": "mini-pc",
+		"zones": ["hallway", "hallway", "loft"], "nodes": ["nuc-home", "pi-zigbee"], "cp": "ha-green"},
+	# a build farm: source hosting, CI runners, compile caches and dev containers per language
+	"dev-containers": {"provider": "Dev containers (k3s)", "version": "v1.31.2+k3s1", "itype": "build-box",
+		"zones": ["rack-1", "rack-1", "rack-2"], "nodes": ["build-01", "build-02", "build-03"], "cp": ""},
 }
+
+# The four demo worlds offered when you start the simulation without naming one
+# (`--demo=<id>`, the chooser on the welcome screen, or the pause menu).
+const DEMO_TYPES = [
+	{"id": "kubernetes", "flavor": "helmsman-sim", "name": "Kubernetes cluster",
+		"desc": "A web shop on a four-node cluster: frontend, cart, checkout, database, monitoring. Two workloads are broken on purpose. The cloud variants (EKS, AKS, GKE, Rancher) are at the cluster gates."},
+	{"id": "home-assistant", "flavor": "home-assistant", "name": "Home Assistant",
+		"desc": "A smart home: Home Assistant, Mosquitto, Zigbee2MQTT, Z-Wave, ESPHome, Node-RED, Frigate cameras, voice, and its database and graphs. The Zigbee stick has gone missing and one image tag is mistyped."},
+	{"id": "dev-containers", "flavor": "dev-containers", "name": "Dev containers",
+		"desc": "A build farm for compiling: Gitea, CI server and runners, BuildKit, a registry, compile caches, and a dev container per language (C++, Rust, Go, Python, Node). One heavy build keeps running out of memory."},
+	{"id": "media", "flavor": "homelab-media", "name": "Media suite",
+		"desc": "A home media server, all healthy: Plex, Overseerr, Sonarr, Radarr, Lidarr, Bazarr, Jackett, Prowlarr, qBittorrent and Tautulli, watched by Grafana, Prometheus, cAdvisor and node-exporter."},
+]
+
+static func demo_flavor(id: String) -> String:
+	for d in DEMO_TYPES:
+		if d["id"] == id or d["flavor"] == id:
+			return d["flavor"]
+	return ""
+
 var provider = ""
 var log_cfg = {}
 var providers = []
@@ -69,6 +98,16 @@ func _init(flavor: String = "helmsman-sim"):
 	var healthy = flavor == "gke-analytics"
 	_add_wl("Deployment", "kube-system", "coredns", [["coredns", "registry.k8s.io/coredns/coredns:v1.11.3"]], 2, 0.1, 0.07)
 	_add_wl("DaemonSet", "kube-system", "kube-proxy", [["kube-proxy", "registry.k8s.io/kube-proxy:v1.31.2"]], 0, 0.1, 0.05)
+	if flavor in ["homelab-media", "home-assistant", "dev-containers"]:
+		match flavor:
+			"homelab-media":
+				_seed_media()
+			"home-assistant":
+				_seed_home()
+			"dev-containers":
+				_seed_dev()
+		_settle()
+		return
 	if flavor == "rancher-edge":
 		_add_wl("Deployment", "cattle-system", "cattle-cluster-agent", [["cluster-register", "rancher/rancher-agent:v2.9.3"]], 2, 0.1, 0.2)
 		_add_wl("Deployment", "cattle-fleet-system", "fleet-agent", [["fleet-agent", "rancher/fleet-agent:v0.10.4"]], 1, 0.1, 0.1)
@@ -91,7 +130,88 @@ func _init(flavor: String = "helmsman-sim"):
 	_add_svc("shop", "redis", "ClusterIP", "6379/TCP", "redis")
 	_add_svc("monitoring", "prometheus", "ClusterIP", "9090/TCP", "prometheus")
 	_add_svc("monitoring", "grafana", "NodePort", "3000/TCP", "grafana")
-	# Start with everything already up.
+	_settle()
+
+# The homelab: the same pieces Porter's "Media server suite" and "Monitoring
+# dashboard" setups build (see Apps.APPS), already running.
+func _seed_media() -> void:
+	for app_id in ["media", "monitoring"]:
+		var app = Apps.find(app_id)
+		for s in app["sim"]:
+			var heavy = s[1] in ["plex", "prometheus"]
+			_add_wl(s[0], app_id, s[1], [[s[1], s[2]]], s[3], 1.0 if heavy else 0.25, 2.0 if heavy else 0.4)
+			if s[4] != "":
+				_add_svc(app_id, s[1], "LoadBalancer" if s[1] in ["plex", "grafana", "overseerr"] else "ClusterIP", s[4], s[1])
+
+# One simple workload with its Service: [kind, name, image, replicas, port, cpu, mem Gi].
+func _stack(ns: String, rows: Array) -> void:
+	for r in rows:
+		_add_wl(r[0], ns, r[1], [[r[1], r[2]]], r[3], r[5], r[6])
+		if r[4] != "":
+			_add_svc(ns, r[1], "LoadBalancer" if r.size() > 7 else "ClusterIP", r[4], r[1])
+
+# The smart home. Zigbee2MQTT cannot find its USB stick and the Matter server's
+# image tag is mistyped, so Bob has something to read.
+func _seed_home() -> void:
+	_stack("home", [
+		["Deployment", "homeassistant", "ghcr.io/home-assistant/home-assistant:stable", 1, "8123/TCP", 0.5, 1.0, "lb"],
+		["Deployment", "mosquitto", "eclipse-mosquitto:2", 1, "1883/TCP", 0.1, 0.1],
+		["Deployment", "zwave-js-ui", "zwavejs/zwave-js-ui:latest", 1, "8091/TCP", 0.2, 0.3],
+		["Deployment", "esphome", "ghcr.io/esphome/esphome:stable", 1, "6052/TCP", 0.25, 0.5],
+		["Deployment", "node-red", "nodered/node-red:latest", 1, "1880/TCP", 0.2, 0.3],
+		["Deployment", "frigate", "ghcr.io/blakeblackshear/frigate:stable", 1, "5000/TCP", 2.0, 2.0],
+		["Deployment", "music-assistant", "ghcr.io/music-assistant/server:latest", 1, "8095/TCP", 0.25, 0.5],
+		["StatefulSet", "mariadb", "mariadb:11", 1, "3306/TCP", 0.5, 1.0],
+		["Deployment", "influxdb", "influxdb:2", 1, "8086/TCP", 0.5, 1.0],
+		["Deployment", "grafana", "grafana/grafana:11.2.0", 1, "3000/TCP", 0.25, 0.5, "lb"]])
+	_stack("voice", [
+		["Deployment", "whisper", "rhasspy/wyoming-whisper:latest", 1, "10300/TCP", 1.0, 1.5],
+		["Deployment", "piper", "rhasspy/wyoming-piper:latest", 1, "10200/TCP", 0.5, 0.5],
+		["Deployment", "openwakeword", "rhasspy/wyoming-openwakeword:latest", 1, "10400/TCP", 0.25, 0.3]])
+	_add_wl("Deployment", "home", "zigbee2mqtt", [["zigbee2mqtt", "koenkk/zigbee2mqtt:latest"]], 1, 0.2, 0.3, "crashy", [
+		"INFO  Starting Zigbee2MQTT version 1.40.2",
+		"INFO  Starting zigbee-herdsman (0.57.3)",
+		"ERROR Error while starting zigbee-herdsman",
+		"ERROR Failed to start zigbee",
+		"ERROR Error: Error while opening serialport 'Error: No such file or directory, cannot open /dev/ttyUSB0'",
+		"FATAL Zigbee adapter not found, exiting with code 1"])
+	_add_svc("home", "zigbee2mqtt", "ClusterIP", "8080/TCP", "zigbee2mqtt")
+	_add_wl("Deployment", "home", "matter-server", [["matter", "ghcr.io/home-assistant-libs/python-matter-server:stabel"]], 1, 0.2, 0.3, "badimage")
+
+# The build farm. One oversized C++ build keeps getting killed for memory and a
+# dev container image tag is mistyped.
+func _seed_dev() -> void:
+	_stack("ci", [
+		["Deployment", "gitea", "gitea/gitea:1.22", 1, "3000/TCP,22/TCP", 0.5, 1.0, "lb"],
+		["Deployment", "woodpecker-server", "woodpeckerci/woodpecker-server:v2", 1, "8000/TCP", 0.25, 0.5, "lb"],
+		["Deployment", "woodpecker-agent", "woodpeckerci/woodpecker-agent:v2", 3, "", 1.0, 1.0],
+		["Deployment", "buildkitd", "moby/buildkit:v0.16.0", 2, "1234/TCP", 1.0, 2.0],
+		["Deployment", "registry", "registry:2", 1, "5000/TCP", 0.25, 0.5],
+		["Deployment", "sccache-redis", "redis:7.4", 1, "6379/TCP", 0.25, 1.0],
+		["StatefulSet", "minio", "minio/minio:latest", 1, "9000/TCP", 0.5, 1.0],
+		["StatefulSet", "postgres", "postgres:16", 1, "5432/TCP", 0.5, 1.0]])
+	_stack("dev", [
+		["Deployment", "devcontainer-cpp", "mcr.microsoft.com/devcontainers/cpp:ubuntu", 2, "", 1.0, 2.0],
+		["Deployment", "devcontainer-rust", "mcr.microsoft.com/devcontainers/rust:1", 1, "", 1.0, 2.0],
+		["Deployment", "devcontainer-go", "mcr.microsoft.com/devcontainers/go:1.23", 1, "", 0.5, 1.0],
+		["Deployment", "devcontainer-python", "mcr.microsoft.com/devcontainers/python:3.12", 1, "", 0.5, 1.0],
+		["Deployment", "devcontainer-node", "mcr.microsoft.com/devcontainers/typescript-node:22", 1, "", 0.5, 1.0],
+		["Deployment", "code-server", "codercom/code-server:latest", 1, "8080/TCP", 0.5, 1.0, "lb"]])
+	_add_wl("Deployment", "ci", "nightly-engine-build", [["builder", "mcr.microsoft.com/devcontainers/cpp:ubuntu"]], 1, 2.0, 2.0, "crashy", [
+		"INFO  cmake --build build --parallel 16",
+		"INFO  [ 86%] Building CXX object src/CMakeFiles/engine.dir/renderer.cpp.o",
+		"INFO  [ 87%] Building CXX object src/CMakeFiles/engine.dir/shader_cache.cpp.o",
+		"ERROR virtual memory exhausted: Cannot allocate memory",
+		"ERROR c++: fatal error: Killed signal terminated program cc1plus",
+		"ERROR compilation terminated.",
+		"ERROR make[2]: *** [src/CMakeFiles/engine.dir/build.make:412: src/CMakeFiles/engine.dir/renderer.cpp.o] Error 1",
+		"ERROR make: *** [Makefile:136: all] Error 2",
+		"FATAL build failed, exiting with code 137"])
+	_add_wl("Deployment", "dev", "devcontainer-zig", [["zig", "mcr.microsoft.com/devcontainers/zig:lastest"]], 1, 0.5, 1.0, "badimage")
+	_add_wl("Job", "ci", "build-firmware", [["make", "mcr.microsoft.com/devcontainers/cpp:ubuntu"]], 1, 0.5, 0.5)
+
+# Start with everything already up.
+func _settle() -> void:
 	_tick()
 	for p in _pods:
 		p["since"] = _now() - 3.0 - _rng.randf() * 6.0
@@ -108,9 +228,10 @@ func _rand_id(n: int) -> String:
 		s += chars[_rng.randi() % chars.length()]
 	return s
 
-func _add_wl(kind, ns, wname, containers, replicas, cpu, mem_gi, quirk = ""):
+# crashlog: the last lines a "crashy" workload prints before it dies (level + message each).
+func _add_wl(kind, ns, wname, containers, replicas, cpu, mem_gi, quirk = "", crashlog = []):
 	_wl.append({"kind": kind, "ns": ns, "name": wname, "containers": containers, "replicas": replicas,
-		"cpu": cpu, "mem": mem_gi * GI, "quirk": quirk, "hash": _rand_id(9), "ordinal": 0, "spawned": false})
+		"cpu": cpu, "mem": mem_gi * GI, "quirk": quirk, "crashlog": crashlog, "hash": _rand_id(9), "ordinal": 0, "spawned": false})
 
 func _add_svc(ns, sname, type, ports, app):
 	_svcs.append({"name": sname, "ns": ns, "type": type, "ports": ports,
@@ -432,7 +553,10 @@ func _fake_logs(p: Dictionary, container: String, a_tail: int = 0, previous: boo
 	for i in mini(int(a_tail), 400) if a_tail > 0 else 22:
 		t += r.randf_range(1.0, 6.0)
 		lines.append("%s INFO  GET %s 200 %dms" % [stamp.call(t), paths[r.randi() % paths.size()], r.randi_range(1, 48)])
-	if w["quirk"] == "crashy":
+	if w["quirk"] == "crashy" and not w["crashlog"].is_empty():
+		for i in w["crashlog"].size():
+			lines.append("%s %s" % [stamp.call(t + 1 + i), w["crashlog"][i]])
+	elif w["quirk"] == "crashy":
 		lines.append("%s ERROR payment gateway handshake failed: connection refused (10.96.44.7:8443)" % stamp.call(t + 1))
 		lines.append("%s FATAL unrecoverable error, exiting with code 1" % stamp.call(t + 2))
 	if w["kind"] == "Job" and p["st"] == "Completed":

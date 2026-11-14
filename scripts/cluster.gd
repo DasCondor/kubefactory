@@ -59,7 +59,11 @@ func _ready() -> void:
 
 # ---- who you are and what you may do here
 
+const DEMO_USER = "DasCondor"   # who you are in the simulated worlds, whatever your OS login is
+
 func user_name() -> String:
+	if backend != null and backend.label == "simulation":
+		return DEMO_USER
 	if backend != null and backend.get("user") != null and str(backend.user) != "":
 		return K.short_user(str(backend.user))
 	var u = OS.get_environment("USERNAME")

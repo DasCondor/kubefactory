@@ -49,7 +49,7 @@ Write-Host "Exporting KubeFactory.exe..."
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path (Join-Path $stage "KubeFactory.exe"))) { Write-Host "Export failed." -ForegroundColor Red; exit 1 }
 
-foreach ($f in @("README.md", "ADMIN.md", "LICENSE", "THIRDPARTY.md", "SECURITY.md", "catalogs.json", "portainer.json", "log-providers.json", "policy.json")) {
+foreach ($f in @("README.md", "ADMIN.md", "LICENSE", "THIRDPARTY.md", "SECURITY.md", "catalogs.json", "portainer.json", "log-providers.json", "policy.json", "bob.json")) {
     Copy-Item (Join-Path $root $f) $stage
 }
 foreach ($d in @("apps", "deploy", "dev")) {

@@ -7,6 +7,8 @@ signal target_requested(target)
 
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
+const Bob = preload("res://scripts/bob.gd")
+const DemoSim = preload("res://scripts/backend_demo.gd")
 const ORANGE = Color(0.98, 0.584, 0.286)
 const BG = Color(0.075, 0.085, 0.095, 0.95)
 const BG2 = Color(0.15, 0.16, 0.18, 1.0)
@@ -66,6 +68,8 @@ var _ls = {"tab": "pods", "ns": "", "pod": "", "container": "", "tail": 200, "pr
 	"follow": false, "warnings": true, "ens": "", "filter": "", "provider": "kube"}
 var _ls_raw = ""
 var _ls_timer = 0.0
+var offer_demos = false   # started on the simulation without naming a world: offer the chooser
+var _case = {}            # Bob's open case file: pod uid, config, fetched log and events
 var _talk = {"screen": "main", "app": "web", "tpl": {}, "search": "", "cat": {}}
 var _lists = {}          # list url -> {source, templates, skipped}, or an error string
 var _tpl_key = ""
@@ -592,6 +596,9 @@ func _request_logs() -> void:
 		cluster.act({"op": "logs", "ns": p["ns"], "name": p["name"], "container": cname, "key": _log_key})
 
 func on_logs(key: String, text: String) -> void:
+	if key.begins_with("bob:"):
+		_on_case(key, text)
+		return
 	if key == _tpl_key and key != "":
 		_tpl_key = ""
 		var d = JSON.parse_string(text)
@@ -970,6 +977,50 @@ func open_clusters() -> void:
 				target_requested.emit(t), "primary"))
 		pc.add_child(r)
 		list.add_child(pc)
+
+# ----- demo worlds: the simulated clusters you can try without connecting to anything
+
+func open_demos() -> void:
+	offer_demos = false
+	var body = _open_modal("demos", null, "CHOOSE A DEMO", Vector2(980, 600))
+	var intro = _lbl("Four simulated worlds. Nothing here is real, so break whatever you like. Switch any time from the pause menu (Esc).", 14, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 930
+	body.add_child(intro)
+	var grid = GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	for d in DemoSim.DEMO_TYPES:
+		var f = DemoSim.FLAVORS[d["flavor"]]
+		var active = cluster.backend != null and cluster.backend.label == "simulation" and cluster.backend.context == d["flavor"]
+		var col = K.provider_color(f["provider"]).lightened(0.25)
+		var pc = PanelContainer.new()
+		pc.custom_minimum_size = Vector2(458, 210)
+		var sb = _sb(BG2, col, 0, 14)
+		sb.border_width_top = 4
+		pc.add_theme_stylebox_override("panel", sb)
+		var v = _col(6)
+		pc.add_child(v)
+		v.add_child(_lbl(str(d["name"]).to_upper(), 18, col))
+		v.add_child(_lbl("%s  ·  %d nodes" % [f["provider"], f["nodes"].size() + (1 if f["cp"] != "" else 0)], 12, DIM))
+		var desc = _lbl(d["desc"], 14)
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc.custom_minimum_size.x = 420
+		desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		v.add_child(desc)
+		var r = _row()
+		r.add_child(_spacer())
+		if active:
+			r.add_child(_btn("Keep playing this one", close_modal, "primary"))
+		else:
+			r.add_child(_btn("Play", func():
+				close_modal()
+				target_requested.emit({"source": "simulation", "context": d["flavor"], "provider": f["provider"]}), "primary"))
+		v.add_child(r)
+		grid.add_child(pc)
+	body.add_child(grid)
 
 # ----- logging station
 
@@ -1438,6 +1489,8 @@ func _fill_bob() -> void:
 		else:
 			b.add_child(_btn("Go there", func(): _bob_goto(world.machine_spot(j["uid"]))))
 			b.add_child(_btn("Logs and events", func(): open_pod(j["uid"])))
+			if Bob.config()["log_review"] and cluster.cap("logs"):
+				b.add_child(_btn("Read the log with me, Bob", func(): open_bob_case(j["uid"]), "primary"))
 			b.add_child(_spacer())
 			var w = K.find_workload(cluster.state, j["ns"], j["wkind"], j["wname"])
 			match j["action"]:
@@ -1456,6 +1509,122 @@ func _fill_bob() -> void:
 		v.add_child(b)
 		_dyn.add_child(pc)
 	_dyn.add_child(_tier_legend())
+
+# ----- Bob 2.0: the case file. He reads the pod's log and events and explains
+# the lines that matter (scripts/bob.gd; optional settings in bob.json).
+
+func open_bob_case(uid: String) -> void:
+	var p = K.find_pod(cluster.state, uid)
+	if p == null:
+		notify("That machine is gone already", "warn")
+		return
+	var cfg = Bob.config()
+	var body = _open_modal("bobcase", uid, "BOB  //  CASE FILE", Vector2(1080, 680))
+	var h = _row(18)
+	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var left = _col(6)
+	left.add_child(_bob_portrait())
+	left.add_child(_lbl("BOB", 18, BOB_COL))
+	left.add_child(_lbl("Reading glasses on", 12, DIM))
+	left.add_child(_spacer())
+	left.add_child(_btn("Back to the fix list", open_bob))
+	left.add_child(_btn("Open the full log", func(): open_pod(uid)))
+	h.add_child(left)
+	var box = _col(8)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(box)
+	body.add_child(h)
+	var head = _row(12)
+	head.add_child(_lbl(p["name"], 18))
+	head.add_child(_lbl(str(p["status"]), 15, K.health_color(p["health"])))
+	head.add_child(_spacer())
+	head.add_child(_lbl("%s  ·  %d restarts" % [p["ns"], p["restarts"]], 12, DIM))
+	box.add_child(head)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_dyn = _col(8)
+	_dyn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(_dyn)
+	box.add_child(sc)
+	_dyn.add_child(_lbl("Hold on. Let me find my place...", 15, BOB_COL))
+	# the container that is in trouble (or the first one), its previous run if it has crashed before
+	var cname = ""
+	for c in p["containers"]:
+		if cname == "" or not (c["state"] == "running" and c["ready"]):
+			cname = c["name"]
+			if not (c["state"] == "running" and c["ready"]):
+				break
+	var previous = cfg["previous"] and int(p["restarts"]) > 0 and p["health"] != "ok"
+	_case = {"uid": uid, "cfg": cfg, "container": cname, "previous": previous, "log": null, "events": null}
+	cluster.act({"op": "events", "ns": p["ns"], "name": p["name"], "key": "bob:%s:events" % uid})
+	cluster.act({"op": "logs", "ns": p["ns"], "name": p["name"], "container": cname, "tail": cfg["tail"],
+		"previous": previous, "key": "bob:%s:log" % uid})
+
+func _on_case(key: String, text: String) -> void:
+	var parts = key.split(":")
+	if _modal_kind != "bobcase" or parts.size() < 3 or parts[1] != str(_case.get("uid", "")):
+		return
+	# no previous container to read (it never got far enough): fall back to the current one
+	if parts[2] == "log" and _case["previous"] and text.contains("previous terminated container"):
+		_case["previous"] = false
+		var p = K.find_pod(cluster.state, _case["uid"])
+		if p != null:
+			cluster.act({"op": "logs", "ns": p["ns"], "name": p["name"], "container": _case["container"],
+				"tail": _case["cfg"]["tail"], "key": "bob:%s:log" % _case["uid"]})
+			return
+	_case[parts[2]] = text
+	if _case["log"] != null and _case["events"] != null:
+		_fill_case()
+
+func _fill_case() -> void:
+	_clear(_dyn)
+	var cfg = _case["cfg"]
+	var compiled = Bob.compile(cfg)
+	var found = Bob.review(_case["log"], "log", compiled) + Bob.review(_case["events"], "events", compiled)
+	var ranked = Bob.rank(found, cfg["max_findings"])
+	_say(_dyn, Bob.verdict(ranked), BOB_COL)
+	var log_lines = str(_case["log"]).split("\n").size()
+	var note = "Read %d log lines from container %s%s and %d event lines." % [log_lines, _case["container"],
+		" (its previous run, the one that crashed)" if _case["previous"] else "", maxi(str(_case["events"]).split("\n").size() - 1, 0)]
+	if compiled["bad"] > 0:
+		note += "  %d rule(s) in bob.json were skipped: bad regex." % compiled["bad"]
+	_dyn.add_child(_lbl(note, 12, DIM))
+	for f in ranked:
+		var col = K.health_color("bad") if f["weight"] >= 3 else (K.health_color("warn") if f["weight"] == 2 else DIM)
+		var pc = PanelContainer.new()
+		var sb = _sb(BG2, col, 0, 10)
+		sb.border_width_left = 4
+		pc.add_theme_stylebox_override("panel", sb)
+		var v = _col(4)
+		pc.add_child(v)
+		var top = _row(10)
+		top.add_child(_lbl("%s  line %d" % ["LOG" if f["source"] == "log" else "EVENTS", f["n"]], 13, col))
+		top.add_child(_lbl(["", "symptom", "strong lead", "likely cause"][f["weight"]], 12, col))
+		if f["count"] > 1:
+			top.add_child(_lbl("seen %d times, this is the last" % f["count"], 12, DIM))
+		if f["custom"]:
+			top.add_child(_lbl("your rule", 12, DIM))
+		v.add_child(top)
+		var code = _lbl(f["line"], 13, Color(0.78, 0.86, 0.8))
+		code.add_theme_font_override("font", _mono)
+		code.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+		code.custom_minimum_size.x = 740
+		var cp = PanelContainer.new()
+		cp.add_theme_stylebox_override("panel", _sb(Color(0.03, 0.035, 0.04), Color(0.25, 0.26, 0.28), 1, 8))
+		cp.add_child(code)
+		v.add_child(cp)
+		for line in [[f["means"], TXT], [("Bob:  " + f["fix"]) if f["fix"] != "" else "", BOB_COL]]:
+			if line[0] == "":
+				continue
+			var l = _lbl(line[0], 14, line[1])
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 740
+			v.add_child(l)
+		_dyn.add_child(pc)
+	var hidden = found.size() - ranked.size()
+	if hidden > 0:
+		_dyn.add_child(_lbl("+ %d more kinds of line I did not bother you with (max_findings in bob.json)." % hidden, 12, DIM))
 
 func _bob_goto(spot) -> void:
 	if spot == null:
@@ -1869,9 +2038,12 @@ func open_welcome() -> void:
 	note.custom_minimum_size.x = 850
 	body.add_child(note)
 	body.add_child(_spacer())
-	body.add_child(_btn("Start", func():
+	body.add_child(_btn("Start" if not offer_demos else "Next: choose a demo", func():
 		_save_setting("welcomed", true)
-		close_modal(), "primary"))
+		if offer_demos:
+			open_demos()
+		else:
+			close_modal(), "primary"))
 
 # ----- pause menu
 
@@ -1880,6 +2052,7 @@ func open_pause() -> void:
 	body.add_child(_btn("Resume", close_modal, "primary"))
 	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
+	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
 	body.add_child(_btn("Logging station  (L)", func(): open_logs()))
 	body.add_child(_btn("Read-only mode:  %s" % ("ON" if cluster.read_only else "OFF"), func():
 		cluster.read_only = not cluster.read_only
