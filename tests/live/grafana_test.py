@@ -38,6 +38,11 @@ env = dict(os.environ, GF_PATHS_DATA=os.path.join(tmp, "data"), GF_PATHS_LOGS=os
 for d in ("data", "logs", "plugins"):
     os.makedirs(os.path.join(tmp, d))      # Grafana does not create its data folder itself
 exe = os.path.join(ghome, "bin", "grafana.exe")
+if not os.path.exists(exe):
+    # the 13.0.0 Windows zip ships the program as bin\grafana, without the extension
+    bare = os.path.join(ghome, "bin", "grafana")
+    if os.path.exists(bare) and open(bare, "rb").read(2) == b"MZ":
+        os.replace(bare, exe)
 srv = subprocess.Popen([exe, "server", "--homepath", ghome], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=ghome)
 
 results = []

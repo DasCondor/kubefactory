@@ -65,17 +65,26 @@ exactly that: the code exists and has not been run against the real thing.
   The Deployment, StatefulSet, DaemonSet, ReplicaSet, Job and Compose models
   are therefore not placed: the world has no object for the workload itself
   yet. Fewer distinct silhouettes is the cost of the plates being true.
-- **Grafana is verified against a real Grafana OSS 11.2.0; Tautulli against
-  a stand-in only.** `tools\live-test.ps1 -Grafana` starts a disposable
-  Grafana on this computer under a `/grafana` sub-path with a Viewer service
-  account, and all 18 steps pass: test connection, dashboard search, panel
-  list (collapsed rows included), variables, credential-free panel links that
-  Grafana serves to a signed-in user and redirects to its sign-in page
-  otherwise, wrong and missing tokens refused as authentication failures, the
-  token absent from disk, from every companion answer and from the game's
-  output, and the game's own panels run against it. Only 11.2.0 was tested:
-  not Grafana 10 or 12, Enterprise or Cloud. No real Tautulli was available,
-  so it is verified against `tests/live/mock_providers.py` only.
+- **Grafana is verified against real Grafana OSS 10.4.10, 11.2.0, 12.3.0 and
+  13.0.0.** `tools\live-test.ps1 -Grafana [-GrafanaVersion x.y.z]` starts a
+  disposable Grafana on this computer under a `/grafana` sub-path with a
+  Viewer service account, and every step passes on all four: test connection,
+  dashboard search, panel list (collapsed rows included), variables,
+  credential-free panel links that Grafana serves to a signed-in user and
+  redirects to its sign-in page otherwise, wrong and missing tokens refused as
+  authentication failures, and the token absent from disk and from every
+  companion answer. The game's own panels were run against 11.2.0 only. Not
+  tested: Grafana Enterprise, Grafana Cloud, or a dashboard saved in the newer
+  layout.
+- **Tautulli is verified against a real Tautulli 2.19.1 with no Plex server
+  behind it** (`tools\live-test.ps1 -Tautulli`, 10 of 10): the key is accepted
+  in the header and in legacy mode, a wrong or missing key is an
+  authentication failure, the wrong address is told apart from a key problem,
+  the key is not on disk, in any companion answer or in Tautulli's own log,
+  and with no Plex every figure shows as unavailable rather than 0. **Real
+  stream counts are not tested**: that needs a Plex server with something
+  playing. Those figures are covered by the stand-in server only. Tautulli
+  older than 2.18 (the reason legacy mode exists) was not tested.
 - Grafana served from a sub-path also answers at its root address; KubeFactory
   then works there too (verified). Either address is fine.
 - Provider gaps against the V8 note: the newer Grafana dashboard API and
