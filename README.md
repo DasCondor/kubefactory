@@ -6,15 +6,15 @@
 
 **Not just a game: a real way to manage your containers, Kubernetes clusters and
 stacks.** It looks like a first-person factory game, but the factory **is** your
-own setup. Walk your Kubernetes clusters or your local Docker engine, spot what
-is broken from across the yard, read the logs, restart, scale, deploy whole
-stacks and tear them down, all with a belt of six tools. Built for personal and
-homelab use.
+own setup. Walk your Kubernetes clusters, your Docker hosts or your Komodo
+servers, spot what is broken from across the yard, read the logs, restart,
+scale, deploy whole stacks and tear them down, all with a belt of six tools,
+with a crew of robots that watch it for you. Built for personal and homelab use.
 
 [![Play in your browser](https://img.shields.io/badge/▶_Play_in_your_browser-f99549?style=for-the-badge)](https://dascondor.github.io/kubefactory/)
-[![Download for Windows](https://img.shields.io/badge/⬇_Download_for_Windows-2b2f36?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases/latest)
+[![Download for Windows, Linux and macOS](https://img.shields.io/badge/⬇_Download-Windows_·_Linux_·_macOS-2b2f36?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases)
 
-[![Release](https://img.shields.io/github/v/release/DasCondor/kubefactory?color=f99549)](https://github.com/DasCondor/kubefactory/releases/latest)
+[![Release](https://img.shields.io/github/v/release/DasCondor/kubefactory?include_prereleases&color=f99549)](https://github.com/DasCondor/kubefactory/releases)
 [![Web demo](https://img.shields.io/github/actions/workflow/status/DasCondor/kubefactory/pages.yml?label=web%20demo)](https://github.com/DasCondor/kubefactory/actions/workflows/pages.yml)
 [![Made with Godot 4.3](https://img.shields.io/badge/Godot-4.3-478cbf?logo=godotengine&logoColor=white)](https://godotengine.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
@@ -27,25 +27,34 @@ homelab use.
 [Editions](#-editions) ·
 [The world](#-what-you-see) ·
 [Tools](#-tools-keys-1-6-or-mouse-wheel) ·
+[The Krew](#the-krew-operations-center-key-k) ·
+[Settings](#-settings-esc--settings) ·
 [Porter](#-porter-the-portainer-dock-worker) ·
 [Bob](#-bob-the-pod-fixer) ·
-[Teams](#-teams-multi-user)
+[Server](#a-kubefactory-server-play-like-a-game-client) ·
+[Plugins](#backend-plugins) ·
+[Contributing](CONTRIBUTING.md)
 
 </div>
 
 ## ✨ Why use it
 
 - 🛠️ **It manages the real thing.** Every action goes to your cluster with your own kubeconfig, or to your own `docker`, as you: logs, events, rolling restarts, scaling, cordon and drain, deleting pods and workloads, deploying and removing complete stacks. Nothing sits in between and no credentials are stored.
-- 🏠 **Made for your own gear.** Point it at a homelab cluster, a cloud cluster or just Docker on your PC. Compose projects show up as namespaces, and Porter deploys ready-made stacks: a media server, a monitoring dashboard, WordPress, databases.
+- 🏠 **Made for your own gear.** Point it at a homelab cluster, a cloud cluster, Docker on your PC or several Docker hosts, or your Komodo servers. Compose projects show up as namespaces, and Porter deploys ready-made stacks: a media server, a monitoring dashboard, WordPress, databases.
+- 🔒 **Look without handing over root.** Other Docker hosts open read-only, a ready-made proxy makes each host refuse changes on its own, and Komodo connections only ever read.
 - 🗺️ **See the whole cluster at a glance.** Nodes are platforms, pods are machines, services are conveyor belts. A failing pod throws a red light column you can see from anywhere.
 - 🔧 **Six tools, five tiers.** From a harmless scanner to the Mk.5 Demolisher. Stronger actions take a longer hold, and the worst ones make you type the target's name.
 - 👴 **Bob, the pod fixer.** An old hand with a repair stand, a live fix list, a diagnosis for every failure, and a zinger for every operator.
+- 🤖 **The Krew watches for you.** Sentinel (security), Scout (network), Scrappy (cleanup), Archie (storage), Forge (build), Blueprint (drift) and Gauge (resources) report findings with evidence, a proposed fix and its risk. Nothing changes until you approve it.
+- 🧑‍✈️ **Foreman, with or without AI.** He groups the Krew's findings into incidents with no AI at all; add Ollama, LM Studio, OpenAI, Claude or your own endpoint to ask in plain words. What an AI proposes is checked and still needs your approval.
 - 🤖 **Porter, the dock worker.** Asks what you want built and cranes a complete app setup onto the cluster.
 - 🧯 **Guard rails on the dangerous parts.** Read-only mode, tool tiers, hold-to-confirm, typed confirmation for the worst actions, and an audit log of everything you do.
-- 👥 **Use it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows.
+- 👥 **Use it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows. Or run one KubeFactory **server** and let everyone connect to it with a token, holding no credentials of their own.
+- 🧩 **Extend it.** Backend plugins add new kinds of sources in any language; they run only once you trust them.
+- ⚙️ **Play it your way.** Rebind every key, use a controller, set the field of view and interface size, and pick a colour-blind palette, all in the game. A minimap shows where everything is.
 - 🧪 **Try it safely first.** Four simulated demo worlds let you use every tool without touching anything real.
 - 📺 **Screens that show the real thing.** Each machine's screen steps through its application's own page, its metrics, its log and its storage. Click it to open it full size.
-- 🎨 **Built with Godot 4.3.** Desktop machines, tools, Porter, Bob and Gauge come from the bundled model library; the browser build draws everything in code, or loads the library from the site on its High preset. Textures, icons and sounds are generated.
+- 💻 **Windows, Linux, macOS and the browser.** Built with Godot 4.3. Every release package carries a checksum and a signed record of how it was built.
 
 ## 📸 Screenshots
 
@@ -60,6 +69,9 @@ homelab use.
 | ![Bob's case file: the log lines that matter on a build that ran out of memory](docs/bob-case.png) Bob 2.0 reads the log: the line that killed it, what it means, what to do | ![The demo chooser](docs/demos.png) Four demo worlds to try everything safely |
 | ![The media suite demo: Plex, the arr apps and Grafana all running](docs/demo-media.png) The media suite world: Plex, Sonarr, Radarr, Jackett and friends, all healthy | ![Porter, the Portainer dock robot](docs/porter.png) Porter builds complete app setups and installs from app lists |
 | ![Typed confirmation before deleting a workload](docs/confirm.png) Mk.5 actions make you type the target's name | ![Two other players shown as robot avatars](docs/multiuser.png) Other people on the cluster appear as avatars |
+| ![The Krew's operations board with Sentinel's findings](docs/krew-panel.png) The Krew's board: every finding with its evidence, a proposed fix and its risk | ![Foreman's answer with one checked proposal and one refused](docs/foreman-answer.png) Foreman: ask in plain words; proposals are checked and need your approval |
+| ![The settings menu with every key rebindable](docs/settings.png) Settings: keys, controller, field of view, interface size, colour palettes | ![The minimap in the bottom-left corner](docs/minimap.png) The minimap turns with you; failing machines pulse |
+
 ## 📱 On a phone or tablet (browser demo)
 
 The browser demo has touch controls. They appear the first time you touch the
@@ -152,7 +164,12 @@ you clear the quarantine flag on the unpacked folder:
 
 ## 📦 Install (release build)
 
-Unzip `KubeFactory-<version>-win64.zip`, then:
+**Linux:** unpack `KubeFactory-<version>-linux-x86_64.tar.gz` and run
+`./KubeFactory.x86_64` from that folder. **macOS:** unzip, clear the quarantine
+flag (above), and open `KubeFactory.app`; keep the other files beside it. On
+both, the options below work the same way (`./KubeFactory.x86_64 -- --demo`).
+
+**Windows:** unzip `KubeFactory-<version>-win64.zip`, then:
 
     powershell -ExecutionPolicy Bypass -File install.ps1
 
@@ -170,6 +187,9 @@ Command-line options go after `--`:
     KubeFactory.exe -- --sim=aws-eks-prod       or azure-aks-staging, gke-analytics, rancher-edge
     KubeFactory.exe -- --context=<name>         a specific kubeconfig context
     KubeFactory.exe -- --read-only              look, don't touch
+    KubeFactory.exe -- --docker --context=<n>   a Docker host, by its Docker context
+    KubeFactory.exe -- --remote=wss://host:7666 a KubeFactory server (token in KF_REMOTE_TOKEN)
+    KubeFactory.exe --headless -- --server      be a server for the others (docs/SERVER.md)
 
     KubeFactory.exe -- --kubectl-cli            use kubectl instead of the built-in client
 
@@ -179,10 +199,11 @@ for troubleshooting. `check-requirements.ps1` checks for the optional cloud CLIs
 
 ## 🔌 Connecting to a cluster (no kubectl needed)
 
-> **2.0 is in development.** Connecting, managing and storage inspection are
-> verified on a real cluster with running containers (kind) and on a real
-> Docker engine. Not yet tried: any cloud provider, and LiveView on a real
-> application through a port-forward. See
+> **2.0 is in beta.** Connecting, managing and storage inspection are verified
+> on a real cluster with running containers (kind) and on a real Docker engine.
+> Not yet tried: any cloud provider, LiveView on a real application through a
+> port-forward, a real Komodo, a Mac, a physical controller, and a server
+> reached from another machine. See
 > [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
 The short version:
@@ -520,7 +541,7 @@ L datapad, G jump to next problem, B belts, F open a machine's storage door,
 V open a machine's screen (or the LiveView list), R next view on a machine's
 screen, F11 fullscreen, Esc menu.
 
-## ⚙️ Settings (Esc → Settings)
+## 🧭 Settings (Esc → Settings)
 
 Everything is set in the game and saved as you change it; no files to edit.
 
@@ -585,6 +606,10 @@ Measured against the last release in [docs/BENCHMARK.md](docs/BENCHMARK.md);
 `tools\bench.ps1` reruns it on your machine.
 
 ## 👥 Teams (multi-user)
+
+Two ways to share a cluster: everyone connects with their own login (below),
+or one person runs a **KubeFactory server** and everyone connects to it with a
+token, holding no cluster credential at all ([docs/SERVER.md](docs/SERVER.md)).
 
 Several people can work on the same cluster at once, each with their own login.
 They see each other as avatars, share an action feed, and are held to a tool-tier
@@ -749,6 +774,12 @@ them in `log-providers.json`:
     scripts/backend_demo.gd     simulated clusters   scripts/log_sources.gd      log providers
     scripts/apps.gd             Porter's setups, app lists, install ledger
     scripts/sfx.gd              synthesised sound    apps/                       bundled app setups
+    scripts/krew.gd             the Krew's rules and findings      scripts/foreman.gd   Foreman: incidents, the AI pipeline
+    scripts/controls.gd         key bindings, controller, key hints scripts/minimap.gd  the minimap
+    scripts/backend_komodo.gd   Komodo (read-only)   scripts/backend_plugin.gd   backend plugins (scripts/plugins.gd: trust)
+    scripts/server.gd           server mode          scripts/backend_remote.gd   a KubeFactory server as a source
+    examples/plugins/           an example backend plugin
+    tests/live/                 in-game tests on the simulation and against throw-away infrastructure
     tests/normalize_test.gd     parser test:  engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tests/normalize_test.gd
 
 More tests and checks:

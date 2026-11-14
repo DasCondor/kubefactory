@@ -33,7 +33,7 @@ const Demo = preload("res://scripts/backend_demo.gd")
 const Gfx = preload("res://scripts/gfx.gd")
 const Bench = preload("res://scripts/bench.gd")
 const LiveView = preload("res://scripts/liveview.gd")
-const VERSION = "2.0.0-dev"
+const VERSION = "2.0.0-beta.1"
 
 const SKY_SHADER = """
 shader_type sky;
