@@ -25,6 +25,9 @@ against live infrastructure.
 - **Grafana and Tautulli providers** for LiveView: pick a dashboard or panel;
   see Plex activity as totals and pin it to a machine. Tokens are sealed by
   Windows and never reach the game.
+- **Demo screens:** in the simulated worlds, Grafana machines show a dashboard
+  of the simulated cluster's figures and Plex / Tautulli machines show
+  simulated streams, each marked SIMULATED. Works in the browser demo.
 - `tools/model_audit.gd` and `docs/MODEL_AUDIT.md`.
 - `tools/live-test.ps1`: runs the companion against a real, disposable
   kube-apiserver without Docker.

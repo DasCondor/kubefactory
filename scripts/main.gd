@@ -13,6 +13,7 @@ const K = preload("res://scripts/kutil.gd")
 const Cluster = preload("res://scripts/cluster.gd")
 const Connections = preload("res://scripts/connections.gd")
 const Providers = preload("res://scripts/providers.gd")
+const DemoScreens = preload("res://scripts/demo_screens.gd")
 const World = preload("res://scripts/world.gd")
 const Player = preload("res://scripts/player.gd")
 const Hud = preload("res://scripts/hud.gd")
@@ -68,6 +69,7 @@ var _shots_running = false
 var _storage_uid = ""        # the machine whose service door is open
 var live: Node
 var providers: Node
+var demo_screens: Node
 var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
 
@@ -148,6 +150,18 @@ func _ready() -> void:
 	hud.providers = providers
 	cluster.source_changed.connect(func(_l, _n): providers.clear())
 	cluster.state_updated.connect(func(st): providers.restore(st))
+	# simulated worlds only: their Grafana and media machines show demo content, marked as such
+	demo_screens = DemoScreens.new()
+	demo_screens.world = world
+	demo_screens.live = live
+	demo_screens.providers = providers
+	add_child(demo_screens)
+	cluster.source_changed.connect(func(_l, _n): demo_screens.clear())
+	cluster.state_updated.connect(func(st):
+		if cluster.backend != null and cluster.backend.label == "simulation":
+			demo_screens.sync.call_deferred(st)
+		else:
+			demo_screens.clear())
 	live.changed.connect(_on_live_changed)
 	cluster.agent_event.connect(live.on_agent_event)
 	cluster.source_changed.connect(func(_l, _n): live.close_all())
@@ -874,6 +888,14 @@ func _run_krewshots(dir: String) -> void:
 			await get_tree().create_timer(0.9).timeout
 			await _shot(dir, "m_" + m.model_id + "_open")
 			m.set_door(false)
+	# the simulated screens: one Grafana machine, one media machine
+	for want in ["grafana", "streams"]:
+		for p in cluster.state["pods"]:
+			if DemoScreens.kind_of(p) == want and world.machines.has(p["uid"]):
+				var c = world.machines[p["uid"]].global_position
+				player.teleport(c + Vector3(0.9, 1.3, 4.6), c + Vector3(0.5, 2.6, 0))
+				await _shot(dir, "demo_" + want)
+				break
 	print("krew: machine models in this world: ", seen.keys())
 	get_tree().quit()
 

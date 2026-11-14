@@ -178,6 +178,18 @@ line2\" injected: true"]])
 	check.call("zero is zero", lines[3][1], "0")
 	check.call("a missing count is unavailable, not zero", lines[1][1], "unavailable")
 	check.call("bandwidth", lines[4][1] + " / " + lines[5][1] + " / " + lines[6][1], "18.3 Mbps / 640 kbps / unavailable")
+	# ---- simulated screens in the demo worlds
+	var DS = load("res://scripts/demo_screens.gd")
+	check.call("a Grafana machine shows the dashboard", DS.kind_of({"containers": [{"image": "grafana/grafana:11.2.0"}]}), "grafana")
+	check.call("Plex and Tautulli machines show streams", DS.kind_of({"containers": [{"image": "plexinc/pms-docker"}]}) + DS.kind_of({"containers": [{"image": "tautulli/tautulli"}]}), "streamsstreams")
+	check.call("any other machine keeps its neutral screen", DS.kind_of({"containers": [{"image": "nginx:1.27"}]}), "")
+	var consistent = true
+	for ti in 400:
+		var sa = DS.streams_at(ti * 7.3)
+		consistent = consistent and sa["streams"] >= 2 and sa["streams"] <= 5 and sa["direct_play"] + sa["direct_stream"] + sa["transcode"] == sa["streams"] and sa["lan_kbps"] + sa["wan_kbps"] == sa["total_kbps"] and sa["direct_play"] >= 0 and sa["direct_stream"] >= 0
+	check.call("simulated streams always add up", consistent, true)
+	var fg = DS.cluster_figures({"nodes": [{"name": "a", "cpu": 8.0, "cpu_req": 2.0, "mem": 16.0, "mem_req": 12.0}], "pods": [{"health": "ok"}, {"health": "bad"}, {"health": "warn"}, {"health": "done"}]})
+	check.call("dashboard figures come from the simulated cluster", "%.2f %.2f %d %d %d" % [fg["cpu"], fg["mem"], fg["running"], fg["pending"], fg["failing"]], "0.25 0.75 2 1 1")
 	# ---- LiveView endpoint discovery
 	var Live = load("res://scripts/liveview.gd")
 	var eps = Live.endpoints({"pods": [{"name": "grafana", "ns": "mon", "ip": "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:9443->9443/tcp, 5432/tcp"}]}, "docker")
