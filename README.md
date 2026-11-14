@@ -205,6 +205,16 @@ make the host itself refuse changes, and to avoid giving anything root
 (Docker access is root), run the read-only proxy in
 `deploy/docker-readonly/` on each host and reach it over an SSH tunnel as an
 ordinary user: **[docs/DOCKER_HOSTS.md](docs/DOCKER_HOSTS.md)**.
+### Komodo (read-only)
+
+Using [Komodo](https://komo.do) for your Docker hosts? Esc > Switch cluster >
+**Komodo...**, enter the Core's address and an API key and secret (Komodo:
+Settings > API keys; a read-only key is enough). Every server becomes a
+platform and every container a machine, and the Krew reads them. KubeFactory
+sends Komodo only read requests (`GetVersion`, `ListServers`,
+`ListAllDockerContainers`), never `/write` or `/execute`, and offers no
+actions on a Komodo connection: changes stay in Komodo. The key and secret are
+sealed by the companion and never shown again.
 
 ## 🚪 Open a machine: storage inspection (key `F`)
 

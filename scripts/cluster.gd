@@ -23,6 +23,7 @@ const Agent = preload("res://scripts/agent.gd")
 const Connections = preload("res://scripts/connections.gd")
 const Docker = preload("res://scripts/backend_docker.gd")
 const Demo = preload("res://scripts/backend_demo.gd")
+const Komodo = preload("res://scripts/backend_komodo.gd")
 const LogSources = preload("res://scripts/log_sources.gd")
 const VIEW_OPS = ["logs", "events", "cluster_events", "templates"]
 # read-only operations that hand back data (not text): storage inspection and loopback forwards
@@ -243,6 +244,12 @@ func _gather_targets(include_local: bool) -> Dictionary:
 				continue
 			list.append({"source": "docker", "context": c["name"], "docker_context": c["name"], "endpoint": c["endpoint"],
 				"provider": "Docker host (opens read-only)" if c["remote"] else "Docker Engine"})
+	# saved Komodo connections (agent/komodo.go keeps them and their keys)
+	if include_local and Agent.available():
+		var kr = Agent.request("komodo.list", {}, 10.0)
+		if kr["ok"]:
+			for kc in kr["data"].get("connections", []):
+				list.append({"source": "komodo", "context": str(kc["name"]), "komodo_id": str(kc["id"]), "provider": "Komodo (read-only)"})
 	for f in Demo.FLAVORS:
 		list.append({"source": "simulation", "context": f, "provider": Demo.FLAVORS[f]["provider"]})
 	return {"list": list, "docker": d, "docker_result": dr, "native": native, "use_kube": use_kube}
@@ -332,6 +339,19 @@ func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
 				note += "The native companion is missing, so this is the kubectl mode. "
 		else:
 			note += "Kubernetes: %s. " % r.msg
+	if b == null and mode == "komodo":
+		var kt = list.filter(func(t): return t["source"] == "komodo" and (t["context"] == ctx or ctx == ""))
+		if kt.is_empty():
+			note += "Komodo: no saved connection named %s. " % ctx
+		else:
+			var kb = Komodo.new()
+			kb.context = kt[0]["context"]
+			kb.conn_id = kt[0]["komodo_id"]
+			var r = kb.probe()
+			if r.ok:
+				b = kb
+			else:
+				note += "Komodo (%s): %s. " % [kb.context, r.msg]
 	if b == null and mode == "docker" and ctx != "" and Docker.contexts().any(func(c): return c["name"] == ctx):
 		# a named Docker context: that host, and only that host
 		var dc = Docker.new()
@@ -374,6 +394,8 @@ func _detected(b, gen: int, note: String, list: Array, failure: Dictionary = {})
 		# read-only proxy on that host (docs/DOCKER_HOSTS.md) makes the engine itself refuse
 		read_only = true
 		note += "Another host's Docker engine: opened read-only. "
+	if b.label == "komodo":
+		read_only = true      # a Komodo connection only looks
 	_joined_at = Time.get_unix_time_from_system()
 	_ptimer = 2.0
 	peers_updated.emit(peers)
