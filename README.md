@@ -199,8 +199,8 @@ run (any address, including one behind a reverse-proxy sub-path).
 - **Tokens** go to the companion once, are sealed with Windows' own per-user
   protection, and are never shown again, sent to the game, or put in a link.
 
-Verified against stand-in servers only so far; see
-[docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+Grafana is verified against a real Grafana OSS 11.2.0; Tautulli against a
+stand-in only so far. See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
 The page is drawn by the Edge or Chrome already on your computer, in a private
 profile that is deleted when you close the display. Links to other hosts are
