@@ -5,6 +5,7 @@ extends CanvasLayer
 signal blueprint_chosen(bp)
 signal target_requested(target)
 signal graphics_requested(id)
+signal storage_requested(uid)        # open this machine's service door and its storage panel
 
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
@@ -573,6 +574,7 @@ func open_pod(uid: String) -> void:
 	lh.add_child(_log_pick)
 	lh.add_child(_btn("Refresh", _request_logs))
 	lh.add_child(_spacer())
+	lh.add_child(_btn("Storage", func(): storage_requested.emit(uid)))
 	lh.add_child(_btn("Open in logging station", func(): open_logs(uid)))
 	body.add_child(lh)
 	_logs = TextEdit.new()
@@ -987,6 +989,245 @@ func open_clusters() -> void:
 				target_requested.emit(t), "primary"))
 		pc.add_child(r)
 		list.add_child(pc)
+
+# ----- storage: what is behind a machine's service door.
+# A read-only look at the pod's (or container's) mounted volumes: what is mounted
+# where, directory listings, and bounded previews. Nothing is ever written, no
+# file is opened until it is picked, and secret volumes are listed but not read.
+
+signal storage_modules(uid, mounts)
+
+var _store = {}
+
+func open_storage(uid: String) -> void:
+	var p = K.find_pod(cluster.state, uid)
+	if p == null:
+		notify("That machine is gone already", "warn")
+		return
+	var body = _open_modal("storage", uid, "STORAGE  //  " + str(p["name"]), Vector2(1000, 700))
+	# dock the panel to the right so the open door and its bays stay in view
+	_modal.get_child(0).color.a = 0.12
+	_modal.get_child(1).anchor_left = 0.36
+	var sim = cluster.backend != null and cluster.backend.label == "simulation"
+	var note = _lbl("Read-only. Files are listed and previewed in pages of 64 KiB; nothing is copied, changed or sent anywhere." +
+		("   SIMULATED: this listing is invented by the demo." if sim else ""), 12, K.health_color("warn") if sim else DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 950
+	body.add_child(note)
+	_dyn = _col(8)
+	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(_dyn)
+	_store = {"uid": uid, "ns": p["ns"], "pod": p["name"], "mounts": null, "mount": {}, "path": "", "list": null, "file": null, "error": "", "busy": true}
+	cluster.act({"op": "file_mounts", "ns": p["ns"], "name": p["name"], "key": "store:%s:mounts" % uid})
+	_fill_storage()
+
+func _store_req(op: String, extra: Dictionary, tag: String) -> void:
+	var a = {"op": op, "ns": _store["ns"], "name": _store["pod"], "container": str(_store["mount"].get("container", "")),
+		"root": str(_store["mount"].get("path", "")), "key": "store:%s:%s" % [_store["uid"], tag]}
+	a.merge(extra)
+	_store["busy"] = true
+	_store["error"] = ""
+	cluster.act(a)
+	_fill_storage()
+
+func _store_dir(mount: Dictionary, path: String) -> void:
+	_store["mount"] = mount
+	_store["path"] = path
+	_store["file"] = null
+	_store["list"] = null
+	_store_req("file_list", {"path": path}, "list")
+
+func _store_file(path: String, page: int) -> void:
+	_store["file"] = {"path": path, "page": page, "data": null}
+	_store_req("file_read", {"path": path, "page": page}, "read")
+
+# Answers to the storage requests (and, further down, LiveView's).
+func on_data(key: String, r: Dictionary) -> void:
+	if key.begins_with("live:"):
+		_on_live_data(key, r)
+		return
+	if not key.begins_with("store:") or _modal_kind != "storage" or key.get_slice(":", 1) != str(_store.get("uid", "")):
+		return
+	_store["busy"] = false
+	var d = r.get("data", {})
+	var err = "" if r.get("ok", false) else "%s: %s" % [Agent.kind_title(str(r.get("kind", "other"))), str(r.get("msg", "failed"))]
+	match key.get_slice(":", 2):
+		"mounts":
+			_store["mounts"] = d.get("mounts", []) if r.get("ok", false) else []
+			_store["error"] = err
+			storage_modules.emit(_store["uid"], _store["mounts"])
+			for m in _store["mounts"]:
+				if m.get("running", true):
+					_store_dir(m, "")
+					return
+		"list":
+			_store["list"] = d if r.get("ok", false) else null
+			_store["error"] = err
+		"read":
+			if r.get("ok", false) and _store["file"] != null:
+				_store["file"]["data"] = d
+			else:
+				_store["file"] = null
+			_store["error"] = err
+	_fill_storage()
+
+func _on_live_data(_key: String, _r: Dictionary) -> void:
+	pass
+
+static func _hexdump(bytes: PackedByteArray, base: int) -> String:
+	var lines = PackedStringArray()
+	for off in range(0, mini(bytes.size(), 4096), 16):
+		var hx = ""
+		var asc = ""
+		for i in 16:
+			if off + i < bytes.size():
+				var b = bytes[off + i]
+				hx += "%02x " % b
+				asc += char(b) if b >= 32 and b < 127 else "."
+			else:
+				hx += "   "
+		lines.append("%08x  %s %s" % [base + off, hx, asc])
+	if bytes.size() > 4096:
+		lines.append("... (%d more bytes on this page not shown as hex)" % (bytes.size() - 4096))
+	return "\n".join(lines)
+
+func _fill_storage() -> void:
+	if _dyn == null or _modal_kind != "storage":
+		return
+	_clear(_dyn)
+	var h = _row(14)
+	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_dyn.add_child(h)
+	# left: the mounts, with the PV / PVC behind each
+	var left = _col(6)
+	left.custom_minimum_size.x = 330
+	h.add_child(left)
+	left.add_child(_lbl("MOUNTED VOLUMES", 13, ORANGE))
+	if _store["mounts"] == null:
+		left.add_child(_lbl("Reading the pod's volumes...", 13, DIM))
+	elif _store["mounts"].is_empty():
+		left.add_child(_lbl("Nothing is mounted into this workload." if _store["error"] == "" else _store["error"], 13, DIM if _store["error"] == "" else RED))
+	else:
+		for m in _store["mounts"]:
+			var sel = m.get("path") == _store["mount"].get("path") and m.get("container") == _store["mount"].get("container")
+			var pc = PanelContainer.new()
+			pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if sel else Color(0, 0, 0, 0), 1 if sel else 0, 8))
+			var v = _col(2)
+			pc.add_child(v)
+			var pl = _lbl(str(m["path"]), 14)
+			pl.clip_text = true
+			pl.custom_minimum_size.x = 300
+			v.add_child(pl)
+			var kind = {"pvc": "PersistentVolumeClaim", "configmap": "ConfigMap", "secret": "Secret", "projected": "service-account token", "emptydir": "emptyDir (scratch)",
+				"hostpath": "host path", "bind": "bind mount", "volume": "Docker volume", "csi": "CSI volume", "nfs": "NFS"}.get(str(m.get("type", "")), str(m.get("type", "")))
+			var line = kind + ("  ·  read-only" if m.get("read_only", false) else "")
+			v.add_child(_lbl(line, 12, DIM))
+			if str(m.get("claim", "")) != "":
+				var cl = _lbl("%s%s" % [m["claim"], ("  ->  PV " + str(m["pv"])) if str(m.get("pv", "")) != "" else ""], 12, K.tier_color(1))
+				cl.clip_text = true
+				cl.custom_minimum_size.x = 300
+				v.add_child(cl)
+			if str(m.get("capacity", "")) != "":
+				v.add_child(_lbl("%s  ·  %s  ·  %s" % [m["capacity"], m.get("storage_class", ""), m.get("phase", "")], 12, DIM))
+			if not m.get("readable", true):
+				v.add_child(_lbl("contents are never shown", 12, RED))
+			if not m.get("running", true):
+				v.add_child(_lbl("container not running", 12, K.health_color("warn")))
+			elif not sel:
+				v.add_child(_btn("Browse", func(): _store_dir(m, "")))
+			left.add_child(pc)
+	# right: the directory, or the file being previewed
+	var right = _col(6)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(right)
+	if _store["mount"].is_empty():
+		right.add_child(_lbl("Pick a volume to look inside." if _store["mounts"] != null else "", 14, DIM))
+		return
+	var crumbs = _row(4)
+	var root = str(_store["mount"]["path"])
+	crumbs.add_child(_btn(root, func(): _store_dir(_store["mount"], "")))
+	var acc = ""
+	for seg in str(_store["path"]).split("/", false):
+		acc = (acc + "/" + seg).trim_prefix("/")
+		var here = acc
+		crumbs.add_child(_lbl("/", 14, DIM))
+		crumbs.add_child(_btn(seg, func(): _store_dir(_store["mount"], here)))
+	right.add_child(crumbs)
+	if _store["error"] != "":
+		var el = _lbl(_store["error"], 14, RED)
+		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		el.custom_minimum_size.x = 580
+		right.add_child(el)
+	if _store["busy"]:
+		right.add_child(_lbl("Reading...", 13, DIM))
+	var f = _store["file"]
+	if f != null and f.get("data") != null:
+		var d = f["data"]
+		var bytes = Marshalls.base64_to_raw(str(d.get("data", "")))
+		var binary = false
+		var odd = 0
+		for i in mini(bytes.size(), 2048):
+			var b = bytes[i]
+			if b == 0:
+				binary = true
+			if b < 9 or (b > 13 and b < 32):
+				odd += 1
+		binary = binary or odd > 40
+		var head = _row(10)
+		head.add_child(_lbl(str(f["path"]).get_file(), 15))
+		head.add_child(_lbl("%s  ·  page %d of %d  ·  %s" % [K.fmt_bytes(float(d.get("size", 0))), int(d.get("page", 0)) + 1, maxi(int(d.get("pages", 1)), 1), "binary, shown as hex" if binary else "text"], 12, DIM))
+		head.add_child(_spacer())
+		head.add_child(_btn("  <  ", func(): _store_file(f["path"], int(d["page"]) - 1), "normal", int(d.get("page", 0)) > 0))
+		head.add_child(_btn("  >  ", func(): _store_file(f["path"], int(d["page"]) + 1), "normal", int(d.get("page", 0)) + 1 < int(d.get("pages", 1))))
+		head.add_child(_btn("Back to the folder", func(): _store_dir(_store["mount"], _store["path"])))
+		right.add_child(head)
+		var te = TextEdit.new()      # plain text only: nothing in a file is ever rendered or run
+		te.editable = false
+		te.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		te.add_theme_font_override("font", _mono)
+		te.add_theme_font_size_override("font_size", 12)
+		te.add_theme_stylebox_override("read_only", _sb(Color(0.03, 0.035, 0.04), Color(0.25, 0.26, 0.28), 1, 8))
+		te.add_theme_color_override("font_readonly_color", Color(0.78, 0.86, 0.8))
+		te.text = _hexdump(bytes, int(d.get("page", 0)) * 65536) if binary else bytes.get_string_from_utf8()
+		if bytes.is_empty():
+			te.text = "(this page is empty)"
+		right.add_child(te)
+		return
+	var li = _store["list"]
+	if li == null:
+		return
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var rows = _col(2)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(rows)
+	right.add_child(sc)
+	var es = li.get("entries", [])
+	if es.is_empty():
+		rows.add_child(_lbl("This folder is empty.", 13, DIM))
+	for e in es:
+		var r = _row(8)
+		var sub = (str(_store["path"]) + "/" + str(e["name"])).trim_prefix("/")
+		match str(e["type"]):
+			"dir":
+				r.add_child(_fixed(_btn(str(e["name"]) + "/", func(): _store_dir(_store["mount"], sub)), 300))
+			"file":
+				r.add_child(_fixed(_btn(str(e["name"]), func(): _store_file(sub, 0), "normal", li.get("readable", true)), 300))
+			"link":
+				var ll = _lbl("%s  ->  %s" % [e["name"], e.get("link", "")], 13, K.health_color("warn"))
+				ll.clip_text = true
+				r.add_child(_fixed(ll, 300))
+			_:
+				r.add_child(_fixed(_lbl(str(e["name"]), 13, DIM), 300))
+		r.add_child(_fixed(_lbl(K.fmt_bytes(float(e["size"])) if e["type"] == "file" else ("link, not followed" if e["type"] == "link" else ""), 12, DIM), 110))
+		r.add_child(_fixed(_lbl(str(e.get("mode", "")), 12, DIM), 96))
+		r.add_child(_lbl(str(e.get("mtime", "")), 12, DIM))
+		rows.add_child(r)
+	if li.get("truncated", false):
+		rows.add_child(_lbl("Only the first 500 entries are listed.", 12, K.health_color("warn")))
+	if not li.get("readable", true):
+		rows.add_child(_lbl("Names only: the contents of this kind of volume are never shown.", 12, RED))
 
 # ----- connecting a cluster from a kubeconfig, without kubectl (native companion)
 

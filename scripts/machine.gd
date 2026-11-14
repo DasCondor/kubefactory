@@ -6,6 +6,7 @@ const Tex = preload("res://scripts/tex.gd")
 const Sfx = preload("res://scripts/sfx.gd")
 
 const Gfx = preload("res://scripts/gfx.gd")
+const Models = preload("res://scripts/models.gd")
 
 static var _m = {}
 static var _merged = {}   # workload colour + detail level -> [core mesh, extra-detail mesh or null]
@@ -27,6 +28,20 @@ var _siren: AudioStreamPlayer3D
 var _warn: Label3D
 var _health = ""
 var _t = 0.0
+# library model state
+var model_id = ""           # "" = the code-drawn machine
+var _tpl = {}
+var _body: Node3D = null
+var _door: Node3D = null
+var _door_body: AnimatableBody3D = null
+var _door_want = 0.0
+var _door_tween: Tween = null
+var _interior: Node3D = null
+var _bays = []
+var _tank_x = 2.62
+var _top = 4.0
+var _live = false
+var _live_mat: StandardMaterial3D = null
 
 static func _box(key: String, size: Vector3) -> BoxMesh:
 	if not _m.has(key):
@@ -154,6 +169,233 @@ func setup(p: Dictionary) -> void:
 
 	var wkey = p["ns"] + "/" + p["wname"]
 	var col = K.hue_color(wkey, 0.5, 0.9) if p["wname"] != "" else Color(0.75, 0.76, 0.78)
+	# On the desktop the machine is a model from the library, chosen by what the
+	# pod is; the browser build (and any missing model) keeps the code-drawn one.
+	if not _build_model(p, col):
+		_build_classic(col)
+	_finish_setup(p)
+
+# ---- a machine from the model library
+
+const MODEL_SCALE = 1.9      # library machines are ~2 m cabinets; the factory's slots are built for ~4 m
+const DOOR_OPEN = deg_to_rad(105.0)
+
+func _build_model(p: Dictionary, col: Color) -> bool:
+	if not Models.available():
+		return false
+	var id = Models.machine_for(p)
+	var tpl = Models.template(id)
+	if tpl.is_empty() or tpl.get("core") == null:
+		return false
+	model_id = id
+	_tpl = tpl
+	_body = Node3D.new()
+	_body.scale = Vector3.ONE * MODEL_SCALE
+	add_child(_body)
+	var core = MeshInstance3D.new()
+	core.mesh = tpl["core"]
+	_body.add_child(core)
+	if tpl.get("accent") != null:
+		# the armour takes the workload's colour, as machine bodies always have
+		var am = MeshInstance3D.new()
+		am.mesh = tpl["accent"]
+		am.material_override = Tex.accent(col)
+		_body.add_child(am)
+	_beacon = MeshInstance3D.new()
+	if tpl.get("lamp") != null:
+		_beacon.mesh = tpl["lamp"]
+	_beacon.material_override = Tex.status_glow("warn")
+	_body.add_child(_beacon)
+	# the service door, on its own pivot along the hinge line
+	var screen_parent: Node3D = _body
+	var screen_off = Vector3.ZERO
+	if tpl.has("door"):
+		var d = tpl["door"]
+		_door = Node3D.new()
+		_door.position = d["hinge"]
+		_body.add_child(_door)
+		var dm = MeshInstance3D.new()
+		dm.mesh = tpl["door_mesh"]
+		_door.add_child(dm)
+		# the accent-coloured panels of the leaf keep the workload colour too
+		for s in dm.mesh.get_surface_count():
+			var m = dm.mesh.surface_get_material(s)
+			if m != null and tpl.get("accent") != null and m == tpl["accent"].surface_get_material(0):
+				dm.set_surface_override_material(s, Tex.accent(col))
+		# collision proxy for the leaf: moves with the pivot, so an open door is solid where it now is
+		var body = AnimatableBody3D.new()
+		body.sync_to_physics = false
+		var cs = CollisionShape3D.new()
+		var sh = BoxShape3D.new()
+		var a: AABB = d["aabb"]
+		sh.size = Vector3(a.size.x, a.size.y, maxf(a.size.z, 0.06))
+		cs.shape = sh
+		cs.position = a.get_center() - d["hinge"]
+		body.add_child(cs)
+		body.set_meta("kf", {"type": "pod", "uid": uid})
+		_door.add_child(body)
+		_door_body = body
+		_interior = Node3D.new()
+		_interior.visible = false      # nothing inside is drawn while the door is shut
+		_body.add_child(_interior)
+		_build_interior(tpl["cavity"], d["side"])
+		if tpl.has("screen") and tpl["screen"].get("on_door", false):
+			screen_parent = _door
+			screen_off = -d["hinge"]
+	# the LiveView surface: its own quad over the model's glass
+	if tpl.has("screen"):
+		var sc = tpl["screen"]
+		var q = QuadMesh.new()
+		q.size = sc["size"]
+		_screen = MeshInstance3D.new()
+		_screen.mesh = q
+		_screen.position = sc["pos"] + screen_off
+		_screen.material_override = Tex.status_glow("warn")
+		_screen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_screen.name = "LiveViewSurface"
+		screen_parent.add_child(_screen)
+	else:
+		_screen = MeshInstance3D.new()
+		_body.add_child(_screen)
+	_fan = Node3D.new()
+	add_child(_fan)
+	var b: AABB = tpl["bounds"]
+	_tank_x = b.end.x * MODEL_SCALE + 0.5
+	_top = b.end.y * MODEL_SCALE
+	return true
+
+# Shelves and storage bays behind the door. The bays stay empty until the pod's
+# real volume mounts are known (set_modules), so nothing inside is invented.
+func _build_interior(cav: AABB, side: int) -> void:
+	var steel = Tex.shared("steel")
+	var dark = Tex.shared("dark")
+	_bays.clear()
+	var rows = 3
+	var cols = 2
+	var cw = cav.size.x / cols
+	var rh = cav.size.y / rows
+	for r in rows:
+		# a shelf under each row, set back from the opening
+		_add(_box("m_shelf_%d_%d" % [int(cav.size.x * 100), int(cav.size.z * 100)], Vector3(cav.size.x, 0.02, cav.size.z * 0.9)), steel,
+			Vector3(cav.get_center().x, cav.position.y + r * rh + 0.01, cav.get_center().z), _interior)
+		for c in cols:
+			var at = Vector3(cav.position.x + (c + 0.5) * cw, cav.position.y + r * rh + rh * 0.5 + 0.01, cav.get_center().z - side * cav.size.z * 0.08)
+			_bays.append({"at": at, "size": Vector3(cw * 0.82, rh * 0.74, cav.size.z * 0.62), "node": null})
+	# a dim work light at the top of the bay, only lit while the door is open
+	_add(_box("m_bay_light", Vector3(cav.size.x * 0.6, 0.012, 0.03)), Tex.glow(Color(1.0, 0.93, 0.8), 1.4),
+		Vector3(cav.get_center().x, cav.end.y - 0.03, cav.get_center().z + side * cav.size.z * 0.3), _interior)
+	_add(_box("m_bay_back_%d" % int(cav.size.x * 100), Vector3(cav.size.x * 0.96, cav.size.y * 0.96, 0.01)), dark,
+		Vector3(cav.get_center().x, cav.get_center().y, cav.get_center().z - side * (cav.size.z / 2.0 - 0.012)), _interior)
+
+# One storage module per real volume mount: [{path, type, claim, readable, read_only}]
+func set_modules(mounts: Array) -> void:
+	if _interior == null:
+		return
+	for bay in _bays:
+		if bay["node"] != null:
+			bay["node"].queue_free()
+			bay["node"] = null
+	var colors = {"pvc": Color(0.72, 0.5, 1.0), "configmap": Color(0.3, 0.85, 1.0), "secret": Color(1.0, 0.35, 0.3), "projected": Color(1.0, 0.35, 0.3),
+		"emptydir": Color(0.75, 0.78, 0.8), "hostpath": Color(1.0, 0.75, 0.2), "bind": Color(1.0, 0.75, 0.2), "volume": Color(0.72, 0.5, 1.0)}
+	for i in mini(mounts.size(), _bays.size()):
+		var bay = _bays[i]
+		var m = mounts[i]
+		var n = Node3D.new()
+		n.position = bay["at"]
+		_interior.add_child(n)
+		var sz: Vector3 = bay["size"]
+		_add(_box("m_mod_%d_%d_%d" % [int(sz.x * 100), int(sz.y * 100), int(sz.z * 100)], sz), Tex.shared("dark"), Vector3.ZERO, n)
+		var side = float(_tpl["door"]["side"])
+		var face = side * (sz.z / 2.0 + 0.004)
+		_add(_box("m_mod_strip_%d" % int(sz.x * 100), Vector3(sz.x * 0.86, 0.02, 0.008)), Tex.glow(colors.get(str(m.get("type", "")), Color(0.8, 0.8, 0.8)), 1.6), Vector3(0, sz.y * 0.32, face), n)
+		_add(_box("m_mod_handle_%d" % int(sz.x * 100), Vector3(sz.x * 0.3, 0.025, 0.03)), Tex.shared("steel"), Vector3(0, -sz.y * 0.2, face + side * 0.012), n)
+		var l = Label3D.new()
+		l.text = "%s\n%s" % [str(m.get("path", "")), str(m.get("claim", "")) if str(m.get("claim", "")) != "" else str(m.get("type", ""))]
+		l.font_size = 20
+		l.pixel_size = 0.0011
+		l.position = Vector3(0, 0.02, face + side * 0.004)
+		l.rotation.y = 0.0 if side > 0 else PI
+		l.modulate = Color(0.85, 0.88, 0.92)
+		l.width = sz.x * 0.86 / 0.0011
+		l.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+		n.add_child(l)
+		bay["node"] = n
+
+# Where to stand to look into the open door, as [position, look-at].
+func door_view() -> Array:
+	if _door == null:
+		return []
+	var d = _tpl["door"]
+	var g = _body.global_transform
+	var centre = g * d["aabb"].get_center()
+	var out = (g.basis * d["out"]).normalized()
+	var along = (g.basis * d["along"]).normalized()
+	var screen_right = (-out).cross(Vector3.UP).normalized()
+	# stand on the side the leaf does not swing to, close enough to stay clear of the
+	# next row, and look past the opening so it sits left of the storage panel
+	return [centre + out * 3.4 + along * 0.9 + Vector3(0, -centre.y + 0.25, 0), centre + screen_right * 2.3]
+
+func has_door() -> bool:
+	return _door != null
+
+func door_open() -> bool:
+	return _door_want > 0.0
+
+# Open or shut the service door. It swings out on its hinge up to its stop, and
+# no further than whoever is standing in its path: `blocker` is a world position
+# (the player) the leaf must not sweep through.
+func set_door(open: bool, blocker = null) -> float:
+	if _door == null:
+		return 0.0
+	var limit = DOOR_OPEN
+	if open and blocker != null:
+		var d = _tpl["door"]
+		var local = _door.get_parent().to_local(blocker) - d["hinge"]     # model units, relative to the hinge
+		var dist = Vector2(local.x, local.z).length()
+		var reach = float(d["width"]) + 0.45 / MODEL_SCALE
+		if dist < reach and absf(local.y) < 1.4:
+			# angle of the blocker round the hinge, measured the way the leaf swings
+			var ang = atan2(local.dot(d["out"]), local.dot(d["along"]))
+			if ang > 0.0:
+				limit = clampf(ang - asin(clampf((0.5 / MODEL_SCALE) / maxf(dist, 0.3), 0.0, 1.0)), 0.0, DOOR_OPEN)
+	_door_want = limit if open else 0.0
+	if open:
+		_interior.visible = true
+	if _door_tween != null:
+		_door_tween.kill()
+	_door_tween = create_tween()
+	_door_tween.tween_property(_door, "rotation:y", _door_want, 0.55 if open else 0.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	if not open:
+		_door_tween.tween_callback(func(): _interior.visible = false)
+	return _door_want
+
+# Show a live texture on the machine's screen (LiveView), or go back to the status colour.
+func set_screen_texture(tex: Texture2D) -> void:
+	if _screen == null or _screen.mesh == null:
+		return
+	if tex == null:
+		_live = false
+		_screen.material_override = Tex.status_glow(_health if _health != "" else "warn")
+		return
+	if not _live or _live_mat == null:
+		_live_mat = StandardMaterial3D.new()
+		_live_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_live_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_live_mat.albedo_texture = tex
+	_screen.material_override = _live_mat
+	_live = true
+
+# Where the screen is in the world and how big, for aiming at it: {pos, right, up, size}
+func screen_rect() -> Dictionary:
+	if _screen == null or not (_screen.mesh is QuadMesh):
+		return {}
+	var g = _screen.global_transform
+	return {"pos": g.origin, "right": g.basis.x.normalized(), "up": g.basis.y.normalized(),
+		"size": _screen.mesh.size * g.basis.get_scale().x, "normal": g.basis.z.normalized()}
+
+# ---- the code-drawn machine (the browser build, and the fallback)
+
+func _build_classic(col: Color) -> void:
 	# Everything on a machine that never moves is merged into one mesh (a surface
 	# per material) and shared by every machine of the same workload, so a machine
 	# costs a handful of draws instead of dozens. The extra detail of the Enhanced
@@ -218,6 +460,7 @@ func setup(p: Dictionary) -> void:
 		_m["bulb"] = s
 	_beacon = _add(_m["bulb"], Tex.status_glow("warn"), Vector3(-1.7, 4.95, 1.7))
 
+func _finish_setup(p: Dictionary) -> void:
 	_label = Label3D.new()
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.font_size = 44
@@ -264,6 +507,15 @@ func setup(p: Dictionary) -> void:
 	_smoke.color_ramp = _m["ramp"]
 	_smoke.emitting = false
 	add_child(_smoke)
+	if model_id != "":
+		# library machines have no chimney: their exhaust is the rear vents
+		_smoke.position = Vector3(0.0, _top * 0.72, -_tpl["bounds"].size.z * MODEL_SCALE * 0.5 - 0.3)
+		_smoke.amount = 6
+		_smoke.scale_amount_min = 0.3
+		_smoke.scale_amount_max = 0.7
+		_smoke.gravity = Vector3(0.2, 0.5, -0.6)
+		_label.position.y = _top + 2.0
+		_sub.position.y = _top + 1.45
 
 	# Alarm: a red light column + warning sign, visible from across the factory.
 	if not _m.has("beam"):
@@ -326,7 +578,8 @@ func update(p: Dictionary) -> void:
 	_sub.modulate = K.health_color(h)
 	if h != _health:
 		_health = h
-		_screen.material_override = Tex.status_glow(h)
+		if not _live:
+			_screen.material_override = Tex.status_glow(h)
 		_beacon.material_override = Tex.status_glow(h)
 		_smoke.emitting = h == "ok"
 		_alarm.visible = h == "bad"
@@ -341,8 +594,8 @@ func update(p: Dictionary) -> void:
 	while _tanks.size() < want:
 		var i = _tanks.size()
 		var z = -1.5 + i * 1.05
-		_add(_cyl("tank", 0.42, 2.2), Tex.shared("steel"), Vector3(2.62, 1.5, z))
-		var ring = _add(_cyl("tank_ring", 0.46, 0.22), Tex.status_glow("warn"), Vector3(2.62, 2.3, z))
+		_add(_cyl("tank", 0.42, 2.2), Tex.shared("steel"), Vector3(_tank_x, 1.5, z))
+		var ring = _add(_cyl("tank_ring", 0.46, 0.22), Tex.status_glow("warn"), Vector3(_tank_x, 2.3, z))
 		_tanks.append(ring)
 	for i in want:
 		var c = conts[i]
