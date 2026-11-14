@@ -473,6 +473,12 @@ More tests and checks:
     powershell -ExecutionPolicy Bypass -File tools\live-test.ps1                                                  companion against a real, disposable kube-apiserver (no Docker)
     engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tools/model_audit.gd                        audits every model, writes docs/MODEL_AUDIT.md
 
+The model library can be inspected in a browser with the asset reviewer
+(`tools/model-viewer/index.html`, published at
+`https://dascondor.github.io/kubefactory/model-viewer/` once this branch is
+merged and Pages has deployed): every model at every tier, door open and shut,
+with a review checklist you can export.
+
 Design and status documents: [ARCHITECTURE](docs/ARCHITECTURE.md),
 [FEATURE_PARITY](docs/FEATURE_PARITY.md), [KNOWN_LIMITATIONS](docs/KNOWN_LIMITATIONS.md),
 [MODEL_AUDIT](docs/MODEL_AUDIT.md), [CHANGELOG](docs/CHANGELOG.md).

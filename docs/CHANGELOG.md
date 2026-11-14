@@ -19,6 +19,9 @@ against live infrastructure.
   hex previews, 64 KiB at a time.
 - **LiveView** (key `V`). An application's real web page on a screen in the
   world or in a window, with working mouse and keyboard.
+- **V6 handheld tools** in first person: each tool's own display faces you and
+  shows the tool, its target and what the trigger would do.
+- **Asset reviewer** at `model-viewer/` on the Pages site (after merge).
 - `tools/model_audit.gd` and `docs/MODEL_AUDIT.md`.
 - `tools/live-test.ps1`: runs the companion against a real, disposable
   kube-apiserver without Docker.

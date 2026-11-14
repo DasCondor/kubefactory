@@ -200,6 +200,15 @@ line2\" injected: true"]])
 				if not tp["cavity"].has_volume() or tp.get("door_mesh") == null:
 					fails.append("machine door without a bay: " + id)
 		check.call("machines with a storage door", doors, 22)
+		# the handheld tools: aim +Z, display towards the operator (-Z), a grip to hold
+		var VM = load("res://scripts/viewmodel.gd")
+		for id in VM.LIB_IDS:
+			var an = Models.entry(id).get("variants", {}).get("standard", {}).get("anchors", {})
+			if not an.has("Grip") or an.get("ToolAim", {}).get("normal") != [0.0, 0.0, 1.0]:
+				fails.append("tool model without a grip or not aimed +Z: " + id)
+			if an.has("LiveViewSurface") and an["LiveViewSurface"]["normal"] != [0.0, 0.0, -1.0]:
+				fails.append("tool display does not face the operator: " + id)
+		check.call("reviewer page is in the repo", FileAccess.file_exists("res://tools/model-viewer/index.html"), true)
 		for id in Models.ids("machines"):
 			var scene = Models._load_scene(id, "standard")
 			if scene == null:

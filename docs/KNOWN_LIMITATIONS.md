@@ -59,15 +59,23 @@ exactly that: the code exists and has not been run against the real thing.
   sampled, not exhaustive. Nothing here changes that.
 - 22 of the 25 machines have a storage door. `cooling_unit`, `load_balancer`
   and `network_appliance` have none.
-- The six V6 handheld tool models (operator-facing displays) are **not used**:
-  the first-person tools are still the game's own. The Krew display surfaces
-  (chest, hand, laptop) are not bound to anything, and nothing is rigged or
-  animated beyond the door.
+- The six V6 handheld tools are used in first person on the desktop renderer:
+  they aim where you look and their display faces you, showing the tool, what
+  it is pointed at and what the trigger would do. The display is text, not a
+  LiveView page. Their colours are the library's; the browser build keeps the
+  hand-built tools. Only one hand pose per tool exists: no finger rig, and the
+  old spinning and moving parts of the hand-built tools have no equivalent.
+- The Krew display surfaces (chest, hand, laptop) are not bound to anything,
+  and nothing is rigged or animated beyond the door.
 - The model's own drive modules are left out of the bay; the game shows one
   module per real volume instead.
 - 10 models reach 7-70 mm below the ground (`MODEL_AUDIT.md`); none of them is
   placed in the world.
-- The asset reviewer page that came with the library is not hosted.
+- The asset reviewer that came with the library is added to the Pages build at
+  `model-viewer/`. It was checked locally (loads, no external requests, no
+  console errors); it goes live only when this branch is merged and Pages
+  deploys. It adds the whole library (about 72 MB) to the site. Not tested on a
+  phone. Reviews stay in the browser that made them unless exported.
 - The audit cannot detect two solid parts pushed into each other unless one of
   them is a display.
 

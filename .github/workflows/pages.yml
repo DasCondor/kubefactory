@@ -48,6 +48,16 @@ jobs:
           ./Godot_v4.3-stable_linux.x86_64 --headless --path . --export-release "Web" dist/web/index.html
           test -s dist/web/index.wasm && test -s dist/web/index.pck
 
+      # The asset reviewer: one self-contained page (no external scripts) that loads the
+      # model library's GLBs from beside itself. Served at <site>/model-viewer/.
+      - name: Add the model reviewer
+        run: |
+          mkdir -p dist/web/model-viewer
+          cp tools/model-viewer/index.html dist/web/model-viewer/index.html
+          cp -r assets dist/web/model-viewer/assets
+          rm -f dist/web/model-viewer/assets/.gdignore
+          test "$(find dist/web/model-viewer/assets -name '*.glb' | wc -l)" -eq 423
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/web

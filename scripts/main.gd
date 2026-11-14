@@ -504,6 +504,7 @@ func _process(delta: float) -> void:
 		hud.set_progress(0.0)
 		sfx.charge(0.0)
 		player.tool_charge(0.0)
+		player.tool_readout(_tool_readout("", {}, {}))
 		return
 	var h = player.hit
 	var meta = h.get("meta", {})
@@ -516,6 +517,7 @@ func _process(delta: float) -> void:
 	else:
 		world.hide_hologram()
 	hud.set_target(_tooltip(type, meta, hold))
+	player.tool_readout(_tool_readout(type, meta, hold))
 	if not hold.is_empty() and Input.is_action_pressed("fire") and not _dis_lock and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or _shots_running):
 		_dis += delta / hold["time"]
 		if _dis >= 1.0:
@@ -535,6 +537,31 @@ func _process(delta: float) -> void:
 	hud.set_progress(_dis)
 	sfx.charge(_dis)
 	player.tool_charge(_charge_test if _charge_test > 0.0 else _dis)
+
+# What the display on the tool in hand shows: the tool, what it is pointed at
+# and what its trigger would do there. All of it is the game's real state.
+func _tool_readout(type: String, meta: Dictionary, hold: Dictionary) -> String:
+	var tool = hud.TOOLS[mode]
+	var head = "%s  MK.%d" % [tool["name"], tool["mk"]]
+	if tool["mk"] > cluster.max_tier():
+		return head + "\nLOCKED"
+	var target = ""
+	match type:
+		"pod":
+			var p = K.find_pod(cluster.state, meta["uid"])
+			if p != null:
+				target = "%s\n%s" % [p["name"], p["status"]]
+		"node":
+			target = "node %s" % meta["name"]
+		"service":
+			target = "service %s" % str(meta.get("name", ""))
+	if mode == 2 and blueprint != null:
+		return head + "\nPLAN  " + hud.bp_text(blueprint) + ("\n" + target if target != "" else "")
+	if target == "":
+		return head + "\nNO TARGET"
+	if not hold.is_empty():
+		return head + "\n" + target + "\n> " + str(hold["label"])
+	return head + "\n" + target
 
 func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 	var tool = hud.TOOLS[mode]
