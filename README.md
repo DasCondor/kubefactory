@@ -245,7 +245,7 @@ pause menu.
 
 ### The Krew: operations center (key `K`)
 
-Bob, Gauge and three new workers watch the cluster and report findings on one
+Bob, Gauge and six more workers watch the cluster and report findings on one
 board. Open it with `K`, from the pause menu, or at a worker's station past
 Gauge's desk:
 
@@ -257,6 +257,16 @@ Gauge's desk:
   the host.
 - **Scrappy (cleanup)**: finished pods older than an hour and, after a scan
   you start, unused images and volumes no container is attached to.
+- **Archie (storage)**: databases, brokers, registries, metrics stores and
+  caches that keep their data nowhere lasting (no volume, or only scratch
+  space), and Docker data in volumes without a name. Archie only reports.
+- **Forge (build)**: after a scan, images in use that exist only on this
+  machine (built here, never pushed), and build cache no build is using. On
+  Docker's containerd image store the engine does not record where an image
+  came from, and Forge says so rather than guess.
+- **Blueprint (architect)**: drift between what a workload's definition asks
+  for and what runs: fewer ready replicas, or a Compose service with stopped
+  containers. A rollout in progress is not drift: Blueprint waits two minutes.
 
 Each finding shows its evidence, a proposed change and its risk. The Krew never
 acts on its own: Sentinel and Scout only propose, and Scrappy's removals run
@@ -271,6 +281,8 @@ are marked **SIMULATED**.
 ![The same stations as the browser build draws them](docs/krew-stations-browser.png)
 ![Sentinel's findings in the operations center](docs/krew-panel.png)
 ![Scrappy's cleanup awaiting approval](docs/krew-scrappy.png)
+![Archie, Forge and Blueprint in the second row](docs/krew-second-row.png)
+![All eight workers on the board](docs/krew-roster.png)
 
 ### Tables
 

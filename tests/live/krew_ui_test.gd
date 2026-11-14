@@ -106,7 +106,10 @@ func _run() -> void:
 	game.cluster.act({"op": "cleanup_scan", "ns": "", "name": "", "key": "krew:scan"})
 	var scanned = await _wait(game, func(): return k.findings.keys().any(func(x): return str(x).begins_with("scrappy:unused-image")), 15.0)
 	_check("the scan finds unused images", scanned, k.status_of("scrappy"))
-	_check("the unattached volume is reported but offered no removal", k.findings.get("scrappy:unattached-volume:volume/old-catalog-backup", {}).get("action", null) == {})
+	_check("Archie: the shop's Redis keeps its data on scratch space", k.findings.get("archie:no-persistent-storage:shop/redis", {}).get("severity") == "low")
+	_check("Archie: the database with a claim is left alone", not k.findings.has("archie:no-persistent-storage:shop/catalog-db"))
+	_check("Forge: the release candidate built on a node, and the idle build cache", k.of_worker("forge").any(func(f): return f["rule"] == "local-build" and f["title"].contains("rc1")) and k.findings.has("forge:build-cache:build-cache"), k.status_of("forge"))
+	_check("the unattached volume is reported but offered no removal",k.findings.get("scrappy:unattached-volume:volume/old-catalog-backup", {}).get("action", null) == {})
 	var img = k.findings.values().filter(func(f): return f["rule"] == "unused-image")
 	if not img.is_empty():
 		var ikey = str(img[0]["key"])

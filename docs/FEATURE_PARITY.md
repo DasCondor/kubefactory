@@ -80,7 +80,8 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Gauge: optional world model, read-only node request and capacity table, on-demand workload usage | UI verified in simulation; Docker usage verified live on a disposable container. Kubernetes metrics API figures not tested live |
 | | Krew framework and operations center: shared findings with evidence, proposal and risk; resolved history; Markdown and JSON export; approval through the guard rails | verified in simulation (both renderers); verified live on Docker and a disposable kind cluster |
 | | Sentinel (security), Scout (network), Scrappy (cleanup) with stations | verified live: Docker (disposable privileged container with the socket mounted) and kind (privileged host-root pod, a Service selecting nothing); approved removals verified in simulation only |
-| | Gauge forecasts and right-sizing; the other Krew roles; incident coordination | unsupported |
+| | Archie (storage), Forge (build), Blueprint (architect) with stations | verified live on Docker with throw-away containers (database image without a volume, unnamed volume, Compose service with a stopped container); Forge's local-build check verified in simulation only, because Docker Desktop's containerd image store does not record image origin. Kubernetes in simulation and unit tests |
+| | Gauge forecasts and right-sizing; backups and restores (Archie); build analysis and publishing (Forge); Compose/YAML import and Terraform plans (Blueprint); incident coordination | unsupported |
 | 09 AI | Providers, action pipeline, tool registry, natural-language workflows | unsupported |
 | 09A Foreman | Provider-specific characters | unsupported (models shipped, not placed) |
 | 10 Autonomy | Policy engine, self-healing, scheduling | unsupported |

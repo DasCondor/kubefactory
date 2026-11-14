@@ -238,6 +238,57 @@ static func floating_tag(image: String) -> bool:
 	var last = image.get_slice("/", image.get_slice_count("/") - 1)
 	return not last.contains(":") or last.ends_with(":latest")
 
+# Where a pod or container keeps its data, the same shape from every source:
+#   persistent  [claim or volume names]   survives the pod or container being replaced
+#   scratch     [volume names]            emptyDir / tmpfs: gone with the pod
+#   anonymous   [volume ids]              Docker volumes without a name: easily lost on recreate
+#   binds       [host paths]              a host folder (survives, but tied to that host)
+#   known       bool                      false when the source said nothing about storage
+static func empty_storage() -> Dictionary:
+	return {"persistent": [], "scratch": [], "anonymous": [], "binds": [], "known": false}
+
+static func pod_storage(spec: Dictionary) -> Dictionary:
+	var s = empty_storage()
+	s["known"] = true
+	for v in spec.get("volumes", []):
+		if typeof(v) != TYPE_DICTIONARY:
+			continue
+		var nm = str(v.get("name", ""))
+		if typeof(v.get("persistentVolumeClaim")) == TYPE_DICTIONARY:
+			s["persistent"].append(str(v["persistentVolumeClaim"].get("claimName", nm)))
+		elif typeof(v.get("ephemeral")) == TYPE_DICTIONARY or typeof(v.get("emptyDir")) == TYPE_DICTIONARY:
+			s["scratch"].append(nm)
+		elif typeof(v.get("hostPath")) == TYPE_DICTIONARY:
+			s["binds"].append(str(v["hostPath"].get("path", "")))
+		else:
+			for k in ["nfs", "csi", "iscsi", "cephfs", "rbd", "glusterfs", "azureFile", "azureDisk", "awsElasticBlockStore", "gcePersistentDisk"]:
+				if v.has(k):
+					s["persistent"].append(nm)
+					break
+	return s
+
+static func container_storage(i: Dictionary) -> Dictionary:
+	var s = empty_storage()
+	s["known"] = true
+	var hex = RegEx.new()
+	hex.compile("^[0-9a-f]{64}$")
+	for m in (i.get("Mounts", []) if typeof(i.get("Mounts")) == TYPE_ARRAY else []):
+		if typeof(m) != TYPE_DICTIONARY:
+			continue
+		match str(m.get("Type", "")):
+			"volume":
+				var nm = str(m.get("Name", ""))
+				if hex.search(nm) != null:
+					s["anonymous"].append(nm.left(12) + " at " + str(m.get("Destination", "")))
+				else:
+					s["persistent"].append(nm)
+			"bind":
+				if not is_socket_path(str(m.get("Source", ""))):
+					s["binds"].append(str(m.get("Source", "")))
+			"tmpfs":
+				s["scratch"].append(str(m.get("Destination", "")))
+	return s
+
 # from a Kubernetes pod spec
 static func pod_security(spec: Dictionary) -> Dictionary:
 	var s = empty_security()

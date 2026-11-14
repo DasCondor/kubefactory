@@ -156,6 +156,14 @@ exactly that: the code exists and has not been run against the real thing.
   containers, overhead or resources outside the visible namespace. They are
   not runtime usage or a scheduling guarantee. Gauge does not forecast, perform
   right-sizing or make changes; actual Kubernetes metrics remain untested.
+- **Archie, Forge and Blueprint** report only; none of them changes anything.
+  Archie judges software by its image name (a database, broker, cache...) and
+  sees volumes only as the pod spec or `docker inspect` states them; it knows
+  nothing about backups made by other tools. Forge's "exists only on this
+  machine" needs the classic Docker image store: with the containerd store
+  (Docker Desktop's default) every image has a digest, so Forge reports that it
+  cannot tell. Blueprint compares replica counts only; it does not read
+  Compose files, manifests or Terraform plans.
 - **The Krew** (Sentinel, Scout, Scrappy) reads only what the cluster state
   already holds: pod specs, Services and, for Docker, `docker inspect`. It does
   not read NetworkPolicies, RBAC, admission policies or image vulnerabilities.

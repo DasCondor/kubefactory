@@ -15,7 +15,7 @@ func _run() -> void:
 	game.hud.close_modal(false)
 	await create_timer(3.0).timeout
 	game.player.flying = true
-	var pos: Vector3 = game.world._krew_tags["scout"].get_parent().global_position
+	var pos: Vector3 = game.world._krew_tags[OS.get_environment("KF_SHOT_WORKER") if OS.get_environment("KF_SHOT_WORKER") != "" else "scout"].get_parent().global_position
 	game.player.teleport(pos + Vector3(-1.5, 0.6, 7.5), pos + Vector3(0, 1.4, 0))
 	await create_timer(1.5).timeout
 	var dir = OS.get_environment("KF_KREW_SHOTS")
