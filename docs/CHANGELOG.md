@@ -47,6 +47,8 @@ against live infrastructure.
 - `docs/ARCHITECTURE.md`, `FEATURE_PARITY.md`, `KNOWN_LIMITATIONS.md`.
 
 ### Fixed
+- The companion and its pipe reader now shut down cleanly when the game exits,
+  including while a LiveView browser is open.
 - Clicking a machine's display now aims at the display itself instead of the
   larger invisible machine collision box, so the screen opens with any tool.
 - Storage inspection followed a link that sat inside a volume: a linked file

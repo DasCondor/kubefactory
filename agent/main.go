@@ -112,6 +112,10 @@ func main() {
 			if json.Unmarshal(line, &req) != nil {
 				send(map[string]any{"id": 0, "ok": false, "error": opError{Kind: "invalid", Msg: "not a JSON request"}})
 			} else {
+				if req.Op == "shutdown" {
+					send(map[string]any{"id": req.ID, "ok": true, "data": map[string]any{}})
+					break
+				}
 				inFlight.Add(1)
 				go func() { defer inFlight.Done(); serve(req) }()
 			}

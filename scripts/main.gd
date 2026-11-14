@@ -10,6 +10,7 @@ extends Node3D
 #   --shots=<dir>                   automated screenshot tour, then quit (dev)
 
 const K = preload("res://scripts/kutil.gd")
+const Agent = preload("res://scripts/agent.gd")
 const Cluster = preload("res://scripts/cluster.gd")
 const Connections = preload("res://scripts/connections.gd")
 const Providers = preload("res://scripts/providers.gd")
@@ -79,6 +80,9 @@ var touch: CanvasLayer = null      # touch controls (browser demo only)
 var _touch_forced = false          # --touch: show them on the desktop, for testing
 var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
+
+func _exit_tree() -> void:
+	Agent.shutdown()
 
 func _ready() -> void:
 	_setup_input()

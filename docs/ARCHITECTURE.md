@@ -52,6 +52,10 @@ Unsolicited lines carry `event` (`watch`, `frame`, `nav`, `blocked`,
 `forward_closed`). Errors carry a `kind` the game turns into a plain sentence:
 `config`, `exec_untrusted`, `needs_base_dir`, `auth`, `rbac`, `tls`, `timeout`,
 `unreachable`, `notfound`, `conflict`, `invalid`, `unsupported`, `other`.
+On exit the game stops its workers, requests companion shutdown and joins the
+pipe reader. The companion finishes outstanding requests and closes browser
+sessions, temporary profiles, forwards and Kubernetes sessions before exiting.
+If it does not exit within 15 seconds, the game terminates its child process.
 
 | File | Ops |
 |---|---|
