@@ -677,6 +677,8 @@ The model library can be inspected in a browser with the asset reviewer
 merged and Pages has deployed): every model at every tier, door open and shut,
 with a review checklist you can export.
 
+Want to help? Start with **[CONTRIBUTING](CONTRIBUTING.md)**: setup, where things are, the tests and the ground rules.
+
 Design and status documents: [ARCHITECTURE](docs/ARCHITECTURE.md),
 [FEATURE_PARITY](docs/FEATURE_PARITY.md), [KNOWN_LIMITATIONS](docs/KNOWN_LIMITATIONS.md),
 [MODEL_AUDIT](docs/MODEL_AUDIT.md), [CHANGELOG](docs/CHANGELOG.md).
