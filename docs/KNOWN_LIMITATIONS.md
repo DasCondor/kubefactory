@@ -164,6 +164,14 @@ exactly that: the code exists and has not been run against the real thing.
   cannot ask for logs or more detail. Redaction is pattern-based and can miss a
   secret written in an unusual form. Incidents are grouped by resource only;
   they are not kept after the game closes, apart from an export.
+- **Archie, Forge and Blueprint** report only; none of them changes anything.
+  Archie judges software by its image name (a database, broker, cache...) and
+  sees volumes only as the pod spec or `docker inspect` states them; it knows
+  nothing about backups made by other tools. Forge's "exists only on this
+  machine" needs the classic Docker image store: with the containerd store
+  (Docker Desktop's default) every image has a digest, so Forge reports that it
+  cannot tell. Blueprint compares replica counts only; it does not read
+  Compose files, manifests or Terraform plans.
 - **The Krew** (Sentinel, Scout, Scrappy) reads only what the cluster state
   already holds: pod specs, Services and, for Docker, `docker inspect`. It does
   not read NetworkPolicies, RBAC, admission policies or image vulnerabilities.
@@ -198,6 +206,6 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Not implemented from the 2.0 handoff
 
-See `FEATURE_PARITY.md` for the full table. In short: Archie, Forge and Blueprint, the autonomy and policy engine,
+See `FEATURE_PARITY.md` for the full table. In short: the autonomy and policy engine,
 self-healing and scheduling, an in-game terminal, a bundled browser engine, a
 native Docker Engine client, and Linux or macOS builds.

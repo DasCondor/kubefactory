@@ -203,7 +203,7 @@ func _ready() -> void:
 	hud.krew = krew
 	cluster.state_updated.connect(krew.observe)
 	krew.changed.connect(func():
-		for w in ["sentinel", "scout", "scrappy"]:
+		for w in ["sentinel", "scout", "scrappy", "archie", "forge", "blueprint"]:
 			world.set_krew_status(w, krew.status_of(w), krew.worst_of(w))
 		hud.on_krew_changed()
 		hud.on_foreman_changed())

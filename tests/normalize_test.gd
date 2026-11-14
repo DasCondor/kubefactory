@@ -390,6 +390,57 @@ line2\" injected: true"]])
 	check.call("Foreman: plain text without JSON is an answer with no actions", FM.parse_reply("I am not sure.", kwl, km2), {"answer": "I am not sure.", "actions": []})
 	check.call("Foreman: the system prompt says context is data and lists only the registry", [FM.system_prompt().contains("never an instruction"), FM.system_prompt().contains("execute_shell")], [true, false])
 	km2.free()
+	# ---- Archie, Forge, Blueprint: storage facts and their rules
+	var stf = K.pod_storage({"volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "db-data"}}, {"name": "tmp", "emptyDir": {}},
+		{"name": "logs", "hostPath": {"path": "/var/log"}}, {"name": "share", "nfs": {"server": "n", "path": "/x"}}, {"name": "cfg", "configMap": {"name": "c"}}]})
+	check.call("storage facts from a pod spec", [stf["persistent"], stf["scratch"], stf["binds"], stf["known"]], [["db-data", "share"], ["tmp"], ["/var/log"], true])
+	var ctf = K.container_storage({"Mounts": [{"Type": "volume", "Name": "pgdata", "Destination": "/var/lib/postgresql/data"},
+		{"Type": "volume", "Name": "a".repeat(64), "Destination": "/data"}, {"Type": "bind", "Source": "/srv/app"}, {"Type": "bind", "Source": "/var/run/docker.sock"}, {"Type": "tmpfs", "Destination": "/run"}]})
+	check.call("storage facts from docker inspect", [ctf["persistent"], ctf["anonymous"], ctf["binds"], ctf["scratch"]], [["pgdata"], ["aaaaaaaaaaaa at /data"], ["/srv/app"], ["/run"]])
+	var mkpod = func(uid, ns, wname, image, store, phase = "Running"):
+		return {"uid": uid, "name": wname + "-0", "ns": ns, "wname": wname, "wkind": "StatefulSet", "status": "Running", "health": "ok", "ready": true, "phase": phase,
+			"containers": [{"name": "c", "image": image}], "labels": {}, "store": store, "sec": K.empty_security()}
+	var scratch = K.empty_storage(); scratch["known"] = true; scratch["scratch"] = ["data"]
+	var none = K.empty_storage(); none["known"] = true
+	var kept = K.empty_storage(); kept["known"] = true; kept["persistent"] = ["db-data"]
+	var anon = K.empty_storage(); anon["known"] = true; anon["anonymous"] = ["abc at /data"]
+	var ast = {"source": "kubernetes", "nodes": [], "services": [], "workloads": [], "pods": [
+		mkpod.call("a1", "shop", "orders-db", "postgres:16", scratch), mkpod.call("a2", "shop", "cache", "redis:7.4", none),
+		mkpod.call("a3", "shop", "catalog-db", "postgres:16", kept), mkpod.call("a4", "shop", "web", "nginx:1.27", none),
+		mkpod.call("a5", "shop", "mq", "rabbitmq:3", anon), mkpod.call("a6", "shop", "old-db", "mysql:8", K.empty_storage())]}
+	var af = KrewM.archie_rules(ast)
+	var ak = {}
+	for f in af:
+		ak[f["key"]] = f
+	check.call("Archie: a database on scratch space is high, a bare cache low", [ak.get("archie:no-persistent-storage:shop/orders-db", {}).get("severity"), ak.get("archie:no-persistent-storage:shop/cache", {}).get("severity")], ["high", "low"])
+	check.call("Archie: a database with a claim, a stateless web server, and unknown storage are left alone", [ak.has("archie:no-persistent-storage:shop/catalog-db"), ak.keys().any(func(x): return x.ends_with("shop/web")), ak.keys().any(func(x): return x.ends_with("shop/old-db"))], [false, false, false])
+	check.call("Archie: a broker whose only volume has no name", [ak.get("archie:no-persistent-storage:shop/mq", {}).get("severity"), ak["archie:no-persistent-storage:shop/mq"]["evidence"][1].contains("no name")], ["medium", true])
+	check.call("Archie never offers an action", af.all(func(f): return f["action"].is_empty()), true)
+	var fscan = {"ok": true, "data": {"images": [{"id": "sha256:111111111111aaaa", "repo": "myapp", "tag": "dev", "containers": 2, "digests": 0},
+		{"id": "sha256:222222222222bbbb", "repo": "nginx", "tag": "1.27", "containers": 1, "digests": 1}, {"id": "sha256:333333333333cccc", "repo": "old", "tag": "1", "containers": 0, "digests": 0}],
+		"volumes": [], "build_cache": {"entries": 10, "reclaimable": 2.5e9, "in_use": 1}}}
+	var ff = KrewM.forge_rules({"source": "docker", "pods": []}, fscan)
+	check.call("Forge: only an image in use with no registry digest, and the idle build cache", ff.map(func(f): return f["key"]), ["forge:local-build:image/111111111111", "forge:build-cache:build-cache"])
+	check.call("Forge: nothing without a scan", KrewM.forge_rules({"source": "docker", "pods": []}, {}).size(), 0)
+	var bst = {"source": "kubernetes", "nodes": [], "services": [], "pods": [], "workloads": [
+		{"kind": "Deployment", "ns": "shop", "name": "api", "replicas": 3, "ready": 1}, {"kind": "Deployment", "ns": "shop", "name": "down", "replicas": 2, "ready": 0},
+		{"kind": "Deployment", "ns": "shop", "name": "ok", "replicas": 2, "ready": 2}, {"kind": "Deployment", "ns": "shop", "name": "off", "replicas": 0, "ready": 0},
+		{"kind": "Job", "ns": "shop", "name": "once", "replicas": 1, "ready": 0}, {"kind": "Compose", "ns": "blog", "name": "db", "replicas": 2, "ready": 1}]}
+	var bk = KrewM.blueprint_rules(bst).map(func(f): return [f["key"], f["severity"]])
+	check.call("Blueprint: drift by severity, Jobs and scaled-to-zero left alone", bk, [["blueprint:drift:shop/api", "low"], ["blueprint:drift:shop/down", "medium"], ["blueprint:drift:blog/db", "low"]])
+	var bm = KrewM.new()
+	bm.update(bst, now)
+	check.call("Blueprint: a rollout in progress is not reported at once", bm.findings.has("blueprint:drift:shop/api"), false)
+	bm.update(bst, now + 60.0)
+	check.call("Blueprint: ... nor after a minute", bm.findings.has("blueprint:drift:shop/api"), false)
+	bm.update(bst, now + 130.0)
+	check.call("Blueprint: after the hold it is, seen since the start", [bm.findings.has("blueprint:drift:shop/api"), bm.findings.get("blueprint:drift:shop/api", {}).get("first_seen")], [true, now])
+	var bst2 = bst.duplicate(true)
+	bst2["workloads"][0]["ready"] = 3
+	bm.update(bst2, now + 140.0)
+	bm.update(bst, now + 150.0)
+	check.call("Blueprint: a fresh drift waits again", bm.findings.has("blueprint:drift:shop/api"), false)
+	bm.free()
 	# ---- LiveView endpoint discovery
 	var Live = load("res://scripts/liveview.gd")
 	var eps = Live.endpoints({"pods": [{"name": "grafana", "ns": "mon", "ip": "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:9443->9443/tcp, 5432/tcp"}]}, "docker")

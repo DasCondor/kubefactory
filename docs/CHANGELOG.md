@@ -13,6 +13,12 @@ against live infrastructure.
   registry and the current state and run only on approval. Keys are sealed by
   the companion; a provider on another computer receives nothing until allowed.
   Foreman's figure follows the chosen provider.
+- **Archie, Forge and Blueprint** join the Krew. Archie (storage): stateful
+  software with no lasting storage, unnamed Docker volumes. Forge (build):
+  images that exist only on this machine, idle build cache. Blueprint
+  (architect): desired versus running replicas and Compose containers, after
+  a two-minute hold. All three only report. Pods now carry storage facts from
+  the pod spec or `docker inspect`; the board's roster wraps to two rows.
 - **The Krew and its operations center** (key `K`). Bob, Gauge and three new
   workers report findings on one board, each with evidence, a proposal and its
   risk: **Sentinel** (security: privileged, engine socket, host paths and
@@ -21,6 +27,8 @@ against live infrastructure.
   pods, unused images, unattached volumes). Nothing runs without individual
   approval; unattached volumes are never offered for removal. Stations past
   Gauge's desk, a resolved history, Markdown and JSON export.
+  The browser build and the Compatibility renderer draw each worker in its
+  own shape (guard robot, drone, tracked sweeper) instead of one block figure.
 - **Gauge's resource desk**: inspect node capacity and visible requests, or
   read a selected workload's usage. Its sortable, filterable node table is
   read-only and distinguishes missing data from zero. Gauge can be hidden.
