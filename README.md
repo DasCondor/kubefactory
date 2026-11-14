@@ -18,7 +18,7 @@ homelab use.
 [![Web demo](https://img.shields.io/github/actions/workflow/status/DasCondor/kubefactory/pages.yml?label=web%20demo)](https://github.com/DasCondor/kubefactory/actions/workflows/pages.yml)
 [![Made with Godot 4.3](https://img.shields.io/badge/Godot-4.3-478cbf?logo=godotengine&logoColor=white)](https://godotengine.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
-![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20browser-8b949e)
+![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20browser-8b949e)
 
 ![Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service belts and a failing pod's alarm](docs/flythrough.gif)
 
@@ -45,7 +45,7 @@ homelab use.
 - 👥 **Use it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows.
 - 🧪 **Try it safely first.** Four simulated demo worlds let you use every tool without touching anything real.
 - 📺 **Screens that show the real thing.** Each machine's screen steps through its application's own page, its metrics, its log and its storage. Click it to open it full size.
-- 🎨 **Built with Godot 4.3.** Desktop machines, tools, Porter, Bob and Gauge come from the bundled model library; the browser build draws everything in code. Textures, icons and sounds are generated.
+- 🎨 **Built with Godot 4.3.** Desktop machines, tools, Porter, Bob and Gauge come from the bundled model library; the browser build draws everything in code, or loads the library from the site on its High preset. Textures, icons and sounds are generated.
 
 ## 📸 Screenshots
 
@@ -94,8 +94,13 @@ The browser build is a sandbox: it runs the built-in simulated clusters only and
 connects to nothing. A browser cannot run `kubectl` or Docker, so managing real
 clusters needs the desktop build below. Every tool works against the simulation,
 including Porter's bundled app setups; his online app lists do not load there.
-Graphics are lighter than the desktop build (one shadow pass, fewer machine
-details). On desktop, click the page to capture the mouse; touch devices have
+Graphics start light (drawn in code, one shadow pass) so the demo opens at once
+on any device. **Esc → Graphics → High** switches to the real model library
+(about 13 MB, fetched once from the same site and checked against the catalog's
+checksums), 4x anti-aliasing and softer shadows; the page reloads to apply it,
+and `?gfx=high` in the address opens it that way. Global illumination and
+reflections need the desktop build: WebGL cannot run them. On desktop, click the
+page to capture the mouse; touch devices have
 on-screen controls. It is rebuilt and redeployed on every push to `main` by
 `.github/workflows/pages.yml`.
 
@@ -123,10 +128,27 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 
 ## 📥 Download
 
-Get the latest Windows build from
-**https://github.com/DasCondor/kubefactory/releases/latest**
-(`KubeFactory-<version>-win64.zip` plus its `.sha256` checksum). The executable
-is not code-signed, so Windows SmartScreen asks for confirmation on first run.
+Get the latest build from
+**https://github.com/DasCondor/kubefactory/releases/latest**:
+
+| Platform | Package | Start it |
+|---|---|---|
+| Windows | `KubeFactory-<version>-win64.zip` | `install.ps1`, or `KubeFactory.exe` |
+| Linux (x86_64) | `KubeFactory-<version>-linux-x86_64.tar.gz` | `./KubeFactory.x86_64` |
+| macOS (Apple Silicon and Intel) | `KubeFactory-<version>-macos.zip` | `KubeFactory.app` (see below) |
+
+**Checking a download.** Every package has a `.sha256`, the release has one
+`SHA256SUMS`, and every package carries a signed build-provenance attestation
+that ties it to this repository's release workflow and the exact commit:
+
+    gh attestation verify KubeFactory-<version>-linux-x86_64.tar.gz -R DasCondor/kubefactory
+
+None of the packages is signed with a Windows or Apple developer identity.
+Windows SmartScreen asks for confirmation on first run. On macOS the app is
+ad-hoc signed but not notarized, so Gatekeeper blocks a downloaded copy until
+you clear the quarantine flag on the unpacked folder:
+
+    xattr -dr com.apple.quarantine KubeFactory-<version>-macos
 
 ## 📦 Install (release build)
 
@@ -190,6 +212,42 @@ kubeconfigs...**), or just drop a kubeconfig file on the window. It:
   Nothing named in a kubeconfig runs until you approve that exact command;
 - says what went wrong in plain words: cannot reach the server, certificate not
   trusted, sign-in refused or expired, not permitted.
+
+### Docker hosts, read-only, without root
+
+Every Docker CLI context is a connection of its own on the cluster list, so
+several Docker hosts are several connections (`-- --docker --context=<name>`
+picks one at start). A context on another machine **opens read-only**. To
+make the host itself refuse changes, and to avoid giving anything root
+(Docker access is root), run the read-only proxy in
+`deploy/docker-readonly/` on each host and reach it over an SSH tunnel as an
+ordinary user: **[docs/DOCKER_HOSTS.md](docs/DOCKER_HOSTS.md)**.
+### A KubeFactory server: play like a game client
+
+Run KubeFactory once as a server beside your cluster (`--headless -- --server`)
+and everyone else connects to it (Esc > Switch cluster > **KubeFactory
+server...**) with a token: no kubeconfig or Docker access on their machines.
+Viewers only look; operators act up to MK.4; the server checks every request
+and logs it. See **[docs/SERVER.md](docs/SERVER.md)**.
+
+### Backend plugins
+
+New kinds of sources can be added as plugins: separate programs, in any
+language, that report machines over a small JSON protocol. A plugin runs only
+once you trust it (tied to a hash of its files) and can only look unless you
+also allow changes. See **[docs/PLUGINS.md](docs/PLUGINS.md)** and
+`examples/plugins/static-world`.
+
+### Komodo (read-only)
+
+Using [Komodo](https://komo.do) for your Docker hosts? Esc > Switch cluster >
+**Komodo...**, enter the Core's address and an API key and secret (Komodo:
+Settings > API keys; a read-only key is enough). Every server becomes a
+platform and every container a machine, and the Krew reads them. KubeFactory
+sends Komodo only read requests (`GetVersion`, `ListServers`,
+`ListAllDockerContainers`), never `/write` or `/execute`, and offers no
+actions on a Komodo connection: changes stay in Komodo. The key and secret are
+sealed by the companion and never shown again.
 
 ## 🚪 Open a machine: storage inspection (key `F`)
 
@@ -279,6 +337,7 @@ are marked **SIMULATED**.
 
 ![The Krew's stations](docs/krew-stations.png)
 ![The same stations as the browser build draws them](docs/krew-stations-browser.png)
+![The browser's High preset: the library models on the same renderer](docs/web-high.png)
 ![Sentinel's findings in the operations center](docs/krew-panel.png)
 ![Scrappy's cleanup awaiting approval](docs/krew-scrappy.png)
 ![Archie, Forge and Blueprint in the second row](docs/krew-second-row.png)
@@ -417,6 +476,13 @@ Rancher needs nothing extra: download the cluster's kubeconfig from the Rancher 
 
 ## 👀 What you see
 
+The **minimap** in the bottom-left corner turns with you (what you face is
+up): node platforms, every machine as a dot in its health colour (failing
+ones pulse), the HUB, the cluster gates, Bob, Porter, Gauge, Foreman and the
+Krew's stations. `N` or the pause menu shows and hides it.
+
+![The minimap, bottom left](docs/minimap.png)
+
 | In the game | In the cluster |
 |---|---|
 | Foundation platform with a gantry sign | Node (status, CPU / memory requests, zone, instance type) |
@@ -454,6 +520,28 @@ L datapad, G jump to next problem, B belts, F open a machine's storage door,
 V open a machine's screen (or the LiveView list), R next view on a machine's
 screen, F11 fullscreen, Esc menu.
 
+## ⚙️ Settings (Esc → Settings)
+
+Everything is set in the game and saved as you change it; no files to edit.
+
+- **Keys:** rebind any action to a key or mouse button (not a WASD player? move
+  it all). Clashes are pointed out, and **Reset all keys** brings back the
+  defaults. Hints throughout the game ("[E] inspect") and the help line follow
+  your bindings.
+- **Controller:** plug in any controller Godot recognises. Left stick move,
+  right stick look, RT use tool, LT copy machine, LB / RB change tool, A jump
+  (twice: hoverpack), B descend, X inspect, Y build menu, L3 sprint, R3 next
+  screen view, D-pad for next problem / Krew / Foreman / datapad, Back codex,
+  Start menu. In menus the left stick moves a pointer, A clicks, the right
+  stick scrolls and B closes. Look speed has its own slider.
+- **Display:** field of view (60-110°), interface size (75-150%), mouse
+  sensitivity, inverted look.
+- **Accessibility:** status colour palettes for red-green and blue-yellow
+  colour blindness (Okabe-Ito colours) and a high-contrast one. They change
+  lamps, alarm beams, findings and tool tiers; every status is also written.
+
+![Settings: every key rebindable](docs/settings.png)
+
 ## 🎨 Graphics presets
 
 Three presets on the same world, switched live from the pause menu
@@ -478,8 +566,10 @@ The rules they are built to:
 - **Graphics never limit management.** Every tool, panel, board and action is
   built by code that does not look at the preset, and switching preset keeps
   your connection, position and open work.
-- **The browser demo stays light.** It always runs its own lean path, whatever
-  preset is asked for.
+- **The browser demo has its own two presets.** Standard is drawn in code;
+  High loads the model library from the site, with 4x anti-aliasing and softer
+  shadows. Enhanced and Ultra need the desktop build (WebGL has no global
+  illumination or screen-space reflections).
 
 How the recommendation is made: the GPU's name and type, memory and CPU threads
 (`recommend()` in `scripts/gfx.gd`). Integrated or entry-level GPUs get Standard,
@@ -676,6 +766,8 @@ The model library can be inspected in a browser with the asset reviewer
 `https://dascondor.github.io/kubefactory/model-viewer/` once this branch is
 merged and Pages has deployed): every model at every tier, door open and shut,
 with a review checklist you can export.
+
+Want to help? Start with **[CONTRIBUTING](CONTRIBUTING.md)**: setup, where things are, the tests and the ground rules.
 
 Design and status documents: [ARCHITECTURE](docs/ARCHITECTURE.md),
 [FEATURE_PARITY](docs/FEATURE_PARITY.md), [KNOWN_LIMITATIONS](docs/KNOWN_LIMITATIONS.md),

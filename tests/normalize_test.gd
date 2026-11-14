@@ -441,6 +441,16 @@ line2\" injected: true"]])
 	bm.update(bst, now + 150.0)
 	check.call("Blueprint: a fresh drift waits again", bm.findings.has("blueprint:drift:shop/api"), false)
 	bm.free()
+	# ---- Backend plugins: whatever a plugin sends is checked, coerced and capped
+	var PB = load("res://scripts/backend_plugin.gd")
+	var junk = PB.normalize({"nodes": [{"name": "n1", "cpu": "lots"}, "not a node", {"name": "x".repeat(500)}],
+		"pods": [{"name": "a", "node": "nowhere", "status": "CrashLoopBackOff", "labels": {"k": 1}}, 42, {"name": "b", "node": "n1", "containers": [{"name": "c", "image": "i", "restarts": "9"}]}],
+		"workloads": "not a list", "services": [{"name": "s", "selector": "app=x"}]}, "test")
+	check.call("plugin state: non-objects dropped, names capped", [junk["nodes"].size(), junk["nodes"][1]["name"].length(), junk["pods"].size()], [2, 120, 2])
+	check.call("plugin state: a bad number is unknown, not a crash", [junk["nodes"][0]["cpu"], junk["pods"][1]["containers"][0]["restarts"]], [0.0, 0])
+	check.call("plugin state: a pod on an unknown node goes to the first node", junk["pods"][0]["node"], "n1")
+	check.call("plugin state: health from status, labels as text, a bad selector ignored", [junk["pods"][0]["health"], junk["pods"][0]["labels"], junk["services"][0]["selector"], junk["workloads"]], ["bad", {"k": "1"}, {}, []])
+	check.call("plugin state: uids are namespaced by the plugin", junk["pods"][1]["uid"].begins_with("test/"), true)
 	# ---- LiveView endpoint discovery
 	var Live = load("res://scripts/liveview.gd")
 	var eps = Live.endpoints({"pods": [{"name": "grafana", "ns": "mon", "ip": "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:9443->9443/tcp, 5432/tcp"}]}, "docker")

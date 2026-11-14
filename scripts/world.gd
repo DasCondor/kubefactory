@@ -9,6 +9,7 @@ const Tex = preload("res://scripts/tex.gd")
 const Platform = preload("res://scripts/platform.gd")
 const Machine = preload("res://scripts/machine.gd")
 const Gfx = preload("res://scripts/gfx.gd")
+const Controls = preload("res://scripts/controls.gd")
 const Scenery = preload("res://scripts/scenery.gd")
 const Models = preload("res://scripts/models.gd")
 
@@ -389,8 +390,6 @@ func _build_hub() -> void:
 # build, or a copy without assets), otherwise a hidden holder, so the parts the
 # idle animation moves still exist.
 func _krew(id: String, body: Node3D, height: float) -> Node3D:
-	if Gfx.lite():
-		return body
 	var m = Models.instance(id)
 	if m == null:
 		return body
@@ -653,6 +652,19 @@ func set_krew_status(id: String, text: String, worst: String) -> void:
 		_krew_tags[id].text = "%s\n%s" % [name, text]
 	if _krew_lamps.has(id):
 		_krew_lamps[id].material_override = Tex.status_glow({"high": "bad", "medium": "warn", "low": "warn"}.get(worst, "ok"))
+
+# Key hints on signs and tags ("[E] findings") follow the player's bindings.
+# The text as written is kept, so a later rebinding translates from the original.
+func refresh_hints(n: Node = self) -> void:
+	for c in n.get_children():
+		if c is Label3D:
+			if not c.has_meta("kf_shown") or c.get_meta("kf_shown") != c.text:
+				c.set_meta("kf_raw", c.text)     # set by the game since: that is the original now
+			var shown = Controls.hint(str(c.get_meta("kf_raw")))
+			c.text = shown
+			c.set_meta("kf_shown", shown)
+		if c.get_child_count() > 0:
+			refresh_hints(c)
 
 func set_gauge_visible(enabled: bool) -> void:
 	_gauge.visible = enabled
@@ -968,7 +980,8 @@ func set_uplink(provider_name: String, ok: bool) -> void:
 	_uplink_label.text = "UPLINK  %s  ·  %s" % [provider_name, "LINKED" if ok else "NO SIGNAL"]
 	_uplink_label.modulate = K.health_color("ok" if ok else "bad")
 	K.fit_label(_uplink_label, 6.0, 0.28)
-	_uplink_mat.albedo_color = Color(0.3, 1.0, 0.5, 0.25) if ok else Color(1.0, 0.2, 0.15, 0.3)
+	var uc = K.health_color("ok" if ok else "bad")
+	_uplink_mat.albedo_color = Color(uc.r, uc.g, uc.b, 0.25 if ok else 0.3)
 
 # One pylon per reachable cluster (kubeconfig contexts, Docker, simulations).
 func set_targets(targets: Array, source: String, context: String) -> void:

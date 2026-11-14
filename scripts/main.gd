@@ -3,7 +3,7 @@ extends Node3D
 #
 # Command line (after "--"):
 #   --demo | --kubectl | --docker   force a data source (default: auto-detect)
-#   --context=<name>                connect to a specific kubeconfig context
+#   --context=<name>                connect to a specific kubeconfig context (with --docker: a Docker CLI context)
 #   --sim=<name>                    a simulated cluster (aws-eks-prod, azure-aks-staging,
 #                                   gke-analytics, rancher-edge, helmsman-sim)
 #   --read-only                     block every action that changes the cluster
@@ -17,6 +17,10 @@ const Providers = preload("res://scripts/providers.gd")
 const DemoScreens = preload("res://scripts/demo_screens.gd")
 const MachineScreens = preload("res://scripts/machine_screens.gd")
 const KrewManager = preload("res://scripts/krew.gd")
+const ServerNode = preload("res://scripts/server.gd")
+const WebAssets = preload("res://scripts/web_assets.gd")
+const Controls = preload("res://scripts/controls.gd")
+const Tex = preload("res://scripts/tex.gd")
 const ForemanNode = preload("res://scripts/foreman.gd")
 const MobileControls = preload("res://scripts/mobile_controls.gd")
 const Models = preload("res://scripts/models.gd")
@@ -84,6 +88,15 @@ var touch: CanvasLayer = null      # touch controls (browser demo only)
 var _touch_forced = false          # --touch: show them on the desktop, for testing
 var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
+var _web_note = ""       # browser: why High could not be used, shown once the HUD is up
+var server: Node = null     # --server: this instance serves players (server.gd)
+var server_port = 0
+var server_listen = "127.0.0.1"
+var server_cert = ""
+var server_key = ""
+var _pad_used = false    # a controller has been used: its actions work without the mouse captured
+var _pad_scroll = 0.0
+var _pad_a = false
 
 func _exit_tree() -> void:
 	Agent.shutdown()
@@ -92,8 +105,18 @@ func _ready() -> void:
 	_setup_input()
 	# the graphics preset has to be known before the world is built
 	settings = K.load_settings()
+	Controls.apply(settings.get("keys", {}))
+	K.palette = str(settings.get("palette", "standard")) if K.PALETTES.has(str(settings.get("palette", ""))) else "standard"
+	get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
 	Gfx.setup(str(settings.get("graphics", "auto")), OS.get_cmdline_user_args())
 	_setup_environment()
+	if Gfx.web() and _web_choice() == "high":
+		set_process(false)
+		set_process_unhandled_input(false)
+		await _load_web_models()
+		set_process(true)
+		set_process_unhandled_input(true)
+		Gfx.apply(_env, world_sun, get_viewport(), _gfx_base)
 	cluster = Cluster.new()
 	add_child(cluster)
 	world = World.new()
@@ -159,6 +182,14 @@ func _ready() -> void:
 		_set_mode(2))
 	hud.target_requested.connect(_connect_target)
 	hud.graphics_requested.connect(set_graphics)
+	hud.settings_changed.connect(func(key):
+		if key == "palette":
+			# lamps, beacons and panels in the new status colours
+			Tex.clear_status()
+			hud._sev_colors()
+			world.rebuild_graphics(cluster.state)
+			hud.on_state(cluster.state)
+		world.refresh_hints.call_deferred())
 	hud.storage_requested.connect(_storage)
 	hud.storage_modules.connect(func(uid, mounts):
 		var m = world.machines.get(uid)
@@ -283,11 +314,26 @@ func _ready() -> void:
 		elif a == "--docker":
 			source = "docker"
 		elif a.begins_with("--context="):
-			source = "kubernetes"
+			# a kubeconfig context, or with --docker a Docker CLI context
+			if source != "docker":
+				source = "kubernetes"
 			ctx = a.trim_prefix("--context=")
 		elif a.begins_with("--sim="):
 			source = "simulation"
 			ctx = a.trim_prefix("--sim=")
+		elif a == "--server" or a.begins_with("--server="):
+			server_port = int(a.trim_prefix("--server=")) if a.begins_with("--server=") else 7666
+		elif a.begins_with("--listen="):
+			server_listen = a.trim_prefix("--listen=")
+		elif a.begins_with("--tls-cert="):
+			server_cert = a.trim_prefix("--tls-cert=")
+		elif a.begins_with("--tls-key="):
+			server_key = a.trim_prefix("--tls-key=")
+		elif a.begins_with("--remote="):
+			# a KubeFactory server; the token comes from KF_REMOTE_TOKEN, never the command line
+			source = "remote"
+			ctx = a.trim_prefix("--remote=")
+			cluster.remote_token = OS.get_environment("KF_REMOTE_TOKEN")
 		elif a == "--read-only":
 			cluster.read_only = true
 		elif a.begins_with("--shots="):
@@ -342,7 +388,11 @@ func _ready() -> void:
 	# saved per-user settings
 	settings = K.load_settings()
 	hud.settings = settings
+	hud._minimap_visibility()
 	player.sensitivity = clampf(float(settings["sensitivity"]), 0.2, 4.0)
+	player.invert_y = bool(settings.get("invert_y", false))
+	player.pad_look = clampf(float(settings.get("pad_look", 1.0)), 0.3, 3.0)
+	player.camera.fov = clampf(float(settings.get("fov", 80.0)), 60.0, 110.0)
 	world.show_belts = bool(settings["belts"])
 	if OS.has_feature("web"):
 		source = "simulation"   # a browser cannot run kubectl or docker
@@ -365,7 +415,23 @@ func _ready() -> void:
 			hud.open_welcome.call_deferred()
 		elif hud.offer_demos:
 			hud.open_demos.call_deferred()
+	if _web_note != "":
+		hud.notify.call_deferred(_web_note, "warn")
 	cluster.start(source, ctx, "cli" if kubeconfig != "" else "")
+	if server_port > 0:
+		server = ServerNode.new()
+		server.cluster = cluster
+		server.port = server_port
+		server.address = server_listen
+		server.tls_cert = server_cert
+		server.tls_key = server_key
+		add_child(server)
+		var sr = server.start()
+		if not sr.ok:
+			printerr("KubeFactory server: ", sr.msg)
+			get_tree().quit(1)
+	if not Controls.changed().is_empty():
+		get_tree().create_timer(2.0).timeout.connect(func(): world.refresh_hints())
 	if shots != "" and shots != "-":
 		_run_shots(shots)
 	if mptest != "":
@@ -414,6 +480,7 @@ func _setup_input() -> void:
 	_key("screen_next", [KEY_R])
 	_key("krew", [KEY_K])
 	_key("foreman", [KEY_H])
+	_key("minimap", [KEY_N])
 	_key("mute", [KEY_M])
 	_key("fullscreen", [KEY_F11])
 	for pair in [["fire", MOUSE_BUTTON_LEFT], ["sample", MOUSE_BUTTON_MIDDLE]]:
@@ -421,6 +488,8 @@ func _setup_input() -> void:
 		var ev = InputEventMouseButton.new()
 		ev.button_index = pair[1]
 		InputMap.action_add_event(pair[0], ev)
+	Controls.snapshot()          # the shipped keys; the player's own are laid on top from settings
+	Controls.add_controller()
 
 func _setup_environment() -> void:
 	# Gradient sky with a sun halo and a layer of drifting-looking (static) clouds
@@ -509,12 +578,96 @@ func _setup_environment() -> void:
 # Switch graphics preset while playing: renderer settings first, then the world
 # rebuilds its scenery and machines at the new detail level.
 func set_graphics(id: String) -> void:
+	if Gfx.web():
+		# the browser's two presets: the page reloads so every model, character
+		# included, is built once from what is loaded; the link carries the choice
+		var want = "high" if id == "high" else "standard"
+		settings["graphics_web"] = want
+		K.save_settings(settings)
+		hud.notify("Switching to %s graphics..." % want.capitalize(), "info")
+		await get_tree().create_timer(0.6).timeout     # let the setting reach the browser's storage
+		JavaScriptBridge.eval("var u = new URL(location.href); u.searchParams.set('gfx', '%s'); location.replace(u.href);" % want)
+		return
 	settings["graphics"] = id
 	K.save_settings(settings)
 	Gfx.setup(id, OS.get_cmdline_user_args() if id == "auto" else [])
 	Gfx.apply(_env, world_sun, get_viewport(), _gfx_base)
 	world.rebuild_graphics(cluster.state)
 	hud.notify("Graphics: %s" % Gfx.NAMES[Gfx.level], "info")
+
+# The browser's preset: a ?gfx= link wins, then the saved choice; Standard by default.
+func _web_choice() -> String:
+	var q = str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('gfx') || ''", true)).to_lower()
+	if q in ["high", "standard"]:
+		return q
+	return str(settings.get("graphics_web", "standard"))
+
+func _load_web_models() -> void:
+	var layer = CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+	var bg = ColorRect.new()
+	bg.color = Color(0.06, 0.07, 0.08)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var lbl = Label.new()
+	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.text = "KUBEFACTORY  ·  High graphics\n\nLoading the model library..."
+	layer.add_child(lbl)
+	var wa = WebAssets.new()
+	add_child(wa)
+	wa.progress.connect(func(done, total):
+		lbl.text = "KUBEFACTORY  ·  High graphics\n\nLoading the model library...  %.1f / %.1f MB" % [done / 1048576.0, total / 1048576.0])
+	wa.fetch()
+	var res = await wa.finished
+	Gfx.web_high = res[0]
+	print("High graphics: ", res[1], "  library in use: ", Models.available())
+	_web_note = "" if res[0] else "High graphics could not load the model library (%s), so the world is drawn in code." % res[1]
+	wa.queue_free()
+	layer.queue_free()
+# Menus are built for a mouse; with a controller, the left stick moves the
+# pointer, A clicks where it points and the right stick scrolls.
+func _pad_pointer(delta: float) -> void:
+	if not hud.modal_open() or not Controls.pad_connected():
+		_pad_a = false
+		return
+	var vp = get_viewport()
+	var move = Controls.stick(false)
+	if move != Vector2.ZERO:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		var size = vp.get_visible_rect().size
+		var p = (vp.get_mouse_position() + move * 900.0 * delta).clamp(Vector2.ZERO, size - Vector2.ONE)
+		vp.warp_mouse(p)
+		var mm = InputEventMouseMotion.new()
+		mm.position = p
+		mm.global_position = p
+		Input.parse_input_event(mm)
+	var pads = Input.get_connected_joypads()
+	var a = Input.is_joy_button_pressed(pads[0], JOY_BUTTON_A)
+	if a != _pad_a:
+		_pad_a = a
+		var mb = InputEventMouseButton.new()
+		mb.button_index = MOUSE_BUTTON_LEFT
+		mb.pressed = a
+		mb.position = vp.get_mouse_position()
+		mb.global_position = mb.position
+		Input.parse_input_event(mb)
+	var sc = Controls.stick(true).y
+	_pad_scroll += sc * delta * 12.0
+	while absf(_pad_scroll) >= 1.0:
+		var wb = InputEventMouseButton.new()
+		wb.button_index = MOUSE_BUTTON_WHEEL_DOWN if _pad_scroll > 0.0 else MOUSE_BUTTON_WHEEL_UP
+		wb.position = vp.get_mouse_position()
+		wb.global_position = wb.position
+		wb.pressed = true
+		Input.parse_input_event(wb)
+		var wr = wb.duplicate()
+		wr.pressed = false
+		Input.parse_input_event(wr)
+		_pad_scroll -= signf(_pad_scroll)
 
 func _set_mode(m: int) -> void:
 	if m != mode:
@@ -609,6 +762,7 @@ func _storage(uid: String) -> void:
 
 func _process(delta: float) -> void:
 	_live_rates(delta)
+	_pad_pointer(delta)
 	if _storage_uid != "" and hud._modal_kind != "storage":
 		var sm = world.machines.get(_storage_uid)
 		if sm != null and sm.has_door():
@@ -642,7 +796,7 @@ func _process(delta: float) -> void:
 	else:
 		hud.set_target(("[LMB] open this screen     [R] next view: dashboard, metrics, logs, storage\n" if _on_screen(meta) else "") + _tooltip(type, meta, hold))
 	player.tool_readout(_tool_readout(type, meta, hold))
-	if not hold.is_empty() and Input.is_action_pressed("fire") and not _dis_lock and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or _shots_running or touch_on()):
+	if not hold.is_empty() and Input.is_action_pressed("fire") and not _dis_lock and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or _shots_running or touch_on() or _pad_used):
 		_dis += delta / hold["time"]
 		if _dis >= 1.0:
 			_dis = 0.0
@@ -794,15 +948,28 @@ func _unhandled_input(ev: InputEvent) -> void:
 		settings["fullscreen"] = w.mode == Window.MODE_FULLSCREEN
 		K.save_settings(settings)
 		return
-	if ev.is_action_pressed("ui_cancel"):
+	var pad = ev is InputEventJoypadButton or ev is InputEventJoypadMotion
+	if pad:
+		_pad_used = true
+	if ev is InputEventJoypadButton and ev.pressed and ev.button_index == JOY_BUTTON_B and hud.modal_open():
+		hud.close_modal()
+		return
+	if ev.is_action_pressed("pad_menu"):
 		if hud.modal_open():
 			hud.close_modal()
 		else:
 			hud.open_pause()
 		return
+	if ev.is_action_pressed("ui_cancel"):
+		if hud.modal_open():
+			hud.close_modal()
+			return
+		if not pad:          # B on a controller descends in the world; Start is its menu button
+			hud.open_pause()
+			return
 	if hud.modal_open():
 		return
-	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not touch_on():
+	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not touch_on() and not pad:
 		if ev is InputEventMouseButton and ev.pressed:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		return
@@ -810,7 +977,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 		if ev.is_action_pressed("tool%d" % (i + 1)):
 			_set_mode(i)
 			return
-	if ev is InputEventMouseButton and ev.pressed and (ev.button_index == MOUSE_BUTTON_WHEEL_UP or ev.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+	if ev.is_action_pressed("tool_next") or ev.is_action_pressed("tool_prev"):
+		_set_mode(posmod(mode + (1 if ev.is_action_pressed("tool_next") else -1), 6))
+	elif ev is InputEventMouseButton and ev.pressed and (ev.button_index == MOUSE_BUTTON_WHEEL_UP or ev.button_index == MOUSE_BUTTON_WHEEL_DOWN):
 		_set_mode(posmod(mode + (1 if ev.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1), 6))
 	elif ev.is_action_pressed("build_menu"):
 		hud.open_build()
@@ -831,6 +1000,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		hud.open_krew()
 	elif ev.is_action_pressed("foreman"):
 		hud.open_foreman()
+	elif ev.is_action_pressed("minimap"):
+		hud.toggle_minimap()
 	elif ev.is_action_pressed("next_problem"):
 		_next_problem()
 	elif ev.is_action_pressed("interact"):

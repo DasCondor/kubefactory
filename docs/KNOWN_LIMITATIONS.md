@@ -36,6 +36,69 @@ exactly that: the code exists and has not been run against the real thing.
 - No clean-Windows-machine installation test was done. No large-cluster
   benchmark (hundreds of nodes, thousands of pods) was done.
 
+## Settings and controller
+
+- **The controller was tested with simulated controller input**, not with a
+  physical pad: the bindings, the menu pointer and the B / Start behaviour are
+  checked by `tests/live/settings_test.gd`. Stick feel (dead zone, speeds) has
+  not been tuned on real hardware, and controller buttons cannot be rebound
+  yet (keys and mouse buttons can).
+- Menus are mouse-first: with a controller you steer a pointer rather than
+  move focus between buttons. Text fields still need a keyboard.
+- Key hints are translated where they are written in the usual form ("[E]",
+  "(K)"); a hint written another way keeps the default key's name.
+- Interface size applies when you press **Apply interface size**, so the menu
+  does not jump under the pointer while dragging.
+
+## Docker hosts
+
+- Docker contexts are listed without being contacted; one that does not answer
+  says so when chosen. The read-only proxy was tested on this machine's engine
+  through `tcp://127.0.0.1`; the SSH tunnel and a separate physical host were
+  not tested.
+- Through the read-only proxy, opening a machine's storage door is not
+  available (it needs `exec`), and neither are logs' follow mode or any action.
+- Read-only for another host is switched on when you connect; turning it off
+  from the Esc menu is your choice, and only the proxy makes it binding.
+
+## Komodo
+
+- **Not tested against a real Komodo Core**: the requests and answers follow
+  the published `komodo_client` source (2.1), and the tests use a stand-in
+  built from it. Komodo versions with a different API may not connect.
+- Read-only by design: no restart, deploy or removal through KubeFactory.
+- Shown per server, not per Compose stack (container labels are not in
+  Komodo's list); logs, capacity figures and storage doors are not available
+  over a Komodo connection.
+
+## Linux and macOS
+
+- **Linux:** the exported game was run headless on Ubuntu 24.04 in a container
+  (the simulation loads, no script errors), the unit tests pass on the Linux
+  engine, and the companion answers there. Not played on a Linux desktop with
+  a GPU, and not tested against a real cluster from Linux.
+- **macOS:** the package is built (universal, ad-hoc signed) but has **not
+  been run on a Mac**. It is not notarized.
+- On both, the companion cannot keep tokens and keys yet: it seals them with
+  Windows' per-user protection only, so Grafana, Tautulli, AI provider and
+  Komodo credentials are refused rather than stored in the clear. Kubeconfig
+  connections, Docker and the simulation do not need it.
+- The helper scripts (install, dev cluster, packaging) are PowerShell on
+  Windows; Linux and macOS have `tools/package.sh` only.
+
+## Server mode and plugins
+
+- **Server mode** was tested with a headless server and client games on this
+  machine over `ws://127.0.0.1`. `wss://` with a certificate, a reverse proxy
+  and players on other machines were not tested. Players' avatars, the shared
+  feed and per-namespace limits of the Kubernetes multi-user mode are not
+  carried over a server connection yet; roles are per token, not per
+  namespace. Tokens are managed by editing `server-tokens.json`.
+- **Plugins** were tested with the example plugin only. A trusted plugin is a
+  program running with your rights: trust only plugins you have read. Plugins
+  cannot draw their own models or screens; their machines use the standard
+  ones. Plugins are not available in the browser build.
+
 ## By design, for now
 
 - **Docker still uses the `docker` command.** Only Kubernetes is native.
@@ -131,6 +194,12 @@ exactly that: the code exists and has not been run against the real thing.
   Grafana or Tautulli pages: clicking one opens it full size with two views to
   switch between, not a web page. On a real cluster or Docker engine these
   screens stay neutral until a real page or provider is put on them.
+- **Browser High graphics** were checked in the exported web build served
+  locally (all 40 models fetched and checked, the library in use) and rendered
+  on the desktop Compatibility renderer the browser uses. Not tested on the
+  deployed site, on a phone, or for frame rate in a browser; on a phone the
+  13 MB download and the extra detail may be slow, which is why it is opt-in.
+  Global illumination and reflections are not available in the browser.
 - **The exported browser build was run**: it loads, the world chooser works,
   the media world loads, and the browser console shows no errors. The tool
   used to drive it could not send keys or capture the mouse, so walking up to

@@ -12,8 +12,13 @@ const REACH = 70.0
 
 signal stepped()
 
+const Controls = preload("res://scripts/controls.gd")
+const PAD_LOOK = 2.8           # radians per second at full stick, at pad_look 1
+
 var enabled = true
 var sensitivity = 1.0
+var invert_y = false
+var pad_look = 1.0
 var _stride = 0.0
 var flying = false
 var camera: Camera3D
@@ -86,7 +91,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 		return
 	if ev is InputEventMouseMotion:
 		rotation.y -= ev.relative.x * 0.0022 * sensitivity
-		_pitch = clampf(_pitch - ev.relative.y * 0.0022 * sensitivity, -1.5, 1.5)
+		_pitch = clampf(_pitch - ev.relative.y * 0.0022 * sensitivity * (-1.0 if invert_y else 1.0), -1.5, 1.5)
 		camera.rotation.x = _pitch
 	elif ev.is_action_pressed("jump"):
 		var now = Time.get_ticks_msec() / 1000.0
@@ -100,6 +105,12 @@ func _physics_process(delta: float) -> void:
 	var up = 0.0
 	var fast = false
 	if enabled:
+		# the controller's right stick looks around, whether or not the mouse is captured
+		var look = Controls.stick(true)
+		if look != Vector2.ZERO:
+			rotation.y -= look.x * PAD_LOOK * pad_look * delta
+			_pitch = clampf(_pitch - look.y * PAD_LOOK * 0.7 * pad_look * delta * (-1.0 if invert_y else 1.0), -1.5, 1.5)
+			camera.rotation.x = _pitch
 		var v = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 		dir = (transform.basis * Vector3(v.x, 0, v.y)).normalized() if v.length() > 0.01 else Vector3.ZERO
 		fast = Input.is_action_pressed("sprint")

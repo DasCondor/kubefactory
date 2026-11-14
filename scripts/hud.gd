@@ -13,6 +13,8 @@ const Bob = preload("res://scripts/bob.gd")
 const Gauge = preload("res://scripts/gauge.gd")
 const DemoSim = preload("res://scripts/backend_demo.gd")
 const Gfx = preload("res://scripts/gfx.gd")
+const Controls = preload("res://scripts/controls.gd")
+const Minimap = preload("res://scripts/minimap.gd")
 const Models = preload("res://scripts/models.gd")
 const Agent = preload("res://scripts/agent.gd")
 const Native = preload("res://scripts/backend_native.gd")
@@ -55,6 +57,19 @@ var _prog_bg: ColorRect
 var _slots = []
 var _help: Label = null
 var touch: CanvasLayer = null     # the touch controls, when the browser demo is on a touch screen
+var minimap: Control = null
+
+# N, or the pause menu: show or hide the minimap (kept in settings.json)
+func toggle_minimap() -> void:
+	settings["minimap"] = not bool(settings.get("minimap", true))
+	K.save_settings(settings)
+	_minimap_visibility()
+	notify("Minimap %s" % ("shown" if settings["minimap"] else "hidden"), "info")
+
+func _minimap_visibility() -> void:
+	if minimap != null:
+		minimap.enabled = bool(settings.get("minimap", true))
+		minimap.visible = minimap.enabled and not (touch != null and touch.active)
 var touch_u = 0.0                 # their unit size while they are on; 0 = desktop
 
 var _notes: VBoxContainer
@@ -113,14 +128,14 @@ func _sb(bg: Color, border: Color = Color(0, 0, 0, 0), bw: int = 0, pad: int = 1
 
 func _lbl(text: String, size: int = 15, color: Color = TXT) -> Label:
 	var l = Label.new()
-	l.text = text
+	l.text = Controls.hint(text)
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	return l
 
 func _btn(text: String, cb: Callable, kind: String = "normal", enabled: bool = true) -> Button:
 	var b = Button.new()
-	b.text = text
+	b.text = Controls.hint(text)
 	b.disabled = not enabled
 	b.focus_mode = Control.FOCUS_NONE
 	var base = BG2
@@ -195,6 +210,7 @@ func _ignore_mouse(c: Node) -> void:
 # ---------------------------------------------------------------- HUD
 
 func _ready() -> void:
+	_sev_colors()
 	_mono = SystemFont.new()
 	_mono.font_names = PackedStringArray(["Consolas", "Cascadia Mono", "Courier New", "monospace"])
 	_root = Control.new()
@@ -306,7 +322,7 @@ func _ready() -> void:
 	_bp.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_root.add_child(_bp)
 
-	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · K Krew · H Foreman · B belts · F storage · V screen · R next view · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
+	var help = _lbl(Controls.ribbon(), 12, Color(1, 1, 1, 0.7))
 	help.anchor_left = 0.0
 	help.anchor_right = 1.0
 	help.anchor_top = 1.0
@@ -325,6 +341,18 @@ func _ready() -> void:
 	_notes.offset_right = -16
 	_notes.offset_top = 16
 	_root.add_child(_notes)
+
+	minimap = Minimap.new()
+	minimap.world = world
+	minimap.player = player
+	minimap.hud = self
+	minimap.anchor_top = 1.0
+	minimap.anchor_bottom = 1.0
+	minimap.offset_left = 16
+	minimap.offset_top = -258
+	minimap.offset_right = 16 + Minimap.SIZE
+	minimap.offset_bottom = -48
+	_root.add_child(minimap)
 
 	_ignore_mouse(_root)
 	set_mode(0, null)
@@ -454,7 +482,7 @@ func _table_rows(key: String, rows: Array, getters: Dictionary) -> Array:
 	return K.table_rows(rows, st["col"], st["desc"], st["filter"], getters)
 
 func set_target(text: String) -> void:
-	_target.text = text
+	_target.text = Controls.hint(text)
 
 func set_progress(f: float) -> void:
 	_prog_bg.visible = f > 0.0
@@ -463,7 +491,7 @@ func set_progress(f: float) -> void:
 func notify(msg: String, kind: String = "info") -> void:
 	if msg.strip_edges() == "":
 		return
-	msg = K.tidy_text(msg)       # a path in a note never shows the account's folder
+	msg = Controls.hint(K.tidy_text(msg))       # a path in a note never shows the account's folder
 	var col = {"ok": K.health_color("ok"), "warn": K.health_color("warn"), "bad": RED}.get(kind, ORANGE)
 	var pc = PanelContainer.new()
 	var s = _sb(BG, col, 0, 9)
@@ -1082,6 +1110,11 @@ func open_clusters() -> void:
 			cluster.discover_targets()
 			open_clusters(), "", not cluster.finding_targets and not cluster.detecting and cluster.backend != null))
 	top.add_child(_btn("Add or manage kubeconfigs...", func(): open_connect(), "primary"))
+	if Agent.available() and cluster.edition != "demo":
+		top.add_child(_btn("Komodo...", open_komodo))
+	if not OS.has_feature("web") and cluster.edition != "demo":
+		top.add_child(_btn("Plugins...", open_plugins))
+	top.add_child(_btn("KubeFactory server...", open_remote))
 	body.add_child(top)
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1122,6 +1155,173 @@ func _cluster_row(t: Dictionary) -> Control:
 		pc.add_child(r)
 		return pc
 	return null
+
+# ----- Backend plugins (docs/PLUGINS.md): nothing runs until trusted, nothing acts until allowed
+
+const PluginList = preload("res://scripts/plugins.gd")
+
+func open_plugins() -> void:
+	var body = _open_modal("plugins", null, "PLUGINS", Vector2(940, 620))
+	var intro = _lbl("A plugin is a separate program that shows another kind of source as a factory. It runs only once you trust it, and trust is tied to its files: if they change, it must be trusted again. It can only look unless you also allow changes, and even then every action goes through the usual tiers and confirmations.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 880
+	body.add_child(intro)
+	var found = PluginList.discover()
+	if found.is_empty():
+		var none = _lbl("No plugins found. Put a plugin's folder in:\n" + "\n".join(PackedStringArray(PluginList.dirs().map(func(d): return "    " + K.tidy_path(d)))) + "\nexamples/plugins/static-world is one to start from.", 13, DIM)
+		none.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		none.custom_minimum_size.x = 880
+		body.add_child(none)
+	for p in found:
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if p["trusted"] else Color(0.3, 0.3, 0.32), 1, 8))
+		var v = _col(4)
+		pc.add_child(v)
+		v.add_child(_lbl("%s  %s" % [p["name"], p["version"]], 15, TXT))
+		if p["error"] != "":
+			v.add_child(_lbl("Cannot be used: " + p["error"], 13, K.health_color("bad")))
+		else:
+			var dl = _lbl(p["description"], 12, DIM)
+			dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			dl.custom_minimum_size.x = 860
+			v.add_child(dl)
+			v.add_child(_lbl("Runs: %s" % " ".join(PackedStringArray(p["command"])).replace("{dir}", "<plugin folder>"), 12, DIM))
+			var r = _row(8)
+			r.add_child(_btn("Trusted (click to stop)" if p["trusted"] else "Trust this plugin", func():
+				PluginList.set_trust(p, not p["trusted"], false)
+				cluster.discover_targets()
+				open_plugins(), "normal" if p["trusted"] else "primary"))
+			if p["trusted"]:
+				r.add_child(_btn("Changes: ALLOWED" if p["actions_allowed"] else "Changes: NOT ALLOWED", func():
+					PluginList.set_trust(p, true, not p["actions_allowed"])
+					open_plugins(), "mk3" if p["actions_allowed"] else "normal"))
+				r.add_child(_btn("Connect", func():
+					close_modal()
+					target_requested.emit({"source": "plugin", "context": p["name"], "plugin_id": p["id"], "provider": "Plugin"}), "primary"))
+			v.add_child(r)
+		body.add_child(pc)
+	var br = _row(8)
+	br.add_child(_spacer())
+	br.add_child(_btn("Back to clusters", open_clusters))
+	body.add_child(br)
+
+# ----- A KubeFactory server (server.gd): play against it like a game client
+
+var _remote_form = {"url": "", "token": ""}
+
+func open_remote() -> void:
+	var body = _open_modal("remote", null, "KUBEFACTORY SERVER", Vector2(860, 420))
+	var intro = _lbl("Connect to a KubeFactory server that someone runs for the cluster. You need its address and a token from its admin. You hold no credential for the cluster itself: the server checks your role and its own read-only mode before anything runs. The token is not saved.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 800
+	body.add_child(intro)
+	for fld in [["Address", "url", "wss://kubefactory.example.lan:7666", false], ["Token", "token", "from the server's admin", true]]:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(fld[0], 13, DIM), 100))
+		var le = LineEdit.new()
+		le.text = str(_remote_form[fld[1]])
+		le.placeholder_text = fld[2]
+		le.secret = fld[3]
+		le.custom_minimum_size.x = 600
+		var key = fld[1]
+		le.text_changed.connect(func(v): _remote_form[key] = v)
+		r.add_child(le)
+		body.add_child(r)
+	var br = _row(8)
+	br.add_child(_btn("Connect", func():
+		var url = str(_remote_form["url"]).strip_edges()
+		cluster.remote_token = str(_remote_form["token"]).strip_edges()
+		_remote_form["token"] = ""
+		close_modal()
+		target_requested.emit({"source": "remote", "context": url, "provider": "KubeFactory server"}), "primary"))
+	br.add_child(_spacer())
+	br.add_child(_btn("Back to clusters", open_clusters))
+	body.add_child(br)
+
+# ----- Komodo connections (agent/komodo.go): read-only, key and secret sealed by the companion
+
+var _kmd = {"list": [], "form": {}, "msg": "", "busy": false}
+
+func open_komodo() -> void:
+	var body = _open_modal("komodo", null, "KOMODO", Vector2(900, 640))
+	var intro = _lbl("Every server and container a Komodo Core manages, without KubeFactory touching the hosts. KubeFactory sends Komodo only read requests and offers no actions; a read-only API key in Komodo (Settings > API keys) is enough. The key and secret go to the companion, which keeps them sealed for your Windows account.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 840
+	body.add_child(intro)
+	if _kmd["msg"] != "":
+		body.add_child(_lbl(_kmd["msg"], 13, K.health_color("warn")))
+	for c in _kmd["list"]:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(str(c["name"]), 14), 240))
+		var addr = _lbl(str(c["base_url"]), 12, DIM)
+		addr.clip_text = true
+		r.add_child(_fixed(addr, 300))
+		var id = str(c["id"])
+		r.add_child(_btn("Test", func():
+			_kmd["msg"] = "Testing..."
+			open_komodo()
+			_komodo_call("komodo.test", {"id": id}, func(res):
+				_kmd["msg"] = ("Reached Komodo %s." % res["data"].get("version", "")) if res["ok"] else str(res["msg"])
+				open_komodo())))
+		r.add_child(_btn("Connect", func():
+			close_modal()
+			target_requested.emit({"source": "komodo", "context": str(c["name"]), "komodo_id": id, "provider": "Komodo (read-only)"}), "primary"))
+		r.add_child(_btn("Remove", func():
+			_komodo_call("komodo.remove", {"id": id}, func(_res): _komodo_refresh())))
+		body.add_child(r)
+	body.add_child(_lbl("ADD A KOMODO CONNECTION", 14, ORANGE))
+	var f: Dictionary = _kmd["form"]
+	for fld in [["Name", "name", "e.g. Home Komodo", false], ["Address", "base_url", "https://komodo.example.lan", false], ["API key", "key", "K-...", true], ["API secret", "secret", "S-...", true]]:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(fld[0], 13, DIM), 120))
+		var le = LineEdit.new()
+		le.text = str(f.get(fld[1], ""))
+		le.placeholder_text = fld[2]
+		le.secret = fld[3]
+		le.custom_minimum_size.x = 560
+		var key = fld[1]
+		le.text_changed.connect(func(v): f[key] = v)
+		r.add_child(le)
+		body.add_child(r)
+	var hr = _row(8)
+	hr.add_child(_btn("Plain http to another computer: %s" % ("ALLOWED" if f.get("allow_http", false) else "NOT ALLOWED"), func():
+		f["allow_http"] = not f.get("allow_http", false)
+		open_komodo()))
+	hr.add_child(_lbl("only if Komodo has no https: the key would travel unencrypted", 12, DIM))
+	body.add_child(hr)
+	var br = _row(8)
+	br.add_child(_btn("Save", func():
+		_komodo_call("komodo.save", {"name": str(f.get("name", "")), "base_url": str(f.get("base_url", "")), "key": str(f.get("key", "")),
+			"secret": str(f.get("secret", "")), "allow_http": bool(f.get("allow_http", false))}, func(res):
+			if res["ok"]:
+				_kmd["form"] = {}
+				_kmd["msg"] = "Saved %s. Test it, then Connect." % res["data"].get("name", "")
+				cluster.discover_targets()
+			else:
+				_kmd["msg"] = str(res["msg"])
+			_komodo_refresh()), "primary"))
+	br.add_child(_spacer())
+	br.add_child(_btn("Back to clusters", open_clusters))
+	body.add_child(br)
+	if not _kmd.get("loaded", false) and not _kmd["busy"]:
+		_komodo_refresh()
+
+func _komodo_refresh() -> void:
+	_kmd["busy"] = true
+	_komodo_call("komodo.list", {}, func(res):
+		_kmd["busy"] = false
+		_kmd["loaded"] = true
+		_kmd["list"] = res["data"].get("connections", []) if res["ok"] else []
+		if _modal_kind == "komodo":
+			open_komodo())
+
+func _komodo_call(op: String, args: Dictionary, done: Callable) -> void:
+	var t = Thread.new()
+	t.start(func():
+		var r = Agent.request(op, args, 30.0)
+		(func():
+			t.wait_to_finish()
+			done.call(r)).call_deferred())
 
 # ----- storage: what is behind a machine's service door.
 # A read-only look at the pod's (or container's) mounted volumes: what is mounted
@@ -3095,7 +3295,43 @@ func open_welcome() -> void:
 # ----- graphics presets (scripts/gfx.gd). They change how the world is drawn,
 # never what you can do in it.
 
+# The browser demo's own choice: Standard (drawn in code) or High (the model
+# library from the site). Choosing reloads the page with ?gfx=..., which is
+# also a link that can be shared.
+func _open_web_graphics() -> void:
+	var body = _open_modal("graphics", null, "GRAPHICS", Vector2(820, 440))
+	var intro = _lbl("Two presets in the browser. Every tool, panel and action works the same on both; switching reloads the demo.", 14, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 780
+	body.add_child(intro)
+	for i in 2:
+		var active = (i == 1) == Gfx.web_high
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if active else Color(0, 0, 0, 0), 1 if active else 0, 10))
+		var r = _row(12)
+		var v = _col(2)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(_lbl(Gfx.WEB_NAMES[i].to_upper(), 17, ORANGE if active else TXT))
+		var bl = _lbl(Gfx.WEB_BLURB[i], 13, DIM)
+		bl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		bl.custom_minimum_size.x = 600
+		v.add_child(bl)
+		r.add_child(v)
+		if active:
+			r.add_child(_lbl("IN USE   ", 14, K.health_color("ok")))
+		else:
+			r.add_child(_btn("Use", func(): graphics_requested.emit("high" if i == 1 else "standard"), "primary"))
+		pc.add_child(r)
+		body.add_child(pc)
+	var back = _row(10)
+	back.add_child(_spacer())
+	back.add_child(_btn("Back", open_pause))
+	body.add_child(back)
+
 func open_graphics() -> void:
+	if Gfx.web():
+		_open_web_graphics()
+		return
 	var body = _open_modal("graphics", null, "GRAPHICS", Vector2(820, 520))
 	var rec = Gfx.recommend()
 	var intro = _lbl("Three presets on the same world. Every tool, panel and action works identically on all of them; Standard is the look the game has always had and nothing is ever drawn below it.", 14, DIM)
@@ -3163,6 +3399,10 @@ func open_pause() -> void:
 	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
+	body.add_child(_btn("Settings  (controls, controller, display, accessibility)", open_settings, "primary"))
+	body.add_child(_btn("Minimap:  %s   (N)" % ("ON" if bool(settings.get("minimap", true)) else "OFF"), func():
+		toggle_minimap()
+		open_pause()))
 	body.add_child(_btn("Krew operations  (K)", func(): open_krew()))
 	body.add_child(_btn("Foreman  (H)", func(): open_foreman()))
 	body.add_child(_btn("Gauge  (resource desk)", open_gauge))
@@ -3177,7 +3417,9 @@ func open_pause() -> void:
 		cluster.read_only = not cluster.read_only
 		on_state(cluster.state)
 		open_pause()))
-	if not Gfx.lite():
+	if Gfx.web():
+		body.add_child(_btn("Graphics  (%s)" % Gfx.WEB_NAMES[1 if Gfx.web_high else 0], open_graphics))
+	elif not Gfx.lite():
 		body.add_child(_btn("Graphics  (%s)" % (Gfx.NAMES[Gfx.level] + (", automatic" if Gfx.chosen == "auto" else "")), open_graphics))
 	body.add_child(_btn("Conveyor belts:  %s" % ("ON" if world.show_belts else "OFF"), func():
 		world.show_belts = not world.show_belts
@@ -3709,7 +3951,18 @@ var _krew_history = false
 var _krew_list: VBoxContainer = null
 var _krew_sig = ""
 
-const SEV_COLORS = {"high": Color(1.0, 0.36, 0.3), "medium": Color(1.0, 0.72, 0.25), "low": Color(0.55, 0.78, 1.0), "info": Color(0.62, 0.68, 0.74)}
+var SEV_COLORS = {}
+
+func _sev_colors() -> void:
+	SEV_COLORS = {"high": K.health_color("bad").lightened(0.1), "medium": K.health_color("warn"), "low": Color(0.55, 0.78, 1.0) if K.palette == "standard" else K.health_color("done"), "info": Color(0.62, 0.68, 0.74)}
+	# the tool bar's tier colours
+	for i in _slots.size():
+		var tc = K.tier_color(TOOLS[i]["mk"])
+		var v = _slots[i].get_child(0)
+		v.get_child(0).get_child(0).add_theme_color_override("font_color", tc)
+		v.get_child(1).add_theme_color_override("font_color", tc)
+	if not _slots.is_empty():
+		set_mode(_mode, _bp_cur)
 
 func open_krew(focus: String = "") -> void:
 	if krew == null:
@@ -4180,3 +4433,150 @@ func open_foreman_providers() -> void:
 	br.add_child(_spacer())
 	br.add_child(_btn("Back to Foreman", open_foreman))
 	body.add_child(br)
+
+# ----- Settings: controls, controller, display, accessibility
+#
+# Everything here is saved to settings.json as it changes; nothing needs to be
+# edited by hand. Key bindings are kept only where they differ from the
+# defaults (Controls.changed), so new default keys still reach everyone else.
+
+signal settings_changed(key)
+
+var _rebind = ""                   # the action waiting for a key, or ""
+var _settings_note = ""
+
+func open_settings() -> void:
+	var body = _open_modal("settings", null, "SETTINGS", Vector2(980, 820))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var col = _col(8)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(col)
+	body.add_child(sc)
+	var slider = func(label: String, lo: float, hi: float, step: float, value: float, fmt: String, on_change: Callable):
+		var r = _row(10)
+		r.add_child(_fixed(_lbl(label, 13, DIM), 220))
+		var sl = HSlider.new()
+		sl.min_value = lo
+		sl.max_value = hi
+		sl.step = step
+		sl.value = value
+		sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sl.focus_mode = Control.FOCUS_NONE
+		var v = _lbl(fmt % value, 13)
+		sl.value_changed.connect(func(x):
+			v.text = fmt % x
+			on_change.call(x))
+		r.add_child(sl)
+		r.add_child(_fixed(v, 70))
+		col.add_child(r)
+	# --- controls
+	col.add_child(_lbl("CONTROLS", 15, ORANGE))
+	slider.call("Mouse sensitivity", 0.3, 3.0, 0.05, player.sensitivity, "%.2f", func(x):
+		player.sensitivity = x
+		_save_setting("sensitivity", x))
+	col.add_child(_btn("Invert look up / down:  %s" % ("ON" if player.invert_y else "OFF"), func():
+		player.invert_y = not player.invert_y
+		_save_setting("invert_y", player.invert_y)
+		open_settings()))
+	if _settings_note != "":
+		col.add_child(_lbl(_settings_note, 13, K.health_color("warn")))
+	var grid = GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 4)
+	for a in Controls.ACTIONS:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(a[1], 13), 200))
+		var names = Controls.bindings(a[0]).map(func(d): return Controls.name_of(d))
+		var waiting = _rebind == a[0]
+		var act = a[0]
+		var b = _btn("press a key or button..." if waiting else (" / ".join(PackedStringArray(names)) if not names.is_empty() else "unbound"), func():
+			_rebind = act
+			_settings_note = "Press the new key or mouse button for %s. Esc cancels." % a[1]
+			open_settings(), "primary" if waiting else "normal")
+		b.custom_minimum_size.x = 200
+		r.add_child(b)
+		grid.add_child(r)
+	col.add_child(grid)
+	var kr = _row(8)
+	kr.add_child(_btn("Reset all keys to the defaults", func():
+		for a in Controls.ACTIONS:
+			Controls.set_bindings(a[0], Controls.defaults(a[0]))
+		_keys_changed()
+		open_settings()))
+	col.add_child(kr)
+	# --- controller
+	col.add_child(_lbl("CONTROLLER", 15, ORANGE))
+	col.add_child(_lbl(("Connected: " + Controls.pad_name()) if Controls.pad_connected() else "No controller connected. Plug one in at any time.", 13, K.health_color("ok") if Controls.pad_connected() else DIM))
+	slider.call("Stick look speed", 0.3, 3.0, 0.05, player.pad_look, "%.2f", func(x):
+		player.pad_look = x
+		_save_setting("pad_look", x))
+	var pl = _lbl("Left stick move · right stick look · RT use tool · LT copy machine · LB / RB change tool · A jump (twice: hoverpack) · B descend · X inspect · Y build menu · L3 sprint · R3 next screen view · D-pad: up next problem, right Krew, left Foreman, down datapad · Back codex · Start menu. In menus the left stick moves the pointer, A clicks, the right stick scrolls and B closes.", 12, DIM)
+	pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	pl.custom_minimum_size.x = 920
+	col.add_child(pl)
+	# --- display
+	col.add_child(_lbl("DISPLAY", 15, ORANGE))
+	slider.call("Field of view", 60.0, 110.0, 1.0, player.camera.fov, "%d°", func(x):
+		player.camera.fov = x
+		_save_setting("fov", x))
+	slider.call("Interface size", 0.75, 1.5, 0.05, get_tree().root.content_scale_factor, "%.2fx", func(x):
+		_save_setting("ui_scale", x))
+	col.add_child(_btn("Apply interface size", func():
+		get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
+		open_settings()))
+	# --- accessibility
+	col.add_child(_lbl("ACCESSIBILITY: STATUS COLOURS", 15, ORANGE))
+	var al = _lbl("Every status is also written out; these change the colours of lamps, beacons, findings and tool tiers.", 12, DIM)
+	al.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	al.custom_minimum_size.x = 920
+	col.add_child(al)
+	for id in K.PALETTES:
+		var pal: Dictionary = K.PALETTES[id]
+		var r = _row(10)
+		for h in ["ok", "warn", "bad", "done"]:
+			var sw = ColorRect.new()
+			sw.color = pal[h]
+			sw.custom_minimum_size = Vector2(22, 22)
+			r.add_child(sw)
+		var chosen = K.palette == id
+		r.add_child(_btn(("IN USE:  " if chosen else "") + str(pal["label"]), func():
+			K.palette = id
+			_save_setting("palette", id)
+			settings_changed.emit("palette")
+			open_settings(), "primary" if chosen else "normal"))
+		col.add_child(r)
+	var back = _row(10)
+	back.add_child(_spacer())
+	back.add_child(_btn("Back", open_pause))
+	body.add_child(back)
+
+func _keys_changed() -> void:
+	_save_setting("keys", Controls.changed())
+	if _help != null:
+		_help.text = Controls.ribbon()
+	settings_changed.emit("keys")
+
+# While Settings waits for a key: the next key or mouse button is the new binding.
+func _input(ev: InputEvent) -> void:
+	if _rebind == "" or _modal_kind != "settings":
+		return
+	if not ((ev is InputEventKey or ev is InputEventMouseButton) and ev.pressed and not ev.is_echo()):
+		return
+	if ev is InputEventMouseButton and ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		return
+	get_viewport().set_input_as_handled()
+	var act = _rebind
+	_rebind = ""
+	if ev is InputEventKey and ev.keycode == KEY_ESCAPE:
+		_settings_note = ""
+		open_settings.call_deferred()
+		return
+	var d = Controls.to_data(ev)
+	var clash = Controls.conflicts(act, d)
+	Controls.set_bindings(act, [d])
+	_keys_changed()
+	_settings_note = ("%s is also used for: %s. Both will happen." % [Controls.name_of(d), ", ".join(PackedStringArray(clash))]) if not clash.is_empty() else ""
+	open_settings.call_deferred()

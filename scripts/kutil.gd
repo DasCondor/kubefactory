@@ -425,15 +425,31 @@ static func path_inside(root: String, rel: String) -> String:
 	var base = root.rstrip("/")
 	return (base if base != "" else "/") if parts.is_empty() else base + "/" + "/".join(PackedStringArray(parts))
 
+# Status colours, chosen in Settings > Accessibility. Health is never colour
+# alone (every status is also written), but the colours should still be told
+# apart. The two colour-blind palettes use the Okabe-Ito set.
+const PALETTES = {
+	"standard": {"label": "Standard", "ok": Color(0.25, 1.0, 0.45), "warn": Color(1.0, 0.78, 0.15), "bad": Color(1.0, 0.22, 0.18), "done": Color(0.35, 0.7, 1.0),
+		"tiers": [Color(0.82, 0.86, 0.9), Color(0.3, 0.86, 0.45), Color(1.0, 0.82, 0.2), Color(1.0, 0.5, 0.14), Color(1.0, 0.2, 0.2)]},
+	"red_green": {"label": "Blue / yellow / vermilion  (red-green colour blindness)", "ok": Color(0.34, 0.71, 0.91), "warn": Color(0.94, 0.89, 0.26), "bad": Color(0.84, 0.37, 0.0), "done": Color(0.78, 0.78, 0.84),
+		"tiers": [Color(0.82, 0.86, 0.9), Color(0.34, 0.71, 0.91), Color(0.94, 0.89, 0.26), Color(0.9, 0.62, 0.0), Color(0.84, 0.37, 0.0)]},
+	"blue_yellow": {"label": "Teal / orange / red  (blue-yellow colour blindness)", "ok": Color(0.0, 0.62, 0.45), "warn": Color(0.9, 0.62, 0.0), "bad": Color(0.92, 0.18, 0.24), "done": Color(0.78, 0.78, 0.84),
+		"tiers": [Color(0.82, 0.86, 0.9), Color(0.0, 0.62, 0.45), Color(0.9, 0.62, 0.0), Color(0.95, 0.42, 0.3), Color(0.92, 0.18, 0.24)]},
+	"high_contrast": {"label": "High contrast  (white / yellow / magenta)", "ok": Color(0.96, 0.96, 0.96), "warn": Color(1.0, 0.92, 0.0), "bad": Color(1.0, 0.2, 0.85), "done": Color(0.45, 0.75, 1.0),
+		"tiers": [Color(0.96, 0.96, 0.96), Color(0.45, 0.75, 1.0), Color(1.0, 0.92, 0.0), Color(1.0, 0.55, 0.0), Color(1.0, 0.2, 0.85)]},
+}
+static var palette = "standard"
+
 static func health_color(h: String) -> Color:
+	var p: Dictionary = PALETTES.get(palette, PALETTES["standard"])
 	match h:
 		"ok":
-			return Color(0.25, 1.0, 0.45)
+			return p["ok"]
 		"warn":
-			return Color(1.0, 0.78, 0.15)
+			return p["warn"]
 		"done":
-			return Color(0.35, 0.7, 1.0)
-	return Color(1.0, 0.22, 0.18)
+			return p["done"]
+	return p["bad"]
 
 static func fmt_age(created) -> String:
 	if created <= 0:
@@ -526,16 +542,8 @@ static func provider_color(p: String) -> Color:
 const TIERS = ["", "SAFE", "CONSTRUCTIVE", "DISRUPTIVE", "DESTRUCTIVE", "CRITICAL"]
 
 static func tier_color(mk: int) -> Color:
-	match mk:
-		1:
-			return Color(0.82, 0.86, 0.9)
-		2:
-			return Color(0.3, 0.86, 0.45)
-		3:
-			return Color(1.0, 0.82, 0.2)
-		4:
-			return Color(1.0, 0.5, 0.14)
-	return Color(1.0, 0.2, 0.2)
+	var t: Array = PALETTES.get(palette, PALETTES["standard"])["tiers"]
+	return t[clampi(mk, 1, 5) - 1]
 
 static func valid_name(s: String) -> bool:
 	var re = RegEx.new()
@@ -616,7 +624,11 @@ static func policy_max_tier(policy: Dictionary, user: String, groups: Array) -> 
 # Installed build: the folder holding KubeFactory.exe. From source: the project folder.
 static func data_dir() -> String:
 	if OS.has_feature("template"):
-		return OS.get_executable_path().get_base_dir()
+		var d = OS.get_executable_path().get_base_dir()
+		# macOS: the game is KubeFactory.app/Contents/MacOS/KubeFactory; its files sit beside the .app
+		if d.ends_with(".app/Contents/MacOS"):
+			d = d.get_base_dir().get_base_dir().get_base_dir()
+		return d
 	return ProjectSettings.globalize_path("res://").trim_suffix("/")
 
 static func data_path(rel: String) -> String:
@@ -636,7 +648,8 @@ static func read_json(path: String) -> Variant:
 
 # ---- per-user settings (kept in the user folder, survive upgrades)
 static func load_settings() -> Dictionary:
-	var s = {"fullscreen": false, "muted": false, "sensitivity": 1.0, "welcomed": false, "belts": true, "graphics": "auto"}
+	var s = {"fullscreen": false, "muted": false, "sensitivity": 1.0, "welcomed": false, "belts": true, "graphics": "auto",
+		"fov": 80.0, "ui_scale": 1.0, "palette": "standard", "invert_y": false, "pad_look": 1.0, "keys": {}}
 	var d = read_json(OS.get_user_data_dir().path_join("settings.json"))
 	if typeof(d) == TYPE_DICTIONARY:
 		for k in d:

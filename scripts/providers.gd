@@ -84,7 +84,11 @@ static func fmt_kbps(v) -> String:
 	if v == null:
 		return "unavailable"
 	var k = float(v)
-	return "%.1f Mbps" % (k / 1000.0) if k >= 1000.0 else "%d kbps" % int(k)
+	if k < 1000.0:
+		return "%d kbps" % int(k)
+	# "%.1f" rounds an exact half differently on Windows and Linux; round in whole tenths instead
+	var tenths = int(round(k / 100.0))
+	return "%d.%d Mbps" % [tenths / 10, tenths % 10]
 
 # seconds since an RFC 3339 UTC timestamp (as the companion stamps its answers)
 static func age_of(at: String) -> float:

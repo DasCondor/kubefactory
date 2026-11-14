@@ -6,6 +6,45 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Server mode.** `--server` runs KubeFactory as a server for a cluster or
+  Docker engine; players connect over WebSocket with a token (`--remote=`, or
+  Esc > Switch cluster > KubeFactory server...). Roles (viewer, operator up to
+  MK.4) and read-only mode are enforced by the server; only token hashes are
+  stored; every action is audited. `docs/SERVER.md`.
+- **Backend plugin API (1).** Plugins are separate programs speaking JSON lines
+  (`docs/PLUGINS.md`); they run only when trusted (by a hash of their files),
+  are read-only unless allowed to change things, and everything they send is
+  checked and capped. Example: `examples/plugins/static-world`.
+- **High graphics in the browser demo.** Esc → Graphics → High (or `?gfx=high`)
+  fetches the model library's machines, Krew and tools from the same site
+  (about 13 MB, each file checked against the catalog's SHA-256) and adds 4x
+  anti-aliasing and softer shadows. Standard stays the default and opens at
+  once. Anything that fails to load is drawn in code as before.
+- **Settings menu** (Esc → Settings): rebind every key and mouse button,
+  controller support (move, look, tools, menus with a stick pointer), field of
+  view, interface size, inverted look, and status palettes for red-green and
+  blue-yellow colour blindness plus high contrast. Saved as you change them;
+  key hints and the help line follow your bindings.
+- **Minimap** (`N`): a top-down view that turns with you, with node platforms,
+  machines in their health colours (failing ones pulse), the HUB, gates and
+  the Krew. Saved on or off; it steps aside for touch controls.
+- **Docker hosts as connections.** Every Docker CLI context is listed on the
+  cluster switcher and can be chosen (`--docker --context=<name>`); one on
+  another machine opens read-only. `deploy/docker-readonly/` runs a pinned
+  read-only socket proxy (`POST=0`) for each host, reachable over an SSH tunnel
+  without docker group or root (`docs/DOCKER_HOSTS.md`). A change refused by
+  the host is reported in plain words.
+- **Komodo connections (read-only).** Esc > Switch cluster > Komodo...: every
+  server a Komodo Core manages is a platform, every container a machine; Bob,
+  Sentinel and Scout read them. Only three read requests are ever sent; the
+  API key and secret are sealed by the companion (`agent/komodo.go`).
+- **Linux and macOS builds.** Releases now include
+  `KubeFactory-<version>-linux-x86_64.tar.gz` and a universal
+  `KubeFactory-<version>-macos.zip` (Apple Silicon and Intel; the companion is
+  a universal binary), built by `tools/package.sh`.
+- **Verifiable releases.** Every package gets a `.sha256`, the release one
+  `SHA256SUMS`, and each package a Sigstore-signed build provenance
+  attestation (`gh attestation verify`).
 - **Foreman** (key `H`): correlates the Krew's findings into incidents and a
   shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
   Claude, any OpenAI-compatible endpoint) answer plain-language questions from

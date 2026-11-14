@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "name": "Static world",
+  "version": "1.0.0",
+  "description": "An example backend plugin: serves the world in world.json, read-only. Copy this folder to start your own.",
+  "command": ["python3", "-I", "{dir}/plugin.py", "{dir}/world.json"],
+  "files": ["plugin.py", "world.json"]
+}

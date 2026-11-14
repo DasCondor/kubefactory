@@ -61,12 +61,12 @@ Write-Host "Exporting KubeFactory.exe..."
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path (Join-Path $stage "KubeFactory.exe"))) { Write-Host "Export failed." -ForegroundColor Red; exit 1 }
 
-foreach ($f in @("README.md", "LICENSE", "docs\ADMIN.md", "docs\THIRDPARTY.md", "docs\SECURITY.md", "docs\KNOWN_LIMITATIONS.md", "config\catalogs.json", "config\portainer.json", "config\log-providers.json", "config\policy.json", "config\bob.json")) {
+foreach ($f in @("README.md", "LICENSE", "docs\ADMIN.md", "docs\THIRDPARTY.md", "docs\SECURITY.md", "docs\KNOWN_LIMITATIONS.md", "docs\PLUGINS.md", "docs\SERVER.md", "config\catalogs.json", "config\portainer.json", "config\log-providers.json", "config\policy.json", "config\bob.json")) {
     Copy-Item (Join-Path $root $f) $stage
 }
 Copy-Item -Recurse (Join-Path $root "tools\dev") (Join-Path $stage "dev")
 # assets: the model library (the game falls back to its code-drawn models without it)
-foreach ($d in @("apps", "deploy", "assets")) {
+foreach ($d in @("apps", "deploy", "assets", "examples")) {
     Copy-Item -Recurse (Join-Path $root $d) (Join-Path $stage $d)
 }
 Get-ChildItem $stage -Recurse -Force -Filter ".gdignore" | Remove-Item -Force
