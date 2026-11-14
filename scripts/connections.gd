@@ -11,6 +11,36 @@ extends RefCounted
 const K = preload("res://scripts/kutil.gd")
 const Agent = preload("res://scripts/agent.gd")
 
+# A kubeconfig named on the command line (KubeFactory.exe --kubeconfig <file>).
+# It is used for this run, listed first, and never saved or copied.
+static var cli_path = ""
+
+# The kubeconfig the command line names, as an absolute path, or "":
+#   --kubeconfig <file>    --kubeconfig=<file>    or just the file (as when it is
+#   dropped on the exe). Looked for before and after Godot's "--" separator.
+static func cli_kubeconfig(args: Array) -> String:
+	var found = ""
+	var i = 0
+	while i < args.size():
+		var a = str(args[i])
+		if a.begins_with("--kubeconfig="):
+			found = a.trim_prefix("--kubeconfig=")
+		elif a == "--kubeconfig" and i + 1 < args.size():
+			found = str(args[i + 1])
+			i += 1
+		elif found == "" and not a.begins_with("-") and a.get_extension().to_lower() in ["yaml", "yml", "json", "conf", "kubeconfig"] and FileAccess.file_exists(a):
+			found = a
+		i += 1
+	if found == "":
+		return ""
+	found = found.replace("\\", "/")
+	if found.is_relative_path():
+		# relative to where the command was run from
+		var here = DirAccess.open(".")
+		if here != null:
+			found = here.get_current_dir().path_join(found)
+	return found.simplify_path()
+
 static func _file() -> String:
 	return OS.get_user_data_dir().path_join("connections.json")
 
@@ -61,6 +91,9 @@ static func profiles() -> Array:
 					found.insert(env_n, {"id": "env%d" % env_n, "name": "KUBECONFIG: " + p.get_file(), "path": p, "base_dir": "", "pasted": false, "implicit": true})
 					env_n += 1
 			res = found + res
+	if cli_path != "":
+		res = res.filter(func(p): return str(p["path"]).to_lower().replace("\\", "/") != cli_path.to_lower())
+		res.push_front({"id": "cli", "name": "--kubeconfig: " + cli_path.get_file(), "path": cli_path, "base_dir": "", "pasted": false, "implicit": true})
 	return res
 
 static func find(id: String) -> Dictionary:

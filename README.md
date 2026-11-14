@@ -110,6 +110,7 @@ You can also just run `KubeFactory.exe` from the unzipped folder.
 
 Command-line options go after `--`:
 
+    KubeFactory.exe --kubeconfig <file>         connect to the cluster in that kubeconfig (YAML or JSON)
     KubeFactory.exe -- --demo                   built-in simulated cluster (safe to break)
     KubeFactory.exe -- --sim=aws-eks-prod       or azure-aks-staging, gke-analytics, rancher-edge
     KubeFactory.exe -- --context=<name>         a specific kubeconfig context
@@ -128,6 +129,18 @@ for troubleshooting. `check-requirements.ps1` checks for the optional cloud CLIs
 > containers or any cloud provider; storage inspection and LiveView are
 > verified against the simulation and a local test page only. See
 > [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+
+The short version:
+
+1. Download and unzip KubeFactory.
+2. `KubeFactory.exe --kubeconfig <kubeconfig.yaml or kubeconfig.json>`
+3. Done: you are standing in that cluster.
+
+Nothing to install first, no `kubectl`, and the file is only read, never copied
+or saved. `--kubeconfig=<file>` works too, and so does dropping the file on
+`KubeFactory.exe`. It uses the file's current context (or its first); add
+`-- --context=<name>` to pick another. If the cluster cannot be reached the game
+says why in plain words and offers the simulation.
 
 KubeFactory ships a small companion program, `kf-agent.exe`, that reads your
 kubeconfig and talks to the cluster itself. You do not need `kubectl`.
