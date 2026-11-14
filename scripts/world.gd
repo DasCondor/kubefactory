@@ -10,6 +10,7 @@ const Platform = preload("res://scripts/platform.gd")
 const Machine = preload("res://scripts/machine.gd")
 const Gfx = preload("res://scripts/gfx.gd")
 const Scenery = preload("res://scripts/scenery.gd")
+const Models = preload("res://scripts/models.gd")
 
 const FRONT_Z = -46.0
 const YARD_Z = -22.0
@@ -378,6 +379,25 @@ func _build_hub() -> void:
 	tip.position = Vector3(5.6, 16.2, -1.5)
 	add_child(tip)
 
+# A Krew member from the model library, standing in `body`. Returns the node the
+# hand-built figure goes under: `body` itself when there is no model (the web
+# build, or a copy without assets), otherwise a hidden holder, so the parts the
+# idle animation moves still exist.
+func _krew(id: String, body: Node3D, height: float) -> Node3D:
+	if Gfx.lite():
+		return body
+	var m = Models.instance(id)
+	if m == null:
+		return body
+	var b: AABB = m.get_meta("bounds")
+	var s = height / maxf(b.size.y, 0.01)
+	m.scale = Vector3.ONE * s
+	m.position = Vector3(-b.get_center().x * s, -b.position.y * s, -b.get_center().z * s)
+	body.add_child(m)
+	var holder = Node3D.new()
+	holder.visible = false
+	body.add_child(holder)
+	return holder
 # Porter, the Portainer dock worker: a little crane-backed robot beside a
 # stack of shipping containers. Talk to him to get complete app setups built.
 func _build_npc() -> void:
@@ -412,16 +432,17 @@ func _build_npc() -> void:
 	_solid(Vector3(1.4, 2.6, 1.4), Vector3(0, 1.3, 0), {"type": "npc"}, _npc)
 	_npc_body = Node3D.new()
 	_npc.add_child(_npc_body)
+	var pfig = _krew("porter", _npc_body, 2.7)
 	for lx in [-0.22, 0.22]:
-		_box(Vector3(0.24, 0.8, 0.28), dark, Vector3(lx, 0.4, 0), _npc_body)
-		_box(Vector3(0.3, 0.14, 0.42), steel, Vector3(lx, 0.07, 0.06), _npc_body)
-	_box(Vector3(0.9, 0.95, 0.55), blue, Vector3(0, 1.3, 0), _npc_body)
-	_box(Vector3(0.5, 0.3, 0.04), Tex.shared("hazard"), Vector3(0, 1.15, 0.29), _npc_body)
+		_box(Vector3(0.24, 0.8, 0.28), dark, Vector3(lx, 0.4, 0), pfig)
+		_box(Vector3(0.3, 0.14, 0.42), steel, Vector3(lx, 0.07, 0.06), pfig)
+	_box(Vector3(0.9, 0.95, 0.55), blue, Vector3(0, 1.3, 0), pfig)
+	_box(Vector3(0.5, 0.3, 0.04), Tex.shared("hazard"), Vector3(0, 1.15, 0.29), pfig)
 	for ax in [-0.58, 0.58]:
-		_box(Vector3(0.2, 0.8, 0.22), blue, Vector3(ax, 1.3, 0), _npc_body)
-		_box(Vector3(0.22, 0.2, 0.24), steel, Vector3(ax, 0.82, 0), _npc_body)
-	_box(Vector3(0.62, 0.5, 0.52), steel, Vector3(0, 2.05, 0), _npc_body)
-	_box(Vector3(0.5, 0.16, 0.04), Tex.glow(Color(0.3, 0.95, 1.0), 2.0), Vector3(0, 2.1, 0.27), _npc_body)
+		_box(Vector3(0.2, 0.8, 0.22), blue, Vector3(ax, 1.3, 0), pfig)
+		_box(Vector3(0.22, 0.2, 0.24), steel, Vector3(ax, 0.82, 0), pfig)
+	_box(Vector3(0.62, 0.5, 0.52), steel, Vector3(0, 2.05, 0), pfig)
+	_box(Vector3(0.5, 0.16, 0.04), Tex.glow(Color(0.3, 0.95, 1.0), 2.0), Vector3(0, 2.1, 0.27), pfig)
 	var hat = MeshInstance3D.new()
 	var hm = CylinderMesh.new()
 	hm.top_radius = 0.3
@@ -430,14 +451,14 @@ func _build_npc() -> void:
 	hat.mesh = hm
 	hat.material_override = yellow
 	hat.position = Vector3(0, 2.42, 0)
-	_npc_body.add_child(hat)
-	_box(Vector3(0.9, 0.05, 0.95), yellow, Vector3(0, 2.31, 0.08), _npc_body)
+	pfig.add_child(hat)
+	_box(Vector3(0.9, 0.05, 0.95), yellow, Vector3(0, 2.31, 0.08), pfig)
 	# crane on his back: mast, jib, cable and hook
-	_box(Vector3(0.14, 2.3, 0.14), yellow, Vector3(0, 2.0, -0.36), _npc_body)
-	_box(Vector3(0.12, 0.12, 1.5), yellow, Vector3(0, 3.1, 0.3), _npc_body)
+	_box(Vector3(0.14, 2.3, 0.14), yellow, Vector3(0, 2.0, -0.36), pfig)
+	_box(Vector3(0.12, 0.12, 1.5), yellow, Vector3(0, 3.1, 0.3), pfig)
 	_npc_hook = Node3D.new()
 	_npc_hook.position = Vector3(0, 3.05, 0.95)
-	_npc_body.add_child(_npc_hook)
+	pfig.add_child(_npc_hook)
 	_box(Vector3(0.03, 0.6, 0.03), dark, Vector3(0, -0.3, 0), _npc_hook)
 	_box(Vector3(0.34, 0.22, 0.22), Tex.body(Color(0.95, 0.45, 0.2)), Vector3(0, -0.7, 0), _npc_hook)
 	var tag = Label3D.new()
@@ -527,13 +548,14 @@ func _build_bob() -> void:
 	_solid(Vector3(1.4, 2.6, 1.4), Vector3(0, 1.3, 0), {"type": "bob"}, _bob)
 	_bob_body = Node3D.new()
 	_bob.add_child(_bob_body)
+	var bfig = _krew("bob", _bob_body, 2.3)
 	for lx in [-0.2, 0.2]:
-		_box(Vector3(0.26, 0.12, 0.42), dark, Vector3(lx, 0.06, 0.06), _bob_body)
-		_box(Vector3(0.24, 0.8, 0.26), brown, Vector3(lx, 0.5, 0), _bob_body)
+		_box(Vector3(0.26, 0.12, 0.42), dark, Vector3(lx, 0.06, 0.06), bfig)
+		_box(Vector3(0.24, 0.8, 0.26), brown, Vector3(lx, 0.5, 0), bfig)
 	var torso = Node3D.new()
 	torso.position = Vector3(0, 0.9, 0)
 	torso.rotation.x = 0.17
-	_bob_body.add_child(torso)
+	bfig.add_child(torso)
 	_box(Vector3(0.86, 0.86, 0.5), green, Vector3(0, 0.45, 0), torso)
 	_box(Vector3(0.52, 0.72, 0.04), Tex.mat(Color(0.42, 0.29, 0.18), 0.8), Vector3(0, 0.4, 0.27), torso)   # leather apron
 	_box(Vector3(0.2, 0.1, 0.05), steel, Vector3(0.1, 0.34, 0.3), torso)                                   # pocket spanner
@@ -557,8 +579,8 @@ func _build_bob() -> void:
 	_box(Vector3(0.32, 0.08, 0.06), white, Vector3(0, 0.14, 0.26), _bob_head)
 	_box(Vector3(0.36, 0.13, 0.07), white, Vector3(0, 0.04, 0.24), _bob_head)
 	# cane, planted beside him
-	_box(Vector3(0.05, 1.02, 0.05), wood_dark, Vector3(0.6, 0.51, 0.3), _bob_body)
-	_box(Vector3(0.05, 0.05, 0.2), wood_dark, Vector3(0.6, 1.02, 0.24), _bob_body)
+	_box(Vector3(0.05, 1.02, 0.05), wood_dark, Vector3(0.6, 0.51, 0.3), bfig)
+	_box(Vector3(0.05, 0.05, 0.2), wood_dark, Vector3(0.6, 1.02, 0.24), bfig)
 	# wrench in the other hand
 	_bob_wrench = Node3D.new()
 	_bob_wrench.position = Vector3(-0.54, 0.0, 0.1)

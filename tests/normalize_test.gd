@@ -142,6 +142,53 @@ line2\" injected: true"]])
 	Gfx.setup("enhanced", ["--gfx=ultra"])
 	check.call("--gfx wins over the saved choice (headless is the light path)", Gfx.chosen + "/" + str(Gfx.detail()), "ultra/0")
 	Gfx.setup("auto", [])
+	# ---- storage inspection helpers
+	var ls = K.parse_ls("total 12\ndrwxr-xr-x 2 root root 4096 Nov  3 10:12 .\ndrwxr-xr-x 3 root root 4096 Nov  3 10:12 ..\n-rw-r--r-- 1 app  app   1532 Nov  3 10:12 my file.conf\ndrwx------ 2 999  999   4096 Oct 30  2025 pgdata\nlrwxrwxrwx 1 root root    11 Nov  3 10:12 current -> ../outside\n")
+	check.call("ls entries (dot dirs dropped)", ls.size(), 3)
+	check.call("ls name with a space", ls[0]["name"] + "|" + ls[0]["type"] + "|" + str(ls[0]["size"]), "my file.conf|file|1532")
+	check.call("ls dir", ls[1]["name"] + "|" + ls[1]["type"], "pgdata|dir")
+	check.call("ls link target kept apart", ls[2]["name"] + "|" + ls[2]["type"] + "|" + ls[2]["link"], "current|link|../outside")
+	check.call("path inside", K.path_inside("/var/lib/data/", "a/./b"), "/var/lib/data/a/b")
+	check.call("path at mount root", K.path_inside("/data", ""), "/data")
+	check.call("path escape refused", K.path_inside("/data", "a/../../etc/passwd"), "")
+	check.call("path escape with backslashes refused", K.path_inside("/data", "..\\secret"), "")
+	check.call("bytes", K.fmt_bytes(512) + " " + K.fmt_bytes(65536) + " " + K.fmt_bytes(3221225472.0), "512 B 64.0 KiB 3.00 GiB")
+	# ---- LiveView endpoint discovery
+	var Live = load("res://scripts/liveview.gd")
+	var eps = Live.endpoints({"pods": [{"name": "grafana", "ns": "mon", "ip": "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:9443->9443/tcp, 5432/tcp"}]}, "docker")
+	check.call("docker endpoints: published ports only, once each", eps.size(), 2)
+	check.call("docker url", eps[0]["url"] + " " + eps[1]["url"], "http://127.0.0.1:3000/ https://127.0.0.1:9443/")
+	eps = Live.endpoints({"services": [
+		{"name": "grafana", "ns": "mon", "selector": {"app": "grafana"}, "ports": "3000/TCP"},
+		{"name": "db", "ns": "shop", "selector": {"app": "db"}, "ports": "5432/TCP"},
+		{"name": "dns", "ns": "kube-system", "selector": {"k": "v"}, "ports": "53/UDP,53/TCP,9153/TCP"},
+		{"name": "external", "ns": "shop", "selector": {}, "ports": "80/TCP"}]}, "kubernetes")
+	check.call("kubernetes endpoints: http-looking ports of selected services", eps.size(), 2)
+	check.call("kubernetes endpoint needs a forward, has no url yet", eps[0]["kind"] + "|" + eps[0]["url"] + "|" + str(eps[1]["port"]), "forward||9153")
+	check.call("simulation offers nothing", Live.endpoints({"services": [{"name": "a", "ns": "b", "selector": {"x": "y"}, "ports": "80/TCP"}]}, "simulation").size(), 0)
+	# ---- model library
+	var Models = load("res://scripts/models.gd")
+	if Models.root() != "":
+		check.call("library size", Models.ids().size(), 141)
+		check.call("krew and machines", "%d/%d" % [Models.ids("krew").size(), Models.ids("machines").size()], "15/25")
+		var missing = []
+		for id in Models.ids():
+			for tier in Models.TIERS:
+				var v = Models.entry(id).get("variants", {}).get(tier)
+				if v == null or not FileAccess.file_exists(Models.root().path_join(str(v["path"]).trim_prefix("assets/"))):
+					missing.append(id + ":" + tier)
+		check.call("every model has a file at every tier", missing, [])
+		check.call("database image -> database server", Models.machine_for({"wkind": "Deployment", "containers": [{"image": "postgres:16"}]}), "database_server")
+		check.call("statefulset kind", Models.machine_for({"wkind": "StatefulSet", "containers": [{"image": "example/app:1"}]}), "statefulset")
+		check.call("bare pod", Models.machine_for({"wkind": "Pod", "containers": [{"image": "example/app:1"}]}), "pod_machine")
+		for id in Models.ids("machines"):
+			var scene = Models._load_scene(id, "standard")
+			if scene == null:
+				fails.append("machine model does not load: " + id)
+			else:
+				scene.free()
+	else:
+		print("NOTE model library not present: its checks were skipped")
 	if fails.is_empty():
 		print("ALL CHECKS PASSED")
 	else:
