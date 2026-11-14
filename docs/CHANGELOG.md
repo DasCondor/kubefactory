@@ -6,6 +6,12 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Docker hosts as connections.** Every Docker CLI context is listed on the
+  cluster switcher and can be chosen (`--docker --context=<name>`); one on
+  another machine opens read-only. `deploy/docker-readonly/` runs a pinned
+  read-only socket proxy (`POST=0`) for each host, reachable over an SSH tunnel
+  without docker group or root (`docs/DOCKER_HOSTS.md`). A change refused by
+  the host is reported in plain words.
 - **Foreman** (key `H`): correlates the Krew's findings into incidents and a
   shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
   Claude, any OpenAI-compatible endpoint) answer plain-language questions from

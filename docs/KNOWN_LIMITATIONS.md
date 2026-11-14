@@ -36,6 +36,17 @@ exactly that: the code exists and has not been run against the real thing.
 - No clean-Windows-machine installation test was done. No large-cluster
   benchmark (hundreds of nodes, thousands of pods) was done.
 
+## Docker hosts
+
+- Docker contexts are listed without being contacted; one that does not answer
+  says so when chosen. The read-only proxy was tested on this machine's engine
+  through `tcp://127.0.0.1`; the SSH tunnel and a separate physical host were
+  not tested.
+- Through the read-only proxy, opening a machine's storage door is not
+  available (it needs `exec`), and neither are logs' follow mode or any action.
+- Read-only for another host is switched on when you connect; turning it off
+  from the Esc menu is your choice, and only the proxy makes it binding.
+
 ## By design, for now
 
 - **Docker still uses the `docker` command.** Only Kubernetes is native.

@@ -3,7 +3,7 @@ extends Node3D
 #
 # Command line (after "--"):
 #   --demo | --kubectl | --docker   force a data source (default: auto-detect)
-#   --context=<name>                connect to a specific kubeconfig context
+#   --context=<name>                connect to a specific kubeconfig context (with --docker: a Docker CLI context)
 #   --sim=<name>                    a simulated cluster (aws-eks-prod, azure-aks-staging,
 #                                   gke-analytics, rancher-edge, helmsman-sim)
 #   --read-only                     block every action that changes the cluster
@@ -283,7 +283,9 @@ func _ready() -> void:
 		elif a == "--docker":
 			source = "docker"
 		elif a.begins_with("--context="):
-			source = "kubernetes"
+			# a kubeconfig context, or with --docker a Docker CLI context
+			if source != "docker":
+				source = "kubernetes"
 			ctx = a.trim_prefix("--context=")
 		elif a.begins_with("--sim="):
 			source = "simulation"
