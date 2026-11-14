@@ -23,7 +23,7 @@ const ACTIONS = [
 	["jump", "Jump (twice: hoverpack)"], ["descend", "Descend"], ["sprint", "Sprint"],
 	["fire", "Use tool"], ["sample", "Copy machine"], ["interact", "Inspect / talk"],
 	["build_menu", "Build menu"], ["codex", "Codex"], ["logs", "Datapad (logs)"], ["next_problem", "Next problem"],
-	["krew", "Krew"], ["foreman", "Foreman"], ["storage", "Storage"], ["liveview", "Screen / LiveView"],
+	["krew", "Krew"], ["foreman", "Foreman"], ["minimap", "Minimap"], ["storage", "Storage"], ["liveview", "Screen / LiveView"],
 	["screen_next", "Next screen view"], ["belts", "Belts"], ["mute", "Sound"], ["fullscreen", "Fullscreen"],
 	["tool1", "Tool 1"], ["tool2", "Tool 2"], ["tool3", "Tool 3"], ["tool4", "Tool 4"], ["tool5", "Tool 5"], ["tool6", "Tool 6"],
 ]
@@ -175,7 +175,7 @@ static func ribbon() -> String:
 		"%s move" % move, "%s sprint" % label("sprint"), "%s jump (double-tap: hoverpack, %s descend)" % [label("jump"), label("descend")],
 		"1-6 / wheel tools", "%s inspect" % label("interact"), "%s build menu" % label("build_menu"), "%s copy machine" % label("sample"),
 		"%s codex" % label("codex"), "%s datapad" % label("logs"), "%s next problem" % label("next_problem"), "%s Krew" % label("krew"),
-		"%s Foreman" % label("foreman"), "%s belts" % label("belts"), "%s storage" % label("storage"), "%s screen" % label("liveview"),
+		"%s Foreman" % label("foreman"), "%s map" % label("minimap"), "%s belts" % label("belts"), "%s storage" % label("storage"), "%s screen" % label("liveview"),
 		"%s next view" % label("screen_next"), "%s sound" % label("mute"), "Esc menu"]))
 
 # ---- controller
