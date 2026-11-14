@@ -29,8 +29,9 @@ exactly that: the code exists and has not been run against the real thing.
   permitted in the session that wrote this, so **reading real figures from the
   metrics API is not tested**.
 - **LiveView** is verified against a local test page (click, typing, blocked
-  external link, 20 frames in 2 s). It has not been run against Grafana, or
-  against a Kubernetes Service through a port-forward.
+  external link, 20 frames in 2 s). Grafana's provider and the game's panels
+  have also been tested; a Grafana page on a machine through a Kubernetes
+  Service port-forward has not been tested.
 - **Port-forward** is verified live (nginx answering through a loopback port on the kind cluster). LiveView through it onto a machine screen has not been run.
 - No clean-Windows-machine installation test was done. No large-cluster
   benchmark (hundreds of nodes, thousands of pods) was done.

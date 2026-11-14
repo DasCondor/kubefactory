@@ -179,12 +179,37 @@ static func fmt_bytes(n: float) -> String:
 		return "%.1f MiB" % (n / 1048576.0)
 	return "%.2f GiB" % (n / 1073741824.0)
 
+# A path as it is shown on screen: the user's own folder is written as "~", so
+# a screenshot or a shared screen never gives away the account name.
+static func tidy_path(p: String, home: String = "") -> String:
+	if home == "":
+		home = OS.get_environment("USERPROFILE")
+		if home == "":
+			home = OS.get_environment("HOME")
+	var a = p.replace("\\", "/")
+	var h = home.replace("\\", "/").rstrip("/")
+	if h != "" and (a.to_lower() == h.to_lower() or a.to_lower().begins_with(h.to_lower() + "/")):
+		return "~" + a.substr(h.length())
+	return p
+
 # Tables: keep the rows that contain `filter` in any column, then order them by
 # one column. getters: {column id: Callable(row) -> value}. Numbers sort as
 # numbers, everything else as text without regard to case; rows that compare
 # equal keep the order they came in. A table of TABLE_LIMIT rows or more is
 # handed back untouched: it is too long to sort and filter on every keystroke.
 const TABLE_LIMIT = 10000
+
+# Intersect the crosshair ray with the display, not the machine's oversized collision box.
+static func ray_hits_screen(origin: Vector3, direction: Vector3, rect: Dictionary, reach: float) -> bool:
+	var normal: Vector3 = rect["normal"]
+	var facing = direction.dot(normal)
+	if facing >= -0.001:
+		return false
+	var distance = (rect["pos"] - origin).dot(normal) / facing
+	if distance < 0.0 or distance > reach:
+		return false
+	var offset: Vector3 = origin + direction * distance - rect["pos"]
+	return absf(offset.dot(rect["right"])) <= rect["size"].x * 0.5 and absf(offset.dot(rect["up"])) <= rect["size"].y * 0.5
 
 static func table_rows(rows: Array, col: String, desc: bool, filter: String, getters: Dictionary) -> Array:
 	if rows.size() >= TABLE_LIMIT:

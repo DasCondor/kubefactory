@@ -524,8 +524,7 @@ func run_action(a: Dictionary) -> Dictionary:
 	if a["op"] == "forward":
 		return {"ok": false, "kind": "unsupported", "msg": "This is a simulated cluster: there is no real application behind this service to show.", "data": {}}
 	if a["op"] == "templates":
-		var tr = Apps.fetch_templates(a.get("catalog", {}))
-		return {"ok": tr.ok, "msg": "", "text": tr.text}
+		return {"ok": false, "msg": "", "text": "Online app lists are unavailable in the simulation. Bundled app setups are still available."}
 	if a["op"] == "logs":
 		# each provider has its own (pretend) network distance
 		if not OS.has_feature("web"):
