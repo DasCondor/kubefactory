@@ -18,6 +18,7 @@ const Sfx = preload("res://scripts/sfx.gd")
 const Demo = preload("res://scripts/backend_demo.gd")
 const Gfx = preload("res://scripts/gfx.gd")
 const Bench = preload("res://scripts/bench.gd")
+const LiveView = preload("res://scripts/liveview.gd")
 const VERSION = "1.0.1"
 
 const SKY_SHADER = """
@@ -63,6 +64,8 @@ var _env: Environment
 var _gfx_base = {}
 var _shots_running = false
 var _storage_uid = ""        # the machine whose service door is open
+var live: Node
+var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
 
 func _ready() -> void:
@@ -130,6 +133,13 @@ func _ready() -> void:
 		if m != null:
 			m.set_modules(mounts))
 	cluster.data_ready.connect(hud.on_data)
+	# LiveView: real application pages on screens
+	live = LiveView.new()
+	add_child(live)
+	hud.live = live
+	live.changed.connect(_on_live_changed)
+	cluster.agent_event.connect(live.on_agent_event)
+	cluster.source_changed.connect(func(_l, _n): live.close_all())
 	# connection wizard: how an attempt ended, and kubeconfig files dropped on the window
 	cluster.source_changed.connect(func(_label, _note): hud.on_connect_result(cluster.last_connect_error))
 	get_window().files_dropped.connect(func(files):
@@ -182,6 +192,10 @@ func _ready() -> void:
 		elif a.begins_with("--bench="):
 			shots = "-"
 			Bench.run(self, a.trim_prefix("--bench="), Gfx.id_of(Gfx.level))
+		elif a.begins_with("--liveshots="):
+			# --liveshots=<dir>,<url>
+			shots = "-"
+			_run_liveshots(a.trim_prefix("--liveshots=").get_slice(",", 0), a.trim_prefix("--liveshots=").get_slice(",", 1))
 		elif a.begins_with("--storageshots="):
 			shots = "-"
 			_run_storageshots(a.trim_prefix("--storageshots="))
@@ -278,6 +292,7 @@ func _setup_input() -> void:
 	_key("next_problem", [KEY_G])
 	_key("logs", [KEY_L])
 	_key("storage", [KEY_F])
+	_key("liveview", [KEY_V])
 	_key("mute", [KEY_M])
 	_key("fullscreen", [KEY_F11])
 	for pair in [["fire", MOUSE_BUTTON_LEFT], ["sample", MOUSE_BUTTON_MIDDLE]]:
@@ -422,6 +437,41 @@ func _hold_action(type: String, meta: Dictionary) -> Dictionary:
 					return {"label": "DRAIN NODE - evict every pod", "time": 2.4, "act": {"op": "drain", "node": n["name"]}}
 	return {}
 
+# A display changed: keep the machine screen it is mounted on showing it.
+func _on_live_changed(s: Dictionary) -> void:
+	hud.on_live_changed(s)
+	for m in world.machines.values():
+		if m.get_meta("live", "") == s["key"] and (s["state"] != "live" or str(s["mounted"]) != m.uid):
+			m.set_screen_texture(null)
+			m.remove_meta("live")
+	if s["state"] == "live" and str(s["mounted"]) != "" and s["tex"] != null:
+		var m = world.machines.get(str(s["mounted"]))
+		if m != null:
+			m.set_screen_texture(s["tex"])
+			m.set_meta("live", s["key"])
+
+# Frame rate follows attention: the display in the viewer runs at full rate, one
+# mounted on a machine slows with distance, and one nobody can see is paused.
+func _live_rates(delta: float) -> void:
+	_live_rate_t += delta
+	if _live_rate_t < 0.5 or live == null:
+		return
+	_live_rate_t = 0.0
+	for s in live.sessions.values():
+		var fps = live.RATE_FAR
+		var paused = true
+		if hud._modal_kind == "liveview" and hud._lv == s:
+			fps = live.RATE_ACTIVE
+			paused = false
+		elif str(s["mounted"]) != "":
+			var m = world.machines.get(str(s["mounted"]))
+			if m != null:
+				var dist = player.global_position.distance_to(m.global_position)
+				var facing = player.camera.global_transform.basis.z.dot(m.global_position - player.camera.global_position) < 0.0
+				paused = dist > 90.0 or not facing
+				fps = live.RATE_NEAR if dist < 25.0 else live.RATE_FAR
+		live.set_rate(s, fps, paused)
+
 # Open a machine's service door and look at what is mounted behind it. The door
 # swings out as far as its stop (or as far as you, if you are standing in its
 # path) and shuts again when the storage panel closes.
@@ -437,6 +487,7 @@ func _storage(uid: String) -> void:
 	hud.open_storage(uid)
 
 func _process(delta: float) -> void:
+	_live_rates(delta)
 	if _storage_uid != "" and hud._modal_kind != "storage":
 		var sm = world.machines.get(_storage_uid)
 		if sm != null and sm.has_door():
@@ -569,6 +620,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		_next_problem()
 	elif ev.is_action_pressed("interact"):
 		_interact()
+	elif ev.is_action_pressed("liveview"):
+		hud.open_liveview()
 	elif ev.is_action_pressed("storage"):
 		var smeta = player.hit.get("meta", {})
 		if smeta.get("type", "") == "pod":
@@ -676,6 +729,70 @@ func _shot(dir: String, name_: String) -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(dir.path_join(name_ + ".png"))
 	print("shot ", name_)
+
+# LiveView against a real page at `url` (tests/liveview_page.html, served by
+# tools\liveview-test.ps1): frames arrive, a click reaches the page's script, typed
+# text lands in a field, a jump to another host is refused, bad addresses fail honestly.
+func _run_liveshots(dir: String, url: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	await get_tree().create_timer(6.0).timeout
+	var pixel = func(s: Dictionary, x: int, y: int) -> String:
+		return s["tex"].get_image().get_pixel(x, y).to_html(false) if s["tex"] != null else "none"
+	var wait_live = func(s: Dictionary, secs: float) -> void:
+		var t = 0.0
+		while t < secs and (s["state"] == "opening" or (s["state"] == "live" and s["frames"] == 0)):
+			await get_tree().create_timer(0.25).timeout
+			t += 0.25
+	var s = live.open(url, "Test page")
+	hud.open_live(s)
+	await wait_live.call(s, 40.0)
+	print("live: state=", s["state"], " status=", s["status"], " frames=", s["frames"], " ", s.get("kind", ""), " ", s.get("msg", ""))
+	if s["state"] == "live":
+		await get_tree().create_timer(1.0).timeout
+		print("live: box before click = #", pixel.call(s, 150, 120))
+		await _shot(dir, "live_1_page")
+		for kind in ["move", "down", "up"]:
+			live.input(s, kind, {"x": 140.0, "y": 310.0, "button": "left"})
+		await get_tree().create_timer(1.2).timeout
+		print("live: box after click  = #", pixel.call(s, 150, 120), "  (the page's script turns it green)")
+		for kind in ["down", "up"]:
+			live.input(s, kind, {"x": 200.0, "y": 400.0, "button": "left"})
+		for ch in "typed in the game":
+			live.input(s, "text", {"text": ch})
+		await get_tree().create_timer(1.2).timeout
+		await _shot(dir, "live_2_clicked_typed")
+		for kind in ["down", "up"]:
+			live.input(s, kind, {"x": 120.0, "y": 475.0, "button": "left"})
+		await get_tree().create_timer(1.5).timeout
+		print("live: link to another host -> blocked=", s["blocked"], "  still on ", s["url"])
+		var frames = s["frames"]
+		await get_tree().create_timer(2.0).timeout
+		print("live: frames in 2 s while the page animates = ", s["frames"] - frames)
+		# mounted on a machine's screen
+		var m = world.machines.values()[0]
+		s["mounted"] = m.uid
+		live.changed.emit(s)
+		hud.close_modal()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		var r = m.screen_rect()
+		if not r.is_empty():
+			player.flying = true
+			player.teleport(r["pos"] + r["normal"] * 2.6 + Vector3(0, -1.2, 0), r["pos"])
+			await _shot(dir, "live_3_on_machine")
+		live.close(s)
+	for bad in ["http://127.0.0.1:9/", "file:///C:/Windows/win.ini"]:
+		var b = live.open(bad, "bad")
+		await wait_live.call(b, 40.0)
+		print("live: ", bad, " -> ", b["state"], " ", b["kind"], ": ", b["msg"])
+		if b["state"] == "live":
+			live.close(b)
+	hud.open_liveview()
+	await _shot(dir, "live_4_list")
+	hud.close_modal()
+	await get_tree().create_timer(1.0).timeout
+	get_tree().quit()
 
 # Storage doors: open one front-door machine and one rear-panel machine, browse
 # into a folder, preview a text file and a binary one, then try to leave the mount.

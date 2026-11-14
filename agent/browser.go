@@ -22,7 +22,9 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"hash/fnv"
 	"fmt"
 	"net/url"
 	"os"
@@ -50,8 +52,8 @@ type browserSession struct {
 	mu      sync.Mutex
 	allowed map[string]bool
 	minGap  time.Duration
-	last    time.Time
 	paused  bool
+	good    string // the last page of the application itself, to return to after a refused jump
 }
 
 var (
@@ -141,8 +143,41 @@ func (b *browserSession) do(actions ...chromedp.Action) error {
 	return chromedp.Run(ctx, actions...)
 }
 
-func (b *browserSession) startCast() chromedp.Action {
-	return page.StartScreencast().WithFormat(page.ScreencastFormatJpeg).WithQuality(72).WithMaxWidth(b.w).WithMaxHeight(b.h).WithEveryNthFrame(1)
+// pump captures the page at the session's frame rate and sends a frame only
+// when the picture changed. (Edge's own screencast stream stays silent in
+// headless mode, so frames are pulled rather than pushed.)
+func (b *browserSession) pump() {
+	var last uint64
+	for {
+		b.mu.Lock()
+		gap, paused := b.minGap, b.paused
+		b.mu.Unlock()
+		select {
+		case <-b.ctx.Done():
+			return
+		case <-time.After(gap):
+		}
+		if paused {
+			continue
+		}
+		var buf []byte
+		ctx, cancel := context.WithTimeout(b.ctx, 10*time.Second)
+		err := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+			var e error
+			buf, e = page.CaptureScreenshot().WithFormat(page.CaptureScreenshotFormatJpeg).WithQuality(72).WithOptimizeForSpeed(true).Do(c)
+			return e
+		}))
+		cancel()
+		if err != nil || len(buf) == 0 {
+			continue
+		}
+		h := fnv.New64a()
+		h.Write(buf)
+		if sum := h.Sum64(); sum != last {
+			last = sum
+			emit("frame", map[string]any{"sid": b.id, "jpeg": base64.StdEncoding.EncodeToString(buf)})
+		}
+	}
 }
 
 func navError(err error) *opError {
@@ -150,6 +185,8 @@ func navError(err error) *opError {
 	switch {
 	case strings.Contains(m, "ERR_CONNECTION_REFUSED"), strings.Contains(m, "ERR_CONNECTION_RESET"), strings.Contains(m, "ERR_ADDRESS_UNREACHABLE"), strings.Contains(m, "ERR_NAME_NOT_RESOLVED"), strings.Contains(m, "ERR_EMPTY_RESPONSE"):
 		return fail("unreachable", "nothing answered at that address")
+	case strings.Contains(m, "ERR_UNSAFE_PORT"):
+		return fail("invalid", "browsers refuse to open that port")
 	case strings.Contains(m, "ERR_CERT"), strings.Contains(m, "ERR_SSL"):
 		return fail("tls", "the site's certificate was not accepted")
 	case strings.Contains(m, "ERR_BLOCKED_BY_CLIENT"):
@@ -217,17 +254,6 @@ func registerBrowser() {
 
 		chromedp.ListenTarget(ctx, func(ev any) {
 			switch e := ev.(type) {
-			case *page.EventScreencastFrame:
-				go chromedp.Run(ctx, page.ScreencastFrameAck(e.SessionID))
-				b.mu.Lock()
-				send := !b.paused && time.Since(b.last) >= b.minGap
-				if send {
-					b.last = time.Now()
-				}
-				b.mu.Unlock()
-				if send {
-					emit("frame", map[string]any{"sid": b.id, "jpeg": e.Data})
-				}
 			case *fetch.EventRequestPaused:
 				h := hostOf(e.Request.URL)
 				b.mu.Lock()
@@ -236,16 +262,36 @@ func registerBrowser() {
 				if ok {
 					go chromedp.Run(ctx, fetch.ContinueRequest(e.RequestID))
 				} else {
-					go chromedp.Run(ctx, fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient))
+					go func() {
+						chromedp.Run(ctx, fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient))
+						// the refused jump leaves the tab on an error page: put the application back
+						b.mu.Lock()
+						back := b.good
+						b.mu.Unlock()
+						if back != "" && e.ResourceType == network.ResourceTypeDocument {
+							time.Sleep(150 * time.Millisecond)
+							b.do(chromedp.Navigate(back))
+						}
+					}()
 					emit("blocked", map[string]any{"sid": b.id, "host": h})
 				}
 			case *page.EventFrameNavigated:
-				if e.Frame != nil && e.Frame.ParentID == "" {
+				if e.Frame != nil && e.Frame.ParentID == "" && (strings.HasPrefix(e.Frame.URL, "http://") || strings.HasPrefix(e.Frame.URL, "https://")) {
+					b.mu.Lock()
+					b.good = e.Frame.URL
+					b.mu.Unlock()
 					emit("nav", map[string]any{"sid": b.id, "url": e.Frame.URL})
 				}
 			}
 		})
 
+		// Start the browser on the session's own context. chromedp ties the
+		// browser's life to the context of the first Run, so a short-lived
+		// one here would take the browser down as soon as this call returned.
+		if err := chromedp.Run(ctx); err != nil {
+			b.close()
+			return nil, fail("other", "the browser did not start: %s", strings.SplitN(err.Error(), "\n", 2)[0])
+		}
 		openCtx, cancelOpen := context.WithTimeout(ctx, 30*time.Second)
 		defer cancelOpen()
 		if err := chromedp.Run(openCtx,
@@ -264,7 +310,8 @@ func registerBrowser() {
 			status = resp.Status
 		}
 		var title string
-		chromedp.Run(openCtx, chromedp.Title(&title), b.startCast())
+		chromedp.Run(openCtx, chromedp.Title(&title))
+		go b.pump()
 		browsersMu.Lock()
 		browsers[b.id] = b
 		browsersMu.Unlock()
@@ -302,14 +349,8 @@ func registerBrowser() {
 			a.FPS = 15
 		}
 		b.mu.Lock()
-		was := b.paused
 		b.paused, b.minGap = a.Paused, time.Second/time.Duration(a.FPS)
 		b.mu.Unlock()
-		if a.Paused && !was {
-			b.do(page.StopScreencast())
-		} else if !a.Paused && was {
-			b.do(b.startCast())
-		}
 		return map[string]any{}, nil
 	}
 
