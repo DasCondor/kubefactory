@@ -10,6 +10,7 @@ extends Node3D
 #   --shots=<dir>                   automated screenshot tour, then quit (dev)
 
 const K = preload("res://scripts/kutil.gd")
+const Agent = preload("res://scripts/agent.gd")
 const Cluster = preload("res://scripts/cluster.gd")
 const Connections = preload("res://scripts/connections.gd")
 const Providers = preload("res://scripts/providers.gd")
@@ -79,6 +80,9 @@ var touch: CanvasLayer = null      # touch controls (browser demo only)
 var _touch_forced = false          # --touch: show them on the desktop, for testing
 var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
+
+func _exit_tree() -> void:
+	Agent.shutdown()
 
 func _ready() -> void:
 	_setup_input()
@@ -206,7 +210,9 @@ func _ready() -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			hud.open_connect(str(p.get("id", ""))))
 	cluster.targets_changed.connect(func():
-		world.set_targets(cluster.targets, cluster.backend.label, cluster.backend.context))
+		world.set_targets(cluster.targets, cluster.backend.label, cluster.backend.context)
+		if hud._modal_kind == "clusters":
+			hud.open_clusters())
 
 	var source = "auto"
 	var ctx = ""
@@ -691,8 +697,7 @@ func _on_screen(meta: Dictionary) -> bool:
 	var r = m.screen_rect()
 	if r.is_empty():
 		return false
-	var d: Vector3 = player.hit["pos"] - r["pos"]
-	return absf(d.dot(r["right"])) <= r["size"].x * 0.5 and absf(d.dot(r["up"])) <= r["size"].y * 0.5 and absf(d.dot(r["normal"])) < 0.9
+	return K.ray_hits_screen(player.camera.global_position, -player.camera.global_transform.basis.z.normalized(), r, player.REACH)
 
 func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 	var tool = hud.TOOLS[mode]
@@ -1115,6 +1120,18 @@ func _run_screenshots(dir: String) -> void:
 	player.teleport(r["pos"] + r["normal"] * 4.2 + Vector3(0.5, -1.55, 0), r["pos"])
 	await get_tree().create_timer(0.6).timeout
 	print("screens: aiming at the screen -> on_screen=", _on_screen(player.hit.get("meta", {})), "  icon=", Icons.kind_of(pick))
+	if _on_screen(player.hit.get("meta", {})):
+		var previous_mode = mode
+		_set_mode(5)
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		var click = InputEventAction.new()
+		click.action = "fire"
+		click.pressed = true
+		_unhandled_input(click)
+		print("screens: click with the demolisher -> modal=", hud._modal_kind)
+		hud.close_modal(false)
+		_set_mode(previous_mode)
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	await _shot(dir, "scr_0_dashboard")
 	for i in 3:
 		var mode = screens.cycle(m.uid)

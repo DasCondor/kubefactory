@@ -52,6 +52,10 @@ Unsolicited lines carry `event` (`watch`, `frame`, `nav`, `blocked`,
 `forward_closed`). Errors carry a `kind` the game turns into a plain sentence:
 `config`, `exec_untrusted`, `needs_base_dir`, `auth`, `rbac`, `tls`, `timeout`,
 `unreachable`, `notfound`, `conflict`, `invalid`, `unsupported`, `other`.
+On exit the game stops its workers, requests companion shutdown and joins the
+pipe reader. The companion finishes outstanding requests and closes browser
+sessions, temporary profiles, forwards and Kubernetes sessions before exiting.
+If it does not exit within 15 seconds, the game terminates its child process.
 
 | File | Ops |
 |---|---|
@@ -83,8 +87,13 @@ Dependencies are client-go (the Kubernetes project's own client) and chromedp
    profile that is deleted on close. Requests to any host other than the one
    you opened are refused. The page is pixels in the game: it cannot reach the
    game, your files or your kubeconfig.
-5. **The browser demo** contains only `backend_demo.gd`. It has no companion,
-   no network code and no credentials.
+5. **The browser demo** uses only the simulation backend. Desktop adapter
+   scripts may be included in the export, but the browser build has no
+   companion or local infrastructure access.
+   An explicitly selected desktop simulation also skips kubeconfig discovery,
+   Docker probing and restoration of real provider screens. The cluster
+   switcher's discovery button initiates local discovery when requested.
+   Simulated actions do not send audit webhooks or fetch online app lists.
 
 ## Models
 
