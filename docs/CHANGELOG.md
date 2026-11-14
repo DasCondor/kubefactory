@@ -6,6 +6,14 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **The Krew and its operations center** (key `K`). Bob, Gauge and three new
+  workers report findings on one board, each with evidence, a proposal and its
+  risk: **Sentinel** (security: privileged, engine socket, host paths and
+  namespaces, root, capabilities, floating tags), **Scout** (Services with no
+  or no ready pods, outside exposure, host ports) and **Scrappy** (old finished
+  pods, unused images, unattached volumes). Nothing runs without individual
+  approval; unattached volumes are never offered for removal. Stations past
+  Gauge's desk, a resolved history, Markdown and JSON export.
 - **Gauge's resource desk**: inspect node capacity and visible requests, or
   read a selected workload's usage. Its sortable, filterable node table is
   read-only and distinguishes missing data from zero. Gauge can be hidden.

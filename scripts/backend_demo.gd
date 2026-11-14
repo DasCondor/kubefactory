@@ -8,7 +8,7 @@ const GI = 1073741824.0
 
 var label = "simulation"
 var poll_interval = 1.0
-var caps = {"scale": true, "delete_pod": true, "restart": true, "delete_workload": true,
+var caps = {"remove_image": true, "scale": true, "delete_pod": true, "restart": true, "delete_workload": true,
 	"create": true, "cordon": true, "drain": true, "logs": true, "files": true}
 var context = "helmsman-sim"
 
@@ -128,6 +128,8 @@ func _init(flavor: String = "helmsman-sim"):
 	_add_svc("shop", "checkout", "ClusterIP", "8080/TCP", "checkout")
 	_add_svc("shop", "catalog-db", "ClusterIP", "5432/TCP", "catalog-db")
 	_add_svc("shop", "redis", "ClusterIP", "6379/TCP", "redis")
+	# left behind when the search service was retired: it selects pods that no longer exist
+	_add_svc("shop", "search", "ClusterIP", "9200/TCP", "search")
 	_add_svc("monitoring", "prometheus", "ClusterIP", "9090/TCP", "prometheus")
 	_add_svc("monitoring", "grafana", "NodePort", "3000/TCP", "grafana")
 	_settle()
@@ -229,6 +231,29 @@ func _rand_id(n: int) -> String:
 	return s
 
 # crashlog: the last lines a "crashy" workload prints before it dies (level + message each).
+# The security settings these apps really ship with (or that a homelab really
+# uses), so the Krew has something true to say about the simulation.
+const SIM_SECURITY = {
+	"kube-proxy": {"privileged": ["kube-proxy"], "host_network": true, "host_paths": ["/run/xtables.lock", "/lib/modules"]},
+	"node-exporter": {"host_network": true, "host_pid": true, "host_paths": ["/proc", "/sys", "/"]},
+	"checkout": {"root": ["checkout"]},
+	"zigbee2mqtt": {"privileged": ["zigbee2mqtt"], "host_paths": ["/dev/ttyUSB0", "/run/udev"]},
+	"home-assistant": {"host_network": true},
+	"matter-server": {"host_network": true},
+	"plex": {"host_network": true},
+	"nightly-engine-build": {"host_paths": ["/var/run/docker.sock"], "docker_socket": true, "caps": ["builder: SYS_ADMIN"]},
+	"qbittorrent": {"host_ports": [6881], "all_interfaces": true},
+}
+
+static func sim_security(wname: String, containers: Array) -> Dictionary:
+	var s = K.empty_security()
+	for k in SIM_SECURITY.get(wname, {}):
+		s[k] = SIM_SECURITY[wname][k]
+	for c in containers:
+		if K.floating_tag(str(c[1])):
+			s["latest"] = s["latest"] + ["%s: %s" % [c[0], c[1]]]
+	return s
+
 func _add_wl(kind, ns, wname, containers, replicas, cpu, mem_gi, quirk = "", crashlog = []):
 	_wl.append({"kind": kind, "ns": ns, "name": wname, "containers": containers, "replicas": replicas,
 		"cpu": cpu, "mem": mem_gi * GI, "quirk": quirk, "crashlog": crashlog, "hash": _rand_id(9), "ordinal": 0, "spawned": false})
@@ -378,7 +403,11 @@ func fetch() -> Dictionary:
 		st.pods.append({"uid": p["uid"], "name": p["name"], "ns": w["ns"], "node": p["node"], "status": p["st"],
 			"ready": running, "health": K.health_of(p["st"], running), "restarts": p["restarts"],
 			"wkind": w["kind"], "wname": w["name"], "ip": p["ip"] if p["node"] != "" else "",
-			"created": p["created"], "labels": {"app": w["name"]}, "containers": conts})
+			"created": p["created"], "labels": {"app": w["name"]}, "containers": conts,
+			"phase": {"Running": "Running", "Completed": "Succeeded", "Error": "Failed"}.get(p["st"], "Pending"),
+			# a finished Job in the demo has sat there for a while, as they do
+			"finished": float(p.get("since", 0.0)) - 5400.0 if p["st"] in ["Completed", "Error"] else 0.0,
+			"sec": sim_security(w["name"], w["containers"])})
 	for w in _wl:
 		if w["kind"] == "Job":
 			continue
@@ -513,7 +542,36 @@ func _sim_metrics(a: Dictionary) -> Dictionary:
 				"at": Time.get_datetime_string_from_system(true) + "Z", "source": "simulation", "simulated": true}}
 	return {"ok": false, "kind": "notfound", "msg": "pod not found", "data": {}}
 
+var _sim_unused = [
+	{"id": "sha256:5e1a7c0d2b9f", "repo": "helmsman/shop-frontend", "tag": "2.3.9", "size": 188.0e6, "unique": 41.0e6, "containers": 0, "created": "5 weeks ago"},
+	{"id": "sha256:91c4d0e7a3b2", "repo": "postgres", "tag": "15", "size": 412.0e6, "unique": 398.0e6, "containers": 0, "created": "3 months ago"},
+	{"id": "sha256:0f3b8a61d4c7", "repo": "<none>", "tag": "<none>", "size": 96.0e6, "unique": 96.0e6, "containers": 0, "created": "2 weeks ago"},
+]
+
+func _sim_scan() -> Dictionary:
+	var images = []
+	var seen = {}
+	for p in _pods:
+		for c in p["wl"]["containers"]:
+			if not seen.has(c[1]):
+				seen[c[1]] = true
+				images.append({"id": "sha256:%012x" % (hash(c[1]) & 0xffffffffffff), "repo": str(c[1]).get_slice(":", 0), "tag": str(c[1]).get_slice(":", 1),
+					"size": 120.0e6, "unique": 40.0e6, "containers": 1, "created": "1 week ago"})
+	return {"ok": true, "msg": "", "kind": "", "data": {"images": images + _sim_unused, "simulated": true, "source": "simulation",
+		"volumes": [{"name": "old-catalog-backup", "links": 0, "size": 2.4e9}]}}
+
 func run_action(a: Dictionary) -> Dictionary:
+	if a["op"] == "cleanup_scan":
+		_mx.lock()
+		var sres = _sim_scan()
+		_mx.unlock()
+		return sres
+	if a["op"] == "remove_image":
+		for i in _sim_unused.size():
+			if str(_sim_unused[i]["id"]) == str(a.get("id", "")):
+				_sim_unused.remove_at(i)
+				return {"ok": true, "msg": "Removed image %s (simulated)" % a["name"]}
+		return {"ok": false, "msg": "That image is in use or already gone (simulated)."}
 	if a["op"] == "pod_metrics":
 		_mx.lock()
 		var mres = _sim_metrics(a)

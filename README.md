@@ -243,6 +243,34 @@ pause menu.
 ![Gauge at the resource desk](docs/gauge-station.png)
 ![Gauge's read-only resource panel](docs/gauge-panel.png)
 
+### The Krew: operations center (key `K`)
+
+Bob, Gauge and three new workers watch the cluster and report findings on one
+board. Open it with `K`, from the pause menu, or at a worker's station past
+Gauge's desk:
+
+- **Sentinel (security)**: privileged containers, the Docker engine socket or
+  host paths mounted, host network or process namespaces, explicit root,
+  powerful added capabilities, and floating image tags.
+- **Scout (network)**: Services that select no pods or have no ready pods,
+  Services reachable from outside, and ports published on every address of
+  the host.
+- **Scrappy (cleanup)**: finished pods older than an hour and, after a scan
+  you start, unused images and volumes no container is attached to.
+
+Each finding shows its evidence, a proposed change and its risk. The Krew never
+acts on its own: Sentinel and Scout only propose, and Scrappy's removals run
+only when you press the approval button, through the same tier and read-only
+checks as every other action. Unattached volumes are reported but never
+offered for removal. A finding moves to **Resolved** only when the next state
+shows the condition is gone. Findings in system namespaces are lowered one
+level. The board exports to Markdown or JSON in the log folder. Demo findings
+are marked **SIMULATED**.
+
+![The Krew's stations](docs/krew-stations.png)
+![Sentinel's findings in the operations center](docs/krew-panel.png)
+![Scrappy's cleanup awaiting approval](docs/krew-scrappy.png)
+
 ### Tables
 
 Lists with columns (workloads, clusters, files in a volume, Grafana dashboards

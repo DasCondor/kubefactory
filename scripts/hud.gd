@@ -306,7 +306,7 @@ func _ready() -> void:
 	_bp.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_root.add_child(_bp)
 
-	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · B belts · F storage · V screen · R next view · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
+	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · K Krew · B belts · F storage · V screen · R next view · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
 	help.anchor_left = 0.0
 	help.anchor_right = 1.0
 	help.anchor_top = 1.0
@@ -631,6 +631,8 @@ func _refresh_modal() -> void:
 			_fill_bob()
 		"gauge":
 			_fill_gauge()
+		"krew":
+			_fill_krew(false)
 
 func _kv(grid: GridContainer, k: String, v: String, color: Color = TXT) -> void:
 	grid.add_child(_fixed(_lbl(k, 13, DIM), 110))
@@ -3161,6 +3163,7 @@ func open_pause() -> void:
 	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
+	body.add_child(_btn("Krew operations  (K)", func(): open_krew()))
 	body.add_child(_btn("Gauge  (resource desk)", open_gauge))
 	body.add_child(_btn("Gauge in the world:  %s" % ("ON" if world._gauge.visible else "OFF"), func():
 		var show = not world._gauge.visible
@@ -3691,3 +3694,172 @@ func open_screen(uid: String) -> void:
 			l.custom_minimum_size.x = 1100
 			body.add_child(l)
 			body.add_child(_btn("Open LiveView", func(): open_liveview(), "primary"))
+
+# ----- the Krew's operations center (scripts/krew.gd)
+#
+# Every worker's findings in one place: what, the evidence, the proposal and
+# its risk. A proposed action runs only when you press its button, through
+# guarded_act: the same tiers, read-only mode and typed confirmation as the tools.
+
+var krew: Node = null              # set by main
+var _krew_focus = ""               # "" = every worker
+var _krew_open = {}                # finding key -> true while its details are shown
+var _krew_history = false
+var _krew_list: VBoxContainer = null
+var _krew_sig = ""
+
+const SEV_COLORS = {"high": Color(1.0, 0.36, 0.3), "medium": Color(1.0, 0.72, 0.25), "low": Color(0.55, 0.78, 1.0), "info": Color(0.62, 0.68, 0.74)}
+
+func open_krew(focus: String = "") -> void:
+	if krew == null:
+		return
+	_krew_focus = focus
+	_krew_sig = ""
+	var compact = touch != null and touch.active
+	var body = _open_modal("krew", focus, "KREW  //  OPERATIONS", Vector2(1260, 800))
+	# the roster: every worker, what it is doing, and how many findings it holds
+	var roster = _row(8)
+	for w in krew.WORKERS:
+		var id = str(w["id"])
+		var pc = PanelContainer.new()
+		var sb = _sb(BG2 if _krew_focus != id else Color(0.16, 0.13, 0.08), w["color"], 0, 8)
+		sb.border_width_left = 4
+		pc.add_theme_stylebox_override("panel", sb)
+		var v = _col(2)
+		v.add_child(_lbl("%s  ·  %s" % [w["name"], w["role"]], 14, w["color"]))
+		var worst = krew.worst_of(id)
+		v.add_child(_lbl(krew.status_of(id), 12, SEV_COLORS.get(worst, Color(0.45, 0.85, 0.5)) if worst != "" else Color(0.45, 0.85, 0.5)))
+		var b = _btn("Only " + str(w["name"]).capitalize() if _krew_focus != id else "Showing", func(): open_krew("" if _krew_focus == id else id), "normal", true)
+		v.add_child(b)
+		pc.add_child(v)
+		pc.custom_minimum_size.x = 230
+		roster.add_child(pc)
+	body.add_child(roster)
+	var src = str(cluster.state.get("source", ""))
+	var bar = _row(8)
+	if src == "simulation":
+		bar.add_child(_lbl("SIMULATED", 13, K.health_color("warn")))
+	bar.add_child(_lbl("Nothing here changes by itself: a proposed action runs only when you approve it.", 12, DIM))
+	bar.add_child(_spacer())
+	if src in ["docker", "simulation"]:
+		bar.add_child(_btn("Scan images and volumes", func():
+			notify("Scrappy is scanning images and volumes...", "info")
+			cluster.act({"op": "cleanup_scan", "ns": "", "name": "", "key": "krew:scan"})))
+	bar.add_child(_btn("Resolved (%d)" % krew.history.size() if not _krew_history else "Open findings", func():
+		_krew_history = not _krew_history
+		open_krew(_krew_focus)))
+	bar.add_child(_btn("Export Markdown", func(): _krew_export("md")))
+	bar.add_child(_btn("Export JSON", func(): _krew_export("json")))
+	body.add_child(bar)
+	body.add_child(_table_head("krew", [["sev", "SEVERITY", 100], ["worker", "WORKER", 110], ["title", "FINDING", 560], ["resource", "RESOURCE", 260], ["age", "SEEN FOR", 110]],
+		func(): _fill_krew(true), krew.findings.size(), 17 if compact else 12))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_krew_list = _col(4)
+	_krew_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(_krew_list)
+	body.add_child(sc)
+	_fill_krew(true)
+
+func on_krew_changed() -> void:
+	if _modal_kind == "krew":
+		_fill_krew(false)
+
+func _fill_krew(force: bool) -> void:
+	if _modal_kind != "krew" or not is_instance_valid(_krew_list):
+		return
+	var rows = krew.history.filter(func(f): return _krew_focus == "" or f["worker"] == _krew_focus) if _krew_history else krew.of_worker(_krew_focus)
+	var sig = JSON.stringify(rows.map(func(f): return [f["key"], f["severity"], f["evidence"]])) + JSON.stringify(_krew_open) + str(cluster.read_only)
+	if not force and sig == _krew_sig:
+		return
+	_krew_sig = sig
+	_clear(_krew_list)
+	var getters = {"sev": func(f): return krew.SEVERITY_ORDER.get(f["severity"], 9), "worker": func(f): return f["worker"], "title": func(f): return f["title"],
+		"resource": func(f): return f["resource"], "age": func(f): return -float(f.get("resolved_at", f["first_seen"]))}
+	var shown = _table_rows("krew", rows, getters)
+	if shown.is_empty():
+		var l = _lbl(("Nothing resolved yet." if _krew_history else ("All clear." if rows.is_empty() else "No finding contains that.")), 15, DIM)
+		_krew_list.add_child(l)
+		if krew.status_of("scrappy") == "images not scanned yet" and not _krew_history:
+			_krew_list.add_child(_lbl("Scrappy has not looked at images yet: use Scan images and volumes.", 13, DIM))
+		return
+	for f in shown:
+		_krew_list.add_child(_krew_row(f))
+
+func _krew_row(f: Dictionary) -> Control:
+	var pc = PanelContainer.new()
+	var sb = _sb(BG2, SEV_COLORS.get(f["severity"], DIM), 0, 8)
+	sb.border_width_left = 4
+	pc.add_theme_stylebox_override("panel", sb)
+	var v = _col(4)
+	pc.add_child(v)
+	var r = _row(10)
+	r.add_child(_fixed(_lbl(str(f["severity"]).to_upper(), 13, SEV_COLORS.get(f["severity"], DIM)), 100))
+	r.add_child(_fixed(_lbl(krew.worker(f["worker"]).get("name", f["worker"]), 13, krew.worker(f["worker"]).get("color", TXT)), 110))
+	var t = _lbl(str(f["title"]), 14)
+	t.clip_text = true
+	r.add_child(_fixed(t, 560))
+	var res = _lbl(str(f["resource"]), 12, DIM)
+	res.clip_text = true
+	r.add_child(_fixed(res, 260))
+	var when = float(f.get("resolved_at", f["first_seen"]))
+	r.add_child(_fixed(_lbl(("resolved " if f.has("resolved_at") else "") + K.fmt_age(when), 12, DIM), 110))
+	var key = str(f["key"])
+	r.add_child(_btn("Hide" if _krew_open.has(key) else "Details", func():
+		if _krew_open.has(key):
+			_krew_open.erase(key)
+		else:
+			_krew_open[key] = true
+		_fill_krew(true)))
+	v.add_child(r)
+	if not _krew_open.has(key):
+		return pc
+	for e in f["evidence"]:
+		var el = _lbl("·  " + str(e), 13, TXT)
+		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		el.custom_minimum_size.x = 1150
+		v.add_child(el)
+	if str(f["proposal"]) != "":
+		var pl = _lbl("Proposed:  " + str(f["proposal"]), 13, Color(0.6, 0.9, 1.0))
+		pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		pl.custom_minimum_size.x = 1150
+		v.add_child(pl)
+	if str(f["risk"]) != "":
+		var rl = _lbl("Risk:  " + str(f["risk"]), 13, K.health_color("warn"))
+		rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rl.custom_minimum_size.x = 1150
+		v.add_child(rl)
+	var acts = _row(8)
+	var uids: Array = f.get("uids", []).filter(func(u): return world.machines.has(str(u)))
+	if not uids.is_empty():
+		acts.add_child(_btn("Go there", func():
+			var spot = world.machine_spot(str(uids[0]))
+			if spot != null:
+				close_modal()
+				player.teleport(spot[0], spot[1])))
+	if f["worker"] == "bob" and not f.has("resolved_at"):
+		acts.add_child(_btn("Ask Bob", func(): open_bob()))
+	var a: Dictionary = f.get("action", {})
+	if not a.is_empty() and not f.has("resolved_at"):
+		var tier = K.tier_of(a, cluster.state)
+		var allowed = not cluster.read_only and tier <= cluster.max_tier(str(a.get("ns", ""))) and cluster.cap(str(a["op"]))
+		var b = _btn(str(f["action_label"]), func():      # the mk style adds "MK.n" in front
+			guarded_act(a, "%s: %s?" % [str(f["action_label"]), str(a.get("name", ""))], str(a.get("name", ""))), "mk%d" % tier, allowed)
+		acts.add_child(b)
+		if not allowed:
+			acts.add_child(_lbl("read-only mode is on" if cluster.read_only else ("above your tool tier here" if tier > cluster.max_tier(str(a.get("ns", ""))) else "not supported by this source"), 12, DIM))
+	if acts.get_child_count() > 0:
+		v.add_child(acts)
+	return pc
+
+func _krew_export(fmt: String) -> void:
+	var stamp = Time.get_datetime_string_from_system(false).replace(":", "").replace("-", "").replace("T", "-")
+	var path = cluster.log_dir.path_join("krew-report-%s.%s" % [stamp, fmt])
+	var f = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		notify("Could not write " + path, "bad")
+		return
+	f.store_string(krew.report_markdown() if fmt == "md" else krew.report_json())
+	f.close()
+	notify("Saved to " + path, "ok")

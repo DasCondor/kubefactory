@@ -136,6 +136,8 @@ func run_action(a: Dictionary) -> Dictionary:
 	var special = _app_action(a)
 	if not special.is_empty():
 		return special
+	if a["op"] in ["cleanup_scan", "remove_image"]:
+		return {"ok": false, "kind": "unsupported", "data": {}, "msg": "Images live in each node's container runtime; the Kubernetes API does not list which ones are unused."}
 	if a["op"] == "logs" and a.get("provider", "kube") != "kube":
 		var lr = LogSources.fetch(a["provider"], a, log_cfg, context)
 		return {"ok": lr.ok, "msg": "", "text": lr.text}
