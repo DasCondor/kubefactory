@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- A page for testing LiveView: it has to be a real page with real script,
+     so the test can tell a live, interactive rendering from a picture. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>KubeFactory LiveView test</title>
+<style>
+  body { margin: 0; background: #10151c; color: #e8eef5; font: 20px system-ui, sans-serif; }
+  #box { position: absolute; left: 40px; top: 40px; width: 300px; height: 200px; background: #d62828; }
+  #btn { position: absolute; left: 40px; top: 280px; width: 200px; height: 60px; font-size: 20px; }
+  #txt { position: absolute; left: 40px; top: 380px; width: 400px; height: 40px; font-size: 20px; }
+  #out { position: absolute; left: 40px; top: 460px; }
+  #clock { position: absolute; left: 400px; top: 40px; font: 64px monospace; }
+  #bar { position: absolute; left: 400px; top: 140px; height: 30px; background: #f99549; }
+</style>
+</head>
+<body>
+<div id="box"></div>
+<button id="btn">Click me</button>
+<input id="txt" placeholder="type here">
+<a id="out" href="http://example.org/">a link to another host</a>
+<div id="clock">0</div>
+<div id="bar"></div>
+<script>
+  let clicks = 0, n = 0;
+  document.getElementById('btn').onclick = () => {
+    clicks++;
+    document.getElementById('box').style.background = '#2a9d43';
+    document.getElementById('btn').textContent = 'Clicked ' + clicks;
+  };
+  setInterval(() => {
+    n++;
+    document.getElementById('clock').textContent = n;
+    document.getElementById('bar').style.width = (20 + (n * 12) % 500) + 'px';
+  }, 100);
+</script>
+</body>
+</html>

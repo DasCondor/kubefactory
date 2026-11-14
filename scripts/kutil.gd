@@ -139,6 +139,98 @@ static func issues(st: Dictionary) -> Array:
 	out.sort_custom(func(a, b): return ("0" if a["sev"] == "bad" else "1") + a["name"] < ("0" if b["sev"] == "bad" else "1") + b["name"])
 	return out
 
+# `ls -la` output (POSIX long format) -> [{name, type: dir|file|link|other, size, mode, owner, group, mtime, link}]
+static func parse_ls(text: String) -> Array:
+	var out = []
+	for ln in text.split("\n"):
+		var f = ln.split(" ", false)
+		if f.size() < 9 or f[0].length() < 10:
+			continue
+		var rest = ln
+		for i in 8:
+			rest = rest.lstrip(" ")
+			var j = rest.find(" ")
+			if j >= 0:
+				rest = rest.substr(j)
+		var name = rest.lstrip(" ")
+		if name in [".", "..", ""]:
+			continue
+		var e = {"name": name, "type": "other", "size": f[4].to_int(), "mode": f[0], "owner": f[2], "group": f[3], "mtime": "%s %s %s" % [f[5], f[6], f[7]], "link": ""}
+		match f[0][0]:
+			"d":
+				e["type"] = "dir"
+			"-":
+				e["type"] = "file"
+			"l":
+				e["type"] = "link"
+				var k = name.find(" -> ")
+				if k >= 0:
+					e["link"] = name.substr(k + 4)
+					e["name"] = name.substr(0, k)
+		out.append(e)
+	return out
+
+static func fmt_bytes(n: float) -> String:
+	if n < 1024.0:
+		return "%d B" % int(n)
+	if n < 1048576.0:
+		return "%.1f KiB" % (n / 1024.0)
+	if n < 1073741824.0:
+		return "%.1f MiB" % (n / 1048576.0)
+	return "%.2f GiB" % (n / 1073741824.0)
+
+# Tables: keep the rows that contain `filter` in any column, then order them by
+# one column. getters: {column id: Callable(row) -> value}. Numbers sort as
+# numbers, everything else as text without regard to case; rows that compare
+# equal keep the order they came in. A table of TABLE_LIMIT rows or more is
+# handed back untouched: it is too long to sort and filter on every keystroke.
+const TABLE_LIMIT = 10000
+
+static func table_rows(rows: Array, col: String, desc: bool, filter: String, getters: Dictionary) -> Array:
+	if rows.size() >= TABLE_LIMIT:
+		return rows
+	var want = filter.strip_edges().to_lower()
+	var kept = []
+	for i in rows.size():
+		var r = rows[i]
+		if want != "":
+			var hit = false
+			for id in getters:
+				if str(getters[id].call(r)).to_lower().contains(want):
+					hit = true
+					break
+			if not hit:
+				continue
+		kept.append([r, i])
+	if col != "" and getters.has(col):
+		var g: Callable = getters[col]
+		kept.sort_custom(func(a, b):
+			var x = g.call(a[0])
+			var y = g.call(b[0])
+			var numbers = typeof(x) in [TYPE_INT, TYPE_FLOAT] and typeof(y) in [TYPE_INT, TYPE_FLOAT]
+			if not numbers:
+				x = str(x).to_lower()
+				y = str(y).to_lower()
+			if x == y:
+				return a[1] < b[1]
+			return (x > y) if desc else (x < y))
+	var out = []
+	for k in kept:
+		out.append(k[0])
+	return out
+
+# A path inside a mounted volume, cleaned: "" if it would leave the mount.
+static func path_inside(root: String, rel: String) -> String:
+	var parts = []
+	for seg in rel.replace("\\", "/").split("/", false):
+		if seg == ".":
+			continue
+		if seg == "..":
+			return ""
+		parts.append(seg)
+	var base = root.rstrip("/")
+	return (base if base != "" else "/") if parts.is_empty() else base + "/" + "/".join(PackedStringArray(parts))
+
 static func health_color(h: String) -> Color:
 	match h:
 		"ok":
@@ -284,7 +376,7 @@ static func selects(selector: Dictionary, labels: Dictionary) -> bool:
 # How dangerous an action is (1 safe .. 5 critical). Matches the tool tiers.
 static func tier_of(a: Dictionary, state: Dictionary) -> int:
 	match a["op"]:
-		"logs", "events", "cluster_events", "templates", "portainer_open":
+		"logs", "events", "cluster_events", "templates", "portainer_open", "file_mounts", "file_list", "file_read", "forward":
 			return 1
 		"create", "apply_app", "deploy_template", "portainer_install":
 			return 2
@@ -350,7 +442,7 @@ static func read_json(path: String) -> Variant:
 
 # ---- per-user settings (kept in the user folder, survive upgrades)
 static func load_settings() -> Dictionary:
-	var s = {"fullscreen": false, "muted": false, "sensitivity": 1.0, "welcomed": false, "belts": true}
+	var s = {"fullscreen": false, "muted": false, "sensitivity": 1.0, "welcomed": false, "belts": true, "graphics": "auto"}
 	var d = read_json(OS.get_user_data_dir().path_join("settings.json"))
 	if typeof(d) == TYPE_DICTIONARY:
 		for k in d:

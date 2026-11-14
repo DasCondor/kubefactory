@@ -1,0 +1,76 @@
+# Changelog
+
+## 2.0.0-dev (unreleased, branch `feature/kubefactory-2.0`)
+
+Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
+against live infrastructure.
+
+### Added
+- **Native Kubernetes connectivity.** A small companion program (`kf-agent`)
+  reads your kubeconfig and talks to the cluster directly. `kubectl` is no
+  longer needed. A connection wizard lists kubeconfig files and contexts,
+  takes a dropped file or pasted text, and explains failures in plain words.
+- **Model library (V8).** 25 machine models, Porter and Bob from the supplied
+  library, at Standard, Enhanced and Ultra detail. Machines show their type on
+  a plate, the real pod name and container list on their own displays, and
+  have sealed housings with a hinged storage door.
+- **Opening doors and storage inspection** (key `F`). Machines with a door open
+  it; inside are the pod's volumes. Browse them read-only: folders, text and
+  hex previews, 64 KiB at a time.
+- **LiveView** (key `V`). An application's real web page on a screen in the
+  world or in a window, with working mouse and keyboard.
+- **V6 handheld tools** in first person: each tool's own display faces you and
+  shows the tool, its target and what the trigger would do.
+- **Asset reviewer** at `model-viewer/` on the Pages site (after merge).
+- **Grafana and Tautulli providers** for LiveView: pick a dashboard or panel;
+  see Plex activity as totals and pin it to a machine. Tokens are sealed by
+  Windows and never reach the game.
+- **Machine screens with four views**: dashboard, metrics, logs and storage.
+  `R` steps through them; clicking a screen (or `V` on the machine) opens it
+  full size.
+- **Application icons** beside each machine's name.
+- **Sortable tables**: click a column heading to sort, type in CONTAINS to
+  filter (workloads, clusters, storage files, Grafana dashboards and panels).
+- **Bob's and Porter's portraits** show their current models.
+- **Usage graphs** in the Metrics view: CPU, memory, network and disk I/O,
+  from the cluster's metrics API or `docker stats`; unavailable figures say so.
+- **Touch controls for the browser demo**: joystick, drag to look, a context
+  ACTION button, jump, aim, a tool bar and a menu, in landscape and portrait.
+- **Demo screens:** in the simulated worlds, Grafana machines show a dashboard
+  of the simulated cluster's figures and Plex / Tautulli machines show
+  simulated streams, each marked SIMULATED. Works in the browser demo.
+- `tools/model_audit.gd` and `docs/MODEL_AUDIT.md`.
+- `tools/live-test.ps1`: runs the companion against a real, disposable
+  kube-apiserver without Docker.
+- `KUBECONFIG` is honoured the way kubectl does.
+- `KubeFactory.exe --kubeconfig <file>`: one step from download to a cluster.
+- `docs/ARCHITECTURE.md`, `FEATURE_PARITY.md`, `KNOWN_LIMITATIONS.md`.
+
+### Fixed
+- Storage inspection followed a link that sat inside a volume: a linked file
+  (and, on Docker, a linked folder) was read through to wherever it pointed.
+  Links are now never followed. Found by the new live tests.
+- A stopped Docker container no longer shows usage figures of zero.
+
+### Changed
+- A machine's model is chosen truthfully: pods are PODs, containers are
+  CONTAINERs, and a role model is used only when the image is that software
+  (a CoreDNS pod pulled from registry.k8s.io is no longer a "registry").
+- Machine screens are neutral with a small status line; health colours the
+  beacon only. The selection highlight is thin corner brackets.
+- The text under the crosshair sits below the screen being read; floating
+  names show only from a distance.
+- Code-drawn machines (the browser build): the oversized fan is replaced by a
+  small fan and vent, and the screen is twice as wide.
+- Kubernetes uses the companion by default; `--kubectl-cli` keeps the old path.
+- The StatefulSet and database-server display fault of the first library is
+  gone in V6; the load-time correction for it was removed.
+- Release builds need Go (for the companion); the workflow installs it.
+
+### Unchanged
+- Docker engine support, the simulated worlds, the browser demo, tools, tiers,
+  Porter's setups, Bob's diagnoses and the graphics presets.
+
+## 1.0.1
+- Graphics presets (Standard, Enhanced, Ultra) and the benchmark.
+- Four demo worlds, per-service belt tracks, Bob 2.0.

@@ -6,3 +6,8 @@ dist/*
 !dist/.gdignore
 # Godot's import cache
 .godot/
+
+# local build toolchains and the native companion's build output
+.toolchain/
+agent/bin/
+

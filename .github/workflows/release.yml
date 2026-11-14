@@ -41,6 +41,16 @@ jobs:
           tar -xf tpl.zip -C $dst --strip-components=1 "templates/windows_*_x86_64*.exe" templates/version.txt
           Remove-Item godot.zip, tpl.zip
 
+      # the native companion (agent/) is built by tools/package.ps1 and needs Go
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      - name: Companion tests
+        shell: pwsh
+        run: ./tools/build-agent.ps1 -Test
+
       - name: Test, export and zip
         shell: pwsh
         run: ./tools/package.ps1

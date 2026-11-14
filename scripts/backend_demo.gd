@@ -9,7 +9,7 @@ const GI = 1073741824.0
 var label = "simulation"
 var poll_interval = 1.0
 var caps = {"scale": true, "delete_pod": true, "restart": true, "delete_workload": true,
-	"create": true, "cordon": true, "drain": true, "logs": true}
+	"create": true, "cordon": true, "drain": true, "logs": true, "files": true}
 var context = "helmsman-sim"
 
 var _mx = Mutex.new()
@@ -403,7 +403,126 @@ func _find_wl(ns: String, kind: String, wname: String) -> Variant:
 			return w
 	return null
 
+# ---- simulated storage: what the storage doors show in the demo worlds.
+# Everything here is invented and says so; it stands in for the real listing a
+# live cluster gives, so the door, the browser and its limits can be tried safely.
+
+func _sim_mounts(p: Dictionary) -> Array:
+	var w = p["wl"]
+	var c = str(w["containers"][0][0])
+	var res = []
+	var img = str(w["containers"][0][1]).to_lower()
+	var data_dirs = {"postgres": "/var/lib/postgresql/data", "mysql": "/var/lib/mysql", "mariadb": "/var/lib/mysql", "redis": "/data", "prometheus": "/prometheus",
+		"grafana": "/var/lib/grafana", "influxdb": "/var/lib/influxdb2", "minio": "/data", "registry": "/var/lib/registry", "gitea": "/data", "plex": "/config", "homeassistant": "/config"}
+	for key in data_dirs:
+		if img.contains(key) or str(w["name"]).contains(key):
+			res.append({"container": c, "path": data_dirs[key], "read_only": false, "volume": "data", "type": "pvc", "claim": "%s-data" % w["name"],
+				"pv": "pvc-%s" % str(p["uid"]).md5_text().left(8), "storage_class": "standard", "capacity": "10Gi", "phase": "Bound", "readable": true, "running": p["st"] == "Running"})
+			break
+	res.append({"container": c, "path": "/etc/%s" % w["name"], "read_only": true, "volume": "config", "type": "configmap", "claim": "", "readable": true, "running": p["st"] == "Running"})
+	res.append({"container": c, "path": "/var/run/secrets/kubernetes.io/serviceaccount", "read_only": true, "volume": "kube-api-access", "type": "projected", "claim": "", "readable": false, "running": p["st"] == "Running"})
+	return res
+
+func _sim_files(a: Dictionary) -> Dictionary:
+	var pod = null
+	for p in _pods:
+		if p["name"] == a["name"] and p["wl"]["ns"] == a["ns"]:
+			pod = p
+	if pod == null:
+		return {"ok": false, "kind": "notfound", "msg": "pod not found", "data": {}}
+	var mounts = _sim_mounts(pod)
+	if a["op"] == "file_mounts":
+		return {"ok": true, "msg": "", "kind": "", "data": {"mounts": mounts, "simulated": true}}
+	var m = null
+	for x in mounts:
+		if x["path"] == a["root"]:
+			m = x
+	if m == null:
+		return {"ok": false, "kind": "invalid", "msg": "%s is not a mounted volume of this container" % a["root"], "data": {}}
+	if not m["running"]:
+		return {"ok": false, "kind": "unsupported", "msg": "The container is not running, so its files cannot be read.", "data": {}}
+	var full = K.path_inside(a["root"], str(a.get("path", "")))
+	if full == "":
+		return {"ok": false, "kind": "invalid", "msg": "That path is outside the mounted volume.", "data": {}}
+	var rel = full.trim_prefix(str(a["root"]).rstrip("/")).trim_prefix("/")
+	# a small invented tree per kind of volume
+	var tree = {}
+	match m["type"]:
+		"pvc":
+			tree = {"": [["base", "dir", 4096], ["pg_wal", "dir", 4096], ["PG_VERSION", "file", 3], ["postgresql.conf", "file", 29525], ["postmaster.pid", "file", 94], ["current", "link", 9]],
+				"base": [["1", "dir", 4096], ["16384", "dir", 4096]], "base/1": [["1259", "file", 122880], ["2619", "file", 81920]], "base/16384": [["16385", "file", 8192]],
+				"pg_wal": [["000000010000000000000001", "file", 16777216]]}
+		"configmap":
+			tree = {"": [["config.yaml", "file", 412], ["logging.yaml", "file", 180]]}
+		_:
+			tree = {"": [["ca.crt", "file", 1107], ["namespace", "file", 4], ["token", "file", 1024]]}
+	if a["op"] == "file_list":
+		if not tree.has(rel):
+			return {"ok": false, "kind": "notfound", "msg": "%s is not a directory" % full, "data": {}}
+		var es = []
+		for row in tree[rel]:
+			es.append({"name": row[0], "type": row[1], "size": row[2], "mode": {"dir": "drwxr-xr-x", "file": "-rw-r--r--", "link": "lrwxrwxrwx"}[row[1]], "owner": "999", "group": "999",
+				"mtime": "Nov 13 21:19", "link": "/etc/passwd" if row[1] == "link" else ""})
+		return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "entries": es, "truncated": false, "readable": m["readable"], "simulated": true}}
+	if not m["readable"]:
+		return {"ok": false, "kind": "unsupported", "msg": "This is a %s volume: its contents are never shown." % m["type"], "data": {}}
+	var dir = rel.get_base_dir()
+	var fname = rel.get_file()
+	var found = null
+	for row in tree.get(dir, []):
+		if row[0] == fname:
+			found = row
+	if found == null or found[1] != "file":
+		return {"ok": false, "kind": "invalid", "msg": "Only regular files can be previewed (links and devices are not followed).", "data": {}}
+	var page = clampi(int(a.get("page", 0)), 0, 255)
+	var bytes = PackedByteArray()
+	if fname.ends_with(".yaml") or fname.ends_with(".conf") or fname == "PG_VERSION" or fname.ends_with(".pid"):
+		bytes = ("# SIMULATED FILE - invented by the demo, not read from anywhere\n# %s\n\nlisten_addresses = '*'\nmax_connections = 100\nshared_buffers = 128MB\nlog_min_messages = warning\n" % full).to_utf8_buffer() if page == 0 else PackedByteArray()
+	else:
+		var r = RandomNumberGenerator.new()
+		r.seed = (full + str(page)).hash()
+		bytes.resize(mini(int(found[2]) - page * 65536, 65536) if int(found[2]) > page * 65536 else 0)
+		for i in bytes.size():
+			bytes[i] = r.randi() % 256
+	return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "size": int(found[2]), "page": page, "pages": mini(int(ceil(int(found[2]) / 65536.0)), 256),
+		"data": Marshalls.raw_to_base64(bytes), "simulated": true}}
+
+# Simulated usage for one pod: it wanders around a share of what the pod asks
+# for, and its counters only ever go up, as real ones do.
+func _sim_metrics(a: Dictionary) -> Dictionary:
+	for p in _pods:
+		if p["name"] == a["name"] and p["wl"]["ns"] == a["ns"]:
+			if p["st"] != "Running":
+				return {"ok": false, "kind": "unsupported", "msg": "This pod is not running, so it is using nothing.", "data": {}}
+			var t = Time.get_ticks_msec() / 1000.0
+			var seed = float(hash(p["name"]) % 1000) / 37.0
+			var busy = 0.42 + 0.22 * sin(t / 9.0 + seed) + 0.1 * sin(t / 2.3 + seed * 2.0)
+			var c = p.get("_ctr", {"rx": 0.0, "tx": 0.0, "rd": 0.0, "wr": 0.0, "t": t})
+			var dt = maxf(t - float(c["t"]), 0.0)
+			c["rx"] += dt * (60000.0 + 240000.0 * busy)
+			c["tx"] += dt * (25000.0 + 90000.0 * busy)
+			c["rd"] += dt * 12000.0 * busy
+			c["wr"] += dt * (8000.0 + 30000.0 * busy)
+			c["t"] = t
+			p["_ctr"] = c
+			return {"ok": true, "msg": "", "kind": "", "data": {"cpu_cores": float(p["cpu"]) * busy, "mem_bytes": float(p["mem"]) * (0.55 + 0.12 * sin(t / 31.0 + seed)),
+				"net_rx_bytes": c["rx"], "net_tx_bytes": c["tx"], "disk_read_bytes": c["rd"], "disk_write_bytes": c["wr"],
+				"at": Time.get_datetime_string_from_system(true) + "Z", "source": "simulation", "simulated": true}}
+	return {"ok": false, "kind": "notfound", "msg": "pod not found", "data": {}}
+
 func run_action(a: Dictionary) -> Dictionary:
+	if a["op"] == "pod_metrics":
+		_mx.lock()
+		var mres = _sim_metrics(a)
+		_mx.unlock()
+		return mres
+	if a["op"] in ["file_mounts", "file_list", "file_read"]:
+		_mx.lock()
+		var fr = _sim_files(a)
+		_mx.unlock()
+		return fr
+	if a["op"] == "forward":
+		return {"ok": false, "kind": "unsupported", "msg": "This is a simulated cluster: there is no real application behind this service to show.", "data": {}}
 	if a["op"] == "templates":
 		var tr = Apps.fetch_templates(a.get("catalog", {}))
 		return {"ok": tr.ok, "msg": "", "text": tr.text}

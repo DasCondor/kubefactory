@@ -3,6 +3,7 @@ extends Node3D
 
 const K = preload("res://scripts/kutil.gd")
 const Tex = preload("res://scripts/tex.gd")
+const Gfx = preload("res://scripts/gfx.gd")
 
 const PITCH = 8.0
 const COLS = 4
@@ -108,6 +109,71 @@ func set_rows(r: int) -> void:
 	_mesh(Vector3(WIDTH + 0.5, 0.45, depth + 0.5), Tex.shared("dark"), Vector3(0, 0.225, -depth / 2.0), _slab)
 	_mesh(Vector3(WIDTH, 0.04, 0.5), Tex.shared("orange"), Vector3(0, HEIGHT + 0.02, -0.3), _slab)
 	_solid(Vector3(WIDTH, HEIGHT, depth), c, {"type": "platform", "node": node_name}, _slab)
+	if Gfx.occlusion():
+		# the slab hides the ground and anything low behind it from the renderer
+		var occ = OccluderInstance3D.new()
+		var bo = BoxOccluder3D.new()
+		bo.size = Vector3(WIDTH, HEIGHT, depth)
+		occ.occluder = bo
+		occ.position = c
+		_slab.add_child(occ)
+	if Gfx.detail() >= 1:
+		_dress(_slab, Gfx.detail())
+
+# Enhanced: safety railings round three sides and floor markings. Ultra adds lit
+# edge strips and two floodlights on the gantry. Decorative only (no collision).
+func _dress(parent: Node3D, lod: int) -> void:
+	var steel = Tex.shared("steel")
+	var hw = WIDTH / 2.0 - 0.15
+	var posts = []
+	var n_side = int(depth / 4.0) + 1
+	for i in n_side:
+		for sx in [-hw, hw]:
+			posts.append(Vector3(sx, HEIGHT + 0.55, -0.4 - i * (depth - 0.8) / maxf(n_side - 1, 1)))
+	var n_back = int(WIDTH / 4.0) + 1
+	for i in n_back:
+		posts.append(Vector3(-hw + i * (2.0 * hw) / (n_back - 1), HEIGHT + 0.55, -depth + 0.15))
+	var mm = MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var pm = BoxMesh.new()
+	pm.size = Vector3(0.08, 1.1, 0.08)
+	pm.material = steel
+	mm.mesh = pm
+	mm.instance_count = posts.size()
+	for i in posts.size():
+		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, posts[i]))
+	var mi = MultiMeshInstance3D.new()
+	mi.multimesh = mm
+	mi.visibility_range_end = 170.0
+	mi.visibility_range_end_margin = 20.0
+	mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	parent.add_child(mi)
+	for h in [0.55, 1.08]:
+		for sx in [-hw, hw]:
+			_mesh(Vector3(0.05, 0.05, depth - 0.6), steel, Vector3(sx, HEIGHT + h, -depth / 2.0 - 0.1), parent)
+		_mesh(Vector3(2.0 * hw, 0.05, 0.05), steel, Vector3(0, HEIGHT + h, -depth + 0.15), parent)
+	# painted lane lines between the machine rows
+	for r in range(1, rows):
+		_mesh(Vector3(WIDTH - 3.0, 0.02, 0.14), Tex.mat(Color(0.93, 0.89, 0.78), 0.8), Vector3(0, HEIGHT + 0.012, -r * PITCH - 2.0), parent)
+	if lod >= 2:
+		var strip = Tex.glow(Tex.ORANGE, 1.4)
+		for sx in [-WIDTH / 2.0, WIDTH / 2.0]:
+			_mesh(Vector3(0.06, 0.06, depth), strip, Vector3(sx * 1.003, HEIGHT - 0.12, -depth / 2.0), parent)
+		_mesh(Vector3(WIDTH, 0.06, 0.06), strip, Vector3(0, HEIGHT - 0.12, -depth - 0.03), parent)
+		for sx in [-7.5, 7.5]:
+			_mesh(Vector3(0.9, 0.3, 0.5), Tex.shared("dark"), Vector3(sx, 5.45, 0.75), parent)
+			_mesh(Vector3(0.7, 0.06, 0.34), Tex.glow(Color(1.0, 0.92, 0.75), 3.0), Vector3(sx, 5.29, 0.72), parent)
+			var sp = SpotLight3D.new()
+			sp.position = Vector3(sx, 5.2, 0.6)
+			sp.rotation = Vector3(deg_to_rad(-62.0), 0, 0)
+			sp.light_color = Color(1.0, 0.9, 0.72)
+			sp.light_energy = 3.0
+			sp.spot_range = 26.0
+			sp.spot_angle = 48.0
+			sp.distance_fade_enabled = true
+			sp.distance_fade_begin = 110.0
+			sp.distance_fade_length = 30.0
+			parent.add_child(sp)
 
 func slot_pos(i: int) -> Vector3:
 	var col = i % COLS
