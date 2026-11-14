@@ -245,7 +245,7 @@ func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
 			if ctx != "":
 				note += "Kubernetes: no saved kubeconfig has a context named %s. " % ctx
 			elif profile == "cli":
-				var cp = Connections.cli_path
+				var cp = K.tidy_path(Connections.cli_path)
 				note += "Kubernetes: %s. " % (("%s was not found" % cp) if not FileAccess.file_exists(cp) else ("%s is not a kubeconfig with a context in it" % cp))
 			elif mode == "kubernetes":
 				note += "Kubernetes: no kubeconfig added yet (Esc > Clusters > Add a kubeconfig). "

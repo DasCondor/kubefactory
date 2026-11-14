@@ -179,6 +179,19 @@ static func fmt_bytes(n: float) -> String:
 		return "%.1f MiB" % (n / 1048576.0)
 	return "%.2f GiB" % (n / 1073741824.0)
 
+# A path as it is shown on screen: the user's own folder is written as "~", so
+# a screenshot or a shared screen never gives away the account name.
+static func tidy_path(p: String, home: String = "") -> String:
+	if home == "":
+		home = OS.get_environment("USERPROFILE")
+		if home == "":
+			home = OS.get_environment("HOME")
+	var a = p.replace("\\", "/")
+	var h = home.replace("\\", "/").rstrip("/")
+	if h != "" and (a.to_lower() == h.to_lower() or a.to_lower().begins_with(h.to_lower() + "/")):
+		return "~" + a.substr(h.length())
+	return p
+
 # Tables: keep the rows that contain `filter` in any column, then order them by
 # one column. getters: {column id: Callable(row) -> value}. Numbers sort as
 # numbers, everything else as text without regard to case; rows that compare
