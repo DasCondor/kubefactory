@@ -41,6 +41,7 @@ var last_connect_error = {}
 var detecting = false
 # Every cluster we know how to reach: [{source, context, provider}]
 var targets = []
+var finding_targets = false
 var audit_lines = []
 var log_dir = ""
 # multi-user
@@ -59,6 +60,7 @@ var _threads = []
 var _fetching = false
 var _timer = 0.0
 var _gen = 0
+var _find_seq = 0
 var _last_error = ""
 
 func _ready() -> void:
@@ -174,6 +176,8 @@ static func describe(a: Dictionary) -> String:
 
 func start(mode: String, ctx: String = "", profile: String = "") -> void:
 	_gen += 1
+	_find_seq += 1
+	finding_targets = false
 	if backend != null and backend.has_method("cleanup"):
 		_spawn(backend.cleanup)   # closes its session and forwards; off the main thread
 	backend = null
@@ -194,16 +198,11 @@ func _spawn(c: Callable) -> void:
 	t.start(c)
 	_threads.append(t)
 
-func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
-	var b = null
-	var note = ""
+func _gather_targets(include_local: bool) -> Dictionary:
 	var list = []
-	var failure = {}
-	# the browser build and the demo edition run the simulations only; the docker
-	# edition offers the local engine (and the simulations, to have somewhere to
-	# go when the engine is off) but never runs kubectl
 	var sim_only = OS.has_feature("web") or edition == "demo"
-	var use_kube = not sim_only and edition != "docker"
+	include_local = include_local and not sim_only
+	var use_kube = include_local and edition != "docker"
 	var native = use_kube and native_kube()
 	var profs = Connections.profiles() if native else []
 	if native:
@@ -218,14 +217,47 @@ func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
 		for c in Kube.list_contexts():
 			list.append({"source": "kubernetes", "context": c["context"], "provider": c["provider"]})
 	var d = Docker.new()
-	var dr = {"ok": false, "msg": "not available in this edition"} if sim_only else d.probe()
+	var dr = d.probe() if include_local else {"ok": false, "msg": "local discovery not requested"}
 	if dr.ok:
 		list.append({"source": "docker", "context": d.context, "provider": "Docker Engine"})
 	for f in Demo.FLAVORS:
 		list.append({"source": "simulation", "context": f, "provider": Demo.FLAVORS[f]["provider"]})
+	return {"list": list, "docker": d, "docker_result": dr, "native": native, "use_kube": use_kube}
+
+# Discover local infrastructure only when the player asks from the switcher.
+func discover_targets() -> void:
+	if detecting or backend == null or finding_targets or OS.has_feature("web") or edition == "demo":
+		return
+	finding_targets = true
+	_find_seq += 1
+	_spawn(_discover_targets.bind(_gen, _find_seq))
+
+func _discover_targets(gen: int, seq: int) -> void:
+	var found = _gather_targets(true)
+	_targets_discovered.call_deferred(found["list"], gen, seq)
+
+func _targets_discovered(list: Array, gen: int, seq: int) -> void:
+	if gen != _gen or seq != _find_seq:
+		return
+	finding_targets = false
+	targets = list
+	targets_changed.emit()
+
+func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
+	var b = null
+	var note = ""
+	var failure = {}
+	# Explicit simulations do not inspect kubeconfigs or probe the local engine.
+	var sim_only = OS.has_feature("web") or edition == "demo"
 	if sim_only and mode != "simulation":
 		mode = "simulation"
 		ctx = ""
+	var found = _gather_targets(mode != "simulation")
+	var list: Array = found["list"]
+	var d = found["docker"]
+	var dr: Dictionary = found["docker_result"]
+	var native: bool = found["native"]
+	var use_kube: bool = found["use_kube"]
 	if native and (mode == "kubernetes" or mode == "auto"):
 		# which context: the one asked for, else the current context of the first kubeconfig
 		var pick = {}
@@ -458,7 +490,7 @@ func _action_finished(a: Dictionary, r: Dictionary, gen: int) -> void:
 	if backend.has_method("post_event") and backend.presence_ok:
 		_spawn(_post_event.bind(backend, summary, r.ok))
 	var hook = str(local_policy.get("audit_webhook", ""))
-	if hook.begins_with("https://"):
+	if backend.label != "simulation" and hook.begins_with("https://"):
 		_spawn(_webhook.bind(hook, JSON.stringify({"text": summary, "user": user_name(), "source": state["source"],
 			"context": state["context"], "action": describe(a), "ok": r.ok, "result": str(r.msg), "tier": K.tier_of(a, state),
 			"time": Time.get_datetime_string_from_system(true) + "Z"})))

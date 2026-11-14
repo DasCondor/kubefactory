@@ -47,6 +47,10 @@ against live infrastructure.
 - `docs/ARCHITECTURE.md`, `FEATURE_PARITY.md`, `KNOWN_LIMITATIONS.md`.
 
 ### Fixed
+- An explicitly selected desktop simulation no longer probes Docker, discovers
+  kubeconfigs or restores real provider screens on startup. Local connection
+  discovery is available from the cluster switcher. Simulated actions no longer
+  send audit webhooks or fetch online app lists.
 - The companion and its pipe reader now shut down cleanly when the game exits,
   including while a LiveView browser is open.
 - Clicking a machine's display now aims at the display itself instead of the

@@ -180,7 +180,7 @@ func clear() -> void:
 
 # Put saved pins back on the machines of the current connection as they appear.
 func restore(state: Dictionary) -> void:
-	if not available() or world == null:
+	if state.get("source", "") == "simulation" or not available() or world == null:
 		return
 	var saved = _saved()
 	for uid in pins.keys():
@@ -194,8 +194,9 @@ func restore(state: Dictionary) -> void:
 		if pins.has(uid) or not saved.has(key) or not world.machines.has(uid):
 			continue
 		var want = str(saved[key].get("provider", ""))
+		var gen = cluster._gen if cluster != null else -1
 		ask("provider.list", {}, func(r):
-			if not r["ok"] or pins.has(uid):
+			if cluster == null or cluster._gen != gen or cluster.backend == null or cluster.backend.label == "simulation" or not r["ok"] or pins.has(uid):
 				return
 			for pr in r["data"].get("providers", []):
 				if str(pr["id"]) == want and str(pr["type"]) == "tautulli":
