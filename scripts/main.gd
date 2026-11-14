@@ -122,8 +122,15 @@ func _ready() -> void:
 	var shots = ""
 	var mptest = ""
 	var flyby = false
+	# Two packaged editions share this code (export presets "Windows Docker" and
+	# "Windows Demo" set the feature tag; --edition= does the same from source):
+	#   docker  opens on the local Docker engine and never touches kubectl
+	#   demo    the full game on the built-in simulated clusters only
+	var edition = "docker" if OS.has_feature("docker_edition") else ("demo" if OS.has_feature("demo_edition") else "")
 	for a in OS.get_cmdline_user_args():
-		if a == "--demo":
+		if a.begins_with("--edition="):
+			edition = a.trim_prefix("--edition=")
+		elif a == "--demo":
 			source = "simulation"
 		elif a == "--kubectl":
 			source = "kubernetes"
@@ -141,6 +148,9 @@ func _ready() -> void:
 			shots = a.trim_prefix("--shots=")
 		elif a == "--flyby":
 			flyby = true
+		elif a == "--trailer":
+			shots = "-"
+			_run_trailer()
 		elif a.begins_with("--toolshots="):
 			shots = "-"
 			_run_toolshots(a.trim_prefix("--toolshots="))
@@ -161,6 +171,15 @@ func _ready() -> void:
 	world.show_belts = bool(settings["belts"])
 	if OS.has_feature("web"):
 		source = "simulation"   # a browser cannot run kubectl or docker
+	elif edition == "demo":
+		source = "simulation"
+		get_window().title = "KubeFactory Demo"
+	elif edition == "docker":
+		if source != "simulation":
+			source = "docker"
+			ctx = ""
+		get_window().title = "KubeFactory Docker"
+	cluster.edition = edition
 	if shots == "" and mptest == "" and not flyby:
 		sfx.set_muted(bool(settings["muted"]))
 		if bool(settings["fullscreen"]):
@@ -880,6 +899,76 @@ func _run_flyby() -> void:
 			var k = smoothstep(0.0, 1.0, t)
 			player.teleport(path[i - 1][0].lerp(path[i][0], k), path[i - 1][1].lerp(path[i][1], k))
 			await get_tree().process_frame
+	get_tree().quit()
+
+# ---- dev: a ~35 s scripted tour for a video. Record it with Godot's movie writer:
+#   Godot --path . --write-movie out.avi --fixed-fps 60 --resolution 1920x1080 -- --demo --trailer
+
+func _glide(a: Array, b: Array, secs: float) -> void:
+	var t = 0.0
+	while t < 1.0:
+		t += get_process_delta_time() / secs
+		var k = smoothstep(0.0, 1.0, t)
+		player.teleport(a[0].lerp(b[0], k), a[1].lerp(b[1], k))
+		await get_tree().process_frame
+
+func _run_trailer() -> void:
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	sfx.set_muted(true)
+	player.flying = true
+	player.enabled = false
+	var spawn = [Vector3(0, 0.6, 26), Vector3(0, 4.2, 0)]
+	player.teleport(spawn[0], spawn[1])
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	await get_tree().create_timer(2.5).timeout
+	var bad = ""
+	for p in cluster.state["pods"]:
+		if p["health"] == "bad":
+			bad = p["uid"]
+			break
+	var hub = [Vector3(0, 0.6, 13), Vector3(0, 4.2, 0)]
+	var over = [Vector3(-46, 30, 8), Vector3(0, 2, -66)]
+	var row = [Vector3(-52, 9, -30), Vector3(-27, 3, -58)]
+	var row_end = [Vector3(40, 11, -30), Vector3(27, 3, -60)]
+	await _glide(spawn, hub, 3.5)
+	await get_tree().create_timer(0.8).timeout
+	await _glide(hub, over, 4.0)
+	await get_tree().create_timer(0.8).timeout
+	await _glide(over, row, 3.5)
+	await _glide(row, row_end, 5.5)
+	var last = row_end
+	var spot = world.machine_spot(bad)
+	if spot != null:
+		var at = [spot[1] + Vector3(6.5, 1.2, 9.5), spot[1] + Vector3(0, 0.6, 0)]
+		await _glide(row_end, at, 3.5)
+		last = at
+		# show off the six tools, then wind the dismantler up on the failing machine
+		for i in [1, 2, 3, 5, 4]:
+			_set_mode(i)
+			await get_tree().create_timer(0.9).timeout
+		var t = 0.0
+		while t < 1.0:
+			t += get_process_delta_time() / 1.6
+			_charge_test = clampf(t, 0.01, 1.0)
+			await get_tree().process_frame
+		_charge_test = 0.0
+		player.tool_kick(1.0)
+		await get_tree().create_timer(0.8).timeout
+		_set_mode(0)
+		hud.open_pod(bad)
+		await get_tree().create_timer(3.0).timeout
+		hud.close_modal()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	hud.open_codex()
+	await get_tree().create_timer(2.5).timeout
+	hud.close_modal()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var dock = [Vector3(12.5, 0.6, 17.5), Vector3(11.5, 2.2, 9)]
+	await _glide(last, [Vector3(30, 14, 4), Vector3(12, 2, 0)], 3.0)
+	await _glide([Vector3(30, 14, 4), Vector3(12, 2, 0)], dock, 3.0)
+	await get_tree().create_timer(1.8).timeout
 	get_tree().quit()
 
 # ---- dev: README fly-through. Saves numbered frames; tools/make_gif.py turns them into docs/flythrough.gif.

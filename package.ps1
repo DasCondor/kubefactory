@@ -7,15 +7,23 @@
 # editable config files, the bundled app setups, the cluster setup manifest, an
 # installer and an uninstaller.
 #
-#   powershell -ExecutionPolicy Bypass -File package.ps1
+#   powershell -ExecutionPolicy Bypass -File package.ps1                    the full game
+#   powershell -ExecutionPolicy Bypass -File package.ps1 -Edition docker    KubeFactory Docker: opens on the local Docker engine, no kubectl
+#   powershell -ExecutionPolicy Bypass -File package.ps1 -Edition demo      KubeFactory Demo: the full game on the simulated clusters only
+#
+# An edition builds dist\KubeFactory-<Edition>-<version>-win64.zip from its own
+# export preset and installs side by side with the full game.
 #
 # Needs the Godot export templates for the engine version in .\engine
 # (%APPDATA%\Godot\export_templates\4.3.stable).
+param([ValidateSet("", "docker", "demo")][string]$Edition = "")
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $godot = Join-Path $root "engine\Godot_v4.3-stable_win64_console.exe"
 $version = (Select-String -Path (Join-Path $root "scripts\main.gd") -Pattern 'const VERSION = "(.+)"').Matches[0].Groups[1].Value
-$name = "KubeFactory-$version-win64"
+$label = if ($Edition) { $Edition.Substring(0, 1).ToUpper() + $Edition.Substring(1) } else { "" }
+$preset = if ($Edition) { "Windows $label" } else { "Windows Desktop" }
+$name = if ($Edition) { "KubeFactory-$label-$version-win64" } else { "KubeFactory-$version-win64" }
 $stage = Join-Path $root "dist\$name"
 $zip = "$stage.zip"
 
@@ -37,7 +45,7 @@ $ErrorActionPreference = "Continue"
 if ($testResult -notmatch "ALL CHECKS PASSED") { Write-Host "Tests failed; not packaging." -ForegroundColor Red; exit 1 }
 
 Write-Host "Exporting KubeFactory.exe..."
-& $godot --headless --path $root --export-release "Windows Desktop" (Join-Path $stage "KubeFactory.exe") 2>&1 | Out-Null
+& $godot --headless --path $root --export-release $preset (Join-Path $stage "KubeFactory.exe") 2>&1 | Out-Null
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path (Join-Path $stage "KubeFactory.exe"))) { Write-Host "Export failed." -ForegroundColor Red; exit 1 }
 
@@ -54,6 +62,7 @@ Copy-Item (Join-Path $root "setup.ps1") (Join-Path $stage "check-requirements.ps
 Copy-Item (Join-Path $root "dev-cluster.ps1") $stage
 Copy-Item (Join-Path $root "dev-users.ps1") $stage
 Set-Content -Path (Join-Path $stage "VERSION") -Value $version -Encoding ascii
+if ($Edition) { Set-Content -Path (Join-Path $stage "EDITION") -Value $label -Encoding ascii }
 
 Compress-Archive -Path $stage -DestinationPath $zip
 $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
