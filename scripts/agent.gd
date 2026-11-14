@@ -149,6 +149,24 @@ static func take_frame(sid: String) -> Variant:
 static func running() -> bool:
 	return _pipe != null and _dead == ""
 
+# Called after the game's worker threads stop, so the companion can close its
+# browsers and forwards before we join the pipe reader.
+static func shutdown() -> void:
+	if _reader == null:
+		return
+	if running():
+		request("shutdown", {}, 5.0)
+	var deadline = Time.get_ticks_msec() + 15000
+	while _reader.is_alive() and Time.get_ticks_msec() < deadline:
+		OS.delay_msec(10)
+	if _reader.is_alive() and _pid > 0 and OS.is_process_running(_pid):
+		OS.kill(_pid)
+	_reader.wait_to_finish()
+	_reader = null
+	_pipe = null
+	_err = null
+	_pid = -1
+
 # What a failure kind means, in the words shown to the player.
 static func kind_title(kind: String) -> String:
 	return {"auth": "AUTHENTICATION", "rbac": "PERMISSION (RBAC)", "tls": "TLS / CERTIFICATE", "timeout": "TIMEOUT",
