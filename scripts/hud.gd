@@ -1105,6 +1105,8 @@ func open_liveview() -> void:
 		open_live(live.open(u, u.get_slice("//", 1).get_slice("/", 0)))
 	url.text_submitted.connect(func(_t): go.call())
 	mr.add_child(_btn("Open", go, "primary"))
+	mr.add_child(_spacer())
+	mr.add_child(_btn("Grafana and Tautulli...", func(): open_providers()))
 	body.add_child(mr)
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2811,3 +2813,365 @@ func open_pause() -> void:
 	body.add_child(_btn("How to play", open_welcome))
 	body.add_child(_spacer())
 	body.add_child(_btn("Quit to desktop", func(): get_tree().quit(), "danger"))
+
+# ----- LiveView providers: Grafana and Tautulli (scripts/providers.gd, agent/providers.go)
+#
+# Setting one up, choosing a dashboard or panel, and the media activity panel.
+# A token typed here goes straight to the companion and is not kept by the game.
+
+var providers: Node = null       # set by main
+var _prov_list = []
+var _prov_cur = {}
+
+func _prov_fail(r: Dictionary) -> String:
+	return "%s: %s" % [Agent.kind_title(str(r.get("kind", "other"))), str(r.get("msg", "failed"))]
+
+func open_providers(msg: String = "", ok: bool = true) -> void:
+	var body = _open_modal("providers", null, "LIVEVIEW  //  GRAFANA AND TAUTULLI", Vector2(1060, 660))
+	var intro = _lbl("Point KubeFactory at a Grafana or Tautulli you already run. Dashboards and panels open as the real pages, in a private browser where you sign in yourself. An API token is only used to list dashboards and read activity; it is kept by this computer's own protected storage and never shown again.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 1010
+	body.add_child(intro)
+	if providers == null or not providers.available():
+		var l = _lbl("Providers are not available here. " + Agent.why_unavailable(), 15, K.health_color("warn"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 1010
+		body.add_child(l)
+		return
+	_dyn = _col(6)
+	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(_dyn)
+	_dyn.add_child(_lbl("Reading...", 13, DIM))
+	providers.ask("provider.list", {}, func(r):
+		if _modal_kind != "providers":
+			return
+		_clear(_dyn)
+		if msg != "":
+			var ml = _lbl(msg, 14, K.health_color("ok") if ok else K.health_color("warn"))
+			ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			ml.custom_minimum_size.x = 1010
+			_dyn.add_child(ml)
+		if not r["ok"]:
+			_dyn.add_child(_lbl(_prov_fail(r), 14, RED))
+			return
+		_prov_list = r["data"].get("providers", [])
+		var top = _row(8)
+		top.add_child(_btn("Add Grafana", func(): _provider_form("grafana", {}), "primary"))
+		top.add_child(_btn("Add Tautulli", func(): _provider_form("tautulli", {}), "primary"))
+		top.add_child(_spacer())
+		top.add_child(_btn("Back to LiveView", func(): open_liveview()))
+		_dyn.add_child(top)
+		if not bool(r["data"].get("can_store_tokens", false)):
+			_dyn.add_child(_lbl("This system has no protected storage KubeFactory can use, so tokens cannot be saved here.", 13, K.health_color("warn")))
+		_dyn.add_child(_lbl("YOUR PROVIDERS", 13, ORANGE))
+		if _prov_list.is_empty():
+			_dyn.add_child(_lbl("None yet.", 14, DIM))
+		for p in _prov_list:
+			var row = _row(8)
+			row.add_child(_fixed(_lbl(str(p["name"]), 15), 230))
+			var info = "%s   ·   %s   ·   %s" % ["Grafana" if p["type"] == "grafana" else "Tautulli", str(p["base_url"]), "token saved" if p["has_token"] else "no token"]
+			if bool(p.get("plain_http", false)):
+				info += "   ·   plain http"
+			var il = _lbl(info, 12, DIM)
+			il.clip_text = true
+			il.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(il)
+			if p["type"] == "grafana":
+				row.add_child(_btn("Dashboards", func(): open_grafana(p), "primary"))
+			else:
+				row.add_child(_btn("Activity", func(): open_tautulli(p), "primary"))
+			row.add_child(_btn("Open", func(): _provider_open_ui(p)))
+			row.add_child(_btn("Test", func(): _provider_test(p)))
+			row.add_child(_btn("Edit", func(): _provider_form(str(p["type"]), p)))
+			row.add_child(_btn("Remove", func():
+				providers.ask("provider.remove", {"id": p["id"]}, func(_r): open_providers("%s removed. Its token is gone with it." % p["name"])), "danger"))
+			_dyn.add_child(row)
+		# machines that run one of the two: a suggestion, confirmed by you in the form
+		var src = cluster.backend.label if cluster.backend != null else ""
+		var cands = providers.candidates(cluster.state, src) if src != "simulation" else []
+		if not cands.is_empty():
+			_dyn.add_child(_lbl("FOUND RUNNING HERE  (by the image it runs; nothing has been contacted)", 13, ORANGE))
+		for c in cands:
+			var row = _row(8)
+			row.add_child(_fixed(_lbl("%s/%s" % [c["ns"], c["name"]], 14), 420))
+			row.add_child(_lbl(str(c["url"]) if c["url"] != "" else "address not known: open it from LiveView's endpoint list, or type its address", 12, DIM))
+			row.add_child(_spacer())
+			row.add_child(_btn("Set up", func(): _provider_form(str(c["type"]), {}, str(c["url"]))))
+			_dyn.add_child(row)
+		if src == "simulation":
+			_dyn.add_child(_lbl("This is a simulated cluster: its Grafana and Tautulli machines are not real applications. A provider you add here still talks to a real one.", 13, DIM)))
+
+func _provider_test(p: Dictionary) -> void:
+	open_providers("Testing %s..." % p["name"])
+	providers.ask("provider.test", {"id": p["id"]}, func(r):
+		if _modal_kind != "providers":
+			return
+		if r["ok"]:
+			var d = r["data"]
+			open_providers("%s: this is %s%s. Token: %s." % [p["name"], d["app"], (" " + str(d["version"])) if str(d.get("version", "")) != "" else "", d["token"]])
+		else:
+			open_providers("%s: %s" % [p["name"], _prov_fail(r)], false))
+
+func _provider_form(type: String, p: Dictionary, prefill_url: String = "") -> void:
+	var title = "Grafana" if type == "grafana" else "Tautulli"
+	var body = _open_modal("providerform", null, "LIVEVIEW  //  %s %s" % ["EDIT" if not p.is_empty() else "ADD", title.to_upper()], Vector2(820, 520))
+	var mk = func(caption: String, text: String, hint: String, secret: bool) -> LineEdit:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(caption, 13, DIM), 130))
+		var e = LineEdit.new()
+		e.text = text
+		e.placeholder_text = hint
+		e.secret = secret
+		e.custom_minimum_size.x = 600
+		r.add_child(e)
+		body.add_child(r)
+		return e
+	var name_e: LineEdit = mk.call("NAME", str(p.get("name", "")), "what to call it (optional)", false)
+	var url_e: LineEdit = mk.call("ADDRESS", str(p.get("base_url", prefill_url)), "https://grafana.example.org/grafana" if type == "grafana" else "https://tautulli.example.org", false)
+	var tok_e: LineEdit = mk.call("TOKEN" if type == "grafana" else "API KEY", "", "saved: leave empty to keep it" if bool(p.get("has_token", false)) else ("a service account token with Viewer rights" if type == "grafana" else "Tautulli > Settings > Web Interface > API key"), true)
+	var help = _lbl("Grafana: Administration > Users and access > Service accounts > add one with the Viewer role > add a token. It is used only to list dashboards and panels; the pages themselves use your own sign-in." if type == "grafana"
+		else "The key is used for one read-only request: current activity as totals. Nothing about who is watching what is read or shown. Tautulli keys are powerful, so it never leaves this computer's companion.", 12, DIM)
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	help.custom_minimum_size.x = 770
+	body.add_child(help)
+	var allow_http = [bool(p.get("allow_http", false))]
+	var legacy = [bool(p.get("legacy_query_key", false))]
+	body.add_child(_check("Accept plain http to another computer (the token travels unprotected: only on a network you trust)", allow_http[0], func(on): allow_http[0] = on))
+	if type == "tautulli":
+		body.add_child(_check("Old Tautulli (before 2.18): send the key in the address instead of a header (it can end up in that server's logs)", legacy[0], func(on): legacy[0] = on))
+	var status = _lbl("", 13, RED)
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status.custom_minimum_size.x = 770
+	body.add_child(status)
+	var bar = _row(8)
+	bar.add_child(_btn("Save and test", func():
+		var args = {"id": str(p.get("id", "")), "type": type, "name": name_e.text.strip_edges(), "base_url": url_e.text.strip_edges(),
+			"token": tok_e.text, "allow_http": allow_http[0], "legacy_query_key": legacy[0]}
+		tok_e.text = ""        # the game keeps no copy
+		status.text = "Saving..."
+		providers.ask("provider.save", args, func(r):
+			if _modal_kind != "providerform":
+				return
+			if not r["ok"]:
+				status.text = _prov_fail(r)
+				return
+			_provider_test(r["data"])), "primary"))
+	bar.add_child(_btn("Cancel", func(): open_providers()))
+	body.add_child(bar)
+
+# The provider's own web interface on a display.
+func _provider_open_ui(p: Dictionary) -> void:
+	providers.ask("provider.link", {"id": p["id"]}, func(r):
+		if r["ok"]:
+			_provider_show(str(r["data"]["url"]), str(p["name"]), str(p["type"]))
+		else:
+			open_providers(_prov_fail(r), false))
+
+# Open a provider page through LiveView, tied to the machine that runs the
+# application (when there is one) so it can go on that machine's screen.
+func _provider_show(url: String, title: String, type: String) -> void:
+	var s = live.open(url, title)
+	var src = cluster.backend.label if cluster.backend != null else ""
+	for c in providers.candidates(cluster.state, src):
+		if c["type"] == type:
+			s["target"] = {"ns": c["ns"], "service": c["pod"]}
+			break
+	open_live(s)
+
+# ---- Grafana: dashboards, then panels
+
+func open_grafana(p: Dictionary, query: String = "") -> void:
+	_prov_cur = p
+	var body = _open_modal("grafana", null, "GRAFANA  //  %s" % p["name"], Vector2(1000, 660))
+	var sr = _row(8)
+	var q = LineEdit.new()
+	q.text = query
+	q.placeholder_text = "find a dashboard"
+	q.custom_minimum_size.x = 520
+	q.text_submitted.connect(func(t): open_grafana(p, t))
+	sr.add_child(q)
+	sr.add_child(_btn("Search", func(): open_grafana(p, q.text), "primary"))
+	sr.add_child(_spacer())
+	sr.add_child(_btn("Providers", func(): open_providers()))
+	body.add_child(sr)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(4)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	list.add_child(_lbl("Reading...", 13, DIM))
+	providers.ask("grafana.dashboards", {"id": p["id"], "query": query, "page": 1}, func(r):
+		if _modal_kind != "grafana":
+			return
+		_clear(list)
+		if not r["ok"]:
+			var l = _lbl(_prov_fail(r), 14, RED)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 940
+			list.add_child(l)
+			return
+		var ds = r["data"].get("dashboards", [])
+		if ds.is_empty():
+			list.add_child(_lbl("No dashboard matches, or the token may not see any.", 14, DIM))
+		for d in ds:
+			var row = _row(8)
+			row.add_child(_fixed(_lbl(str(d["title"]), 15), 480))
+			row.add_child(_lbl(str(d.get("folder", "")), 12, DIM))
+			row.add_child(_spacer())
+			row.add_child(_btn("Panels", func(): open_grafana_panels(p, d)))
+			row.add_child(_btn("Open dashboard", func(): _grafana_open(p, d, 0, "", {}), "primary"))
+			list.add_child(row)
+		if bool(r["data"].get("more", false)):
+			list.add_child(_lbl("More than 100 match: narrow the search.", 12, DIM)))
+
+const GRAFANA_RANGES = [["the dashboard's own range", ""], ["last hour", "now-1h"], ["last 6 hours", "now-6h"], ["last 24 hours", "now-24h"], ["last 7 days", "now-7d"]]
+
+func open_grafana_panels(p: Dictionary, dash: Dictionary) -> void:
+	var body = _open_modal("grafana", null, "GRAFANA  //  %s" % dash["title"], Vector2(1000, 660))
+	var top = _row(8)
+	top.add_child(_lbl("TIME RANGE", 12, DIM))
+	var range_pick = OptionButton.new()
+	for g in GRAFANA_RANGES:
+		range_pick.add_item(g[0])
+	top.add_child(range_pick)
+	top.add_child(_spacer())
+	top.add_child(_btn("Dashboards", func(): open_grafana(p)))
+	body.add_child(top)
+	var var_box = _col(4)
+	body.add_child(var_box)
+	var var_edits = {}
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(4)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	list.add_child(_lbl("Reading...", 13, DIM))
+	var open = func(panel: int):
+		var vars = {}
+		for k in var_edits:
+			if var_edits[k].text.strip_edges() != "":
+				vars[k] = var_edits[k].text.strip_edges()
+		_grafana_open(p, dash, panel, GRAFANA_RANGES[range_pick.selected][1], vars)
+	providers.ask("grafana.panels", {"id": p["id"], "uid": dash["uid"]}, func(r):
+		if _modal_kind != "grafana":
+			return
+		_clear(list)
+		if not r["ok"]:
+			var l = _lbl(_prov_fail(r), 14, RED)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 940
+			list.add_child(l)
+			return
+		var d = r["data"]
+		# the dashboard's own variables: set by you, never guessed from a workload's name
+		for v in d.get("variables", []):
+			var vr = _row(8)
+			vr.add_child(_fixed(_lbl("VARIABLE  " + str(v), 12, DIM), 260))
+			var e = LineEdit.new()
+			e.placeholder_text = "leave empty for the dashboard's default"
+			e.custom_minimum_size.x = 400
+			vr.add_child(e)
+			var_box.add_child(vr)
+			var_edits[str(v)] = e
+		var whole = _row(8)
+		whole.add_child(_fixed(_lbl("The whole dashboard", 15), 480))
+		whole.add_child(_spacer())
+		whole.add_child(_btn("Open", func(): open.call(0), "primary"))
+		list.add_child(whole)
+		if not bool(d.get("panels_readable", true)):
+			var l = _lbl("This dashboard is in a layout whose panels KubeFactory cannot list. Nothing is made up: open the whole dashboard instead.", 13, K.health_color("warn"))
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 940
+			list.add_child(l)
+		for pn in d.get("panels", []):
+			var row = _row(8)
+			row.add_child(_fixed(_lbl(str(pn["title"]) if str(pn["title"]) != "" else "(untitled panel %d)" % int(pn["id"]), 14), 480))
+			row.add_child(_lbl("%s%s" % [str(pn["type"]), ("   ·   " + str(pn["row"])) if str(pn.get("row", "")) != "" else ""], 12, DIM))
+			row.add_child(_spacer())
+			row.add_child(_btn("Open panel", func(): open.call(int(pn["id"]))))
+			list.add_child(row))
+
+func _grafana_open(p: Dictionary, dash: Dictionary, panel: int, from: String, vars: Dictionary) -> void:
+	var args = {"id": p["id"], "uid": dash["uid"], "panel": panel, "vars": vars}
+	if from != "":
+		args["from"] = from
+		args["to"] = "now"
+	providers.ask("grafana.link", args, func(r):
+		if r["ok"]:
+			_provider_show(str(r["data"]["url"]), "%s  ·  %s" % [p["name"], dash["title"]], "grafana")
+		else:
+			open_providers(_prov_fail(r), false))
+
+# ---- Tautulli: media activity as totals
+
+func open_tautulli(p: Dictionary) -> void:
+	_prov_cur = p
+	var body = _open_modal("tautulli", null, "TAUTULLI  //  %s" % p["name"], Vector2(900, 620))
+	var note = _lbl("Plex activity as Tautulli reports it, as totals only. No user, address or title is read. This is monitoring, not playback.", 13, DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 850
+	body.add_child(note)
+	_dyn = _col(6)
+	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(_dyn)
+	_dyn.add_child(_lbl("Reading...", 13, DIM))
+	_tautulli_read(p)
+
+func _tautulli_read(p: Dictionary) -> void:
+	providers.ask("tautulli.activity", {"id": p["id"]}, _tautulli_fill.bind(p))
+
+func _tautulli_tick(p: Dictionary) -> void:
+	if _modal_kind == "tautulli" and _prov_cur.get("id") == p["id"]:
+		_tautulli_read(p)
+
+func _tautulli_fill(r: Dictionary, p: Dictionary) -> void:
+	if true:
+		if _modal_kind != "tautulli" or _prov_cur.get("id") != p["id"]:
+			return
+		_clear(_dyn)
+		if r["ok"]:
+			var d = r["data"]
+			var grid = GridContainer.new()
+			grid.columns = 2
+			grid.add_theme_constant_override("h_separation", 60)
+			for row in providers.summary_lines(d):
+				grid.add_child(_lbl(row[0], 15, DIM))
+				grid.add_child(_lbl(row[1], 20, TXT if row[1] != "unavailable" else DIM))
+			_dyn.add_child(grid)
+			_dyn.add_child(_lbl("Source: %s (Tautulli)   ·   read at %s UTC   ·   refreshes every 10 s while this is open" % [p["name"], str(d["at"]).get_slice("T", 1).trim_suffix("Z")], 12, DIM))
+		else:
+			var l = _lbl(_prov_fail(r), 14, RED)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 850
+			_dyn.add_child(l)
+		var bar = _row(8)
+		bar.add_child(_btn("Refresh", func(): _tautulli_read(p)))
+		bar.add_child(_btn("Open Tautulli", func(): _provider_open_ui(p)))
+		bar.add_child(_spacer())
+		bar.add_child(_btn("Providers", func(): open_providers()))
+		_dyn.add_child(bar)
+		# pin the summary to a machine that runs Plex or Tautulli
+		_dyn.add_child(_lbl("ON A MACHINE'S SCREEN", 13, ORANGE))
+		var media = providers.media_machines(cluster.state)
+		if media.is_empty():
+			_dyn.add_child(_lbl("No Plex or Tautulli machine in this world to put it on.", 13, DIM))
+		for m in media:
+			var uid = str(m["uid"])
+			var row = _row(8)
+			row.add_child(_fixed(_lbl("%s/%s" % [m["ns"], m["name"]], 14), 480))
+			row.add_child(_spacer())
+			if providers.pins.has(uid):
+				row.add_child(_btn("Take it off", func():
+					providers.unpin(uid)
+					_tautulli_read(p)))
+			else:
+				row.add_child(_btn("Show activity on its screen", func():
+					if not providers.pin(uid, p):
+						notify("That machine has no screen to show it on.", "warn")
+					_tautulli_read(p), "primary", r["ok"]))
+			_dyn.add_child(row)
+		get_tree().create_timer(10.0).timeout.connect(_tautulli_tick.bind(p))

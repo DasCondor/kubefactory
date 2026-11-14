@@ -55,6 +55,7 @@ Unsolicited lines carry `event` (`watch`, `frame`, `nav`, `blocked`,
 | `files.go` | `files.mounts`, `files.list`, `files.read` |
 | `forward.go` | `kube.forward`, `kube.forward_stop` |
 | `browser.go` | `browser.find`, `open`, `close`, `rate`, `navigate`, `input` |
+| `providers.go` | `provider.list`, `save`, `remove`, `test`, `link`; `grafana.dashboards`, `panels`, `link`; `tautulli.activity`. Tokens sealed in `provider_seal_windows.go` |
 
 Dependencies are client-go (the Kubernetes project's own client) and chromedp
 (a Chrome DevTools Protocol client). Nothing else is linked in.

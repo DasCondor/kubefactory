@@ -45,6 +45,26 @@ more.
 - **The browser demo connects to nothing.** It only runs the built-in
   simulation.
 
+## Grafana and Tautulli tokens
+
+- A token is typed once, handed to the companion, and sealed with the Windows
+  Data Protection API for your Windows account. The game keeps no copy, no
+  operation returns it, and it is not in `providers.json` in readable form.
+  On systems without that protection a token is refused rather than stored
+  in the clear.
+- Links the game opens (a dashboard, a panel) carry no credential. The page
+  runs in LiveView's disposable browser and asks you to sign in yourself.
+- Only the provider's own address is contacted; redirects are not followed.
+  Plain http is accepted for this computer, or for another one only after you
+  tick the box that says the token would travel unprotected.
+- Tautulli: one read-only request (`get_activity`), from which only totals
+  are taken. No user names, addresses, titles or history are read out, and
+  there is no way to send any other command. The key goes in a header; the
+  key-in-address mode for Tautulli older than 2.18 is off unless you turn it
+  on, because that server may then log the key.
+- Changing a provider's address drops its saved token: a token belongs to the
+  address it was entered for.
+
 ## How secrets are handled
 
 - Authentication is whatever your kubeconfig and Docker setup already use.

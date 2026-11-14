@@ -182,6 +182,26 @@ you can use Grafana, Portainer or Sonarr from inside the factory.
 - Simulated worlds have no real application behind them, so LiveView says so.
   It never draws a stand-in picture.
 
+### Grafana and Tautulli
+
+LiveView > **Grafana and Tautulli...** points KubeFactory at ones you already
+run (any address, including one behind a reverse-proxy sub-path).
+
+- **Grafana:** search your dashboards, pick a whole dashboard or one panel,
+  set its time range and variables, and it opens as the real Grafana page.
+  You sign in yourself in that page. An optional service-account token
+  (Viewer) is used only to list dashboards and panels.
+- **Tautulli:** current Plex activity as totals (streams, direct play, direct
+  stream, transcodes, bandwidth), in a panel or pinned to the screen of your
+  Plex or Tautulli machine. It reads no user, address or title, and it cannot
+  stop a stream or change anything. A figure Tautulli does not report shows as
+  "unavailable", never as 0.
+- **Tokens** go to the companion once, are sealed with Windows' own per-user
+  protection, and are never shown again, sent to the game, or put in a link.
+
+Verified against stand-in servers only so far; see
+[docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+
 The page is drawn by the Edge or Chrome already on your computer, in a private
 profile that is deleted when you close the display. Links to other hosts are
 blocked. Up to four displays run at once; ones you walk away from slow down.
