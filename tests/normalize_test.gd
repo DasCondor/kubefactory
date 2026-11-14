@@ -128,6 +128,20 @@ line2\" injected: true"]])
 	for hp in Demo.new("dev-containers").fetch()["pods"]:
 		dv[hp["wname"]] = true
 	check.call("dev containers stack", dv.has("devcontainer-cpp") and dv.has("buildkitd") and dv.has("gitea"), true)
+	# graphics presets: hardware classes, and the preset never reaches below Standard
+	var Gfx = load("res://scripts/gfx.gd")
+	check.call("gpu high-end nvidia", Gfx.gpu_class("NVIDIA GeForce RTX 5070 Ti Laptop GPU"), 3)
+	check.call("gpu mid nvidia", Gfx.gpu_class("NVIDIA GeForce RTX 3050"), 2)
+	check.call("gpu old nvidia", Gfx.gpu_class("NVIDIA GeForce GTX 1050 Ti"), 1)
+	check.call("gpu high-end amd", Gfx.gpu_class("AMD Radeon RX 7800 XT"), 3)
+	check.call("gpu mid amd", Gfx.gpu_class("AMD Radeon RX 6600"), 2)
+	check.call("gpu integrated intel", Gfx.gpu_class("Intel(R) UHD Graphics 620"), 1)
+	check.call("gpu integrated amd", Gfx.gpu_class("AMD Radeon(TM) Graphics"), 1)
+	check.call("gpu unknown", Gfx.gpu_class("Some Future Card"), 0)
+	check.call("preset ids", Gfx.level_of("ultra") * 10 + Gfx.level_of("nonsense"), 20)
+	Gfx.setup("enhanced", ["--gfx=ultra"])
+	check.call("--gfx wins over the saved choice (headless is the light path)", Gfx.chosen + "/" + str(Gfx.detail()), "ultra/0")
+	Gfx.setup("auto", [])
 	if fails.is_empty():
 		print("ALL CHECKS PASSED")
 	else:

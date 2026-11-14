@@ -1,4 +1,5 @@
 extends RefCounted
+const Gfx = preload("res://scripts/gfx.gd")
 # Procedural textures and shared materials - the game ships no image assets.
 
 const ORANGE = Color(0.98, 0.584, 0.286)
@@ -149,6 +150,54 @@ static func ghost(color: Color) -> StandardMaterial3D:
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
 
+# ---- preset-dependent surface response (Gfx.detail(): 0 Standard, 1 Enhanced, 2 Ultra)
+# Colours and albedo textures never change with the preset. The higher presets
+# add a roughness map (stained areas dull, clean areas glossier) and a little
+# more metal, so reflections and bounce light have something to work with.
+
+# Tileable roughness map: values between lo and hi, and with `wet` > 0 a share of
+# the surface drops to puddle-smooth so it picks up reflections.
+static func _rough_map(key: String, sd: int, lo: float, hi: float, wet: float = 0.0) -> ImageTexture:
+	if _cache.has(key):
+		return _cache[key]
+	var s = 256
+	var n = FastNoiseLite.new()
+	n.seed = sd
+	n.frequency = 0.012
+	n.fractal_octaves = 4
+	var g = n.get_seamless_image(s, s)
+	var fine = _noise(s, 0.5, 0.5, sd + 1)
+	var img = Image.create(s, s, false, Image.FORMAT_RGB8)
+	for y in s:
+		for x in s:
+			var v = clampf((g.get_pixel(x, y).r - 0.3) * 2.2, 0.0, 1.0)
+			var r = lerpf(lo, hi, v) + (fine.get_pixel(x, y).r - 0.5) * 0.06
+			if wet > 0.0 and v < wet:
+				r = lerpf(0.08, r, smoothstep(wet * 0.55, wet, v))
+			img.set_pixel(x, y, Color(r, r, r))
+	_cache[key] = _finish(img)
+	return _cache[key]
+
+static func _style_body(m: StandardMaterial3D) -> void:
+	var d = Gfx.detail()
+	m.roughness_texture = _rough_map("rough_panel", 9, 0.42, 0.82) if d >= 1 else null
+	m.roughness = 1.0 if d >= 1 else 0.55
+	m.metallic = [0.25, 0.3, 0.4][d]
+	m.metallic_specular = [0.5, 0.5, 0.6][d]
+
+static func _style_foundation(m: StandardMaterial3D) -> void:
+	var d = Gfx.detail()
+	m.roughness_texture = null if d == 0 else (_rough_map("rough_found", 5, 0.72, 0.97) if d == 1 else _rough_map("rough_found_wet", 5, 0.72, 0.97, 0.22))
+	m.roughness = 1.0 if d >= 1 else 0.85
+
+# Re-style every material already made, after the preset changed.
+static func apply_detail() -> void:
+	for key in _cache.keys():
+		if key.begins_with("b_"):
+			_style_body(_cache[key])
+	if _cache.has("m_foundation"):
+		_style_foundation(_cache["m_foundation"])
+
 # Named shared materials.
 static func shared(key: String) -> StandardMaterial3D:
 	if _cache.has("m_" + key):
@@ -163,6 +212,7 @@ static func shared(key: String) -> StandardMaterial3D:
 			m = mat(ORANGE, 0.5, 0.2)
 		"foundation":
 			m = mat(Color.WHITE, 0.85, 0.0, foundation(), 0.125, _cache["foundation_n"])
+			_style_foundation(m)
 		"hazard":
 			m = mat(Color.WHITE, 0.7, 0.0, hazard(), 0.5)
 		"board":
@@ -184,4 +234,5 @@ static func body(color: Color) -> StandardMaterial3D:
 	var key = "b_" + color.to_html()
 	if not _cache.has(key):
 		_cache[key] = mat(color, 0.55, 0.25, panel(), 0.25, _cache["panel_n"])
+		_style_body(_cache[key])
 	return _cache[key]

@@ -5,7 +5,10 @@ const K = preload("res://scripts/kutil.gd")
 const Tex = preload("res://scripts/tex.gd")
 const Sfx = preload("res://scripts/sfx.gd")
 
+const Gfx = preload("res://scripts/gfx.gd")
+
 static var _m = {}
+static var _merged = {}   # workload colour + detail level -> [core mesh, extra-detail mesh or null]
 
 var uid = ""
 var pod = {}
@@ -42,6 +45,93 @@ static func _cyl(key: String, r: float, h: float) -> CylinderMesh:
 		_m[key] = c
 	return _m[key]
 
+# ---- the fixed parts of a machine, as [mesh, material, position, rotation] rows
+
+# The machine as it has always looked (the Standard preset, and the base of the others).
+static func _core_parts() -> Array:
+	var dark = Tex.shared("dark")
+	var steel = Tex.shared("steel")
+	var z = Vector3.ZERO
+	var parts = [
+		[_box("base", Vector3(5.6, 0.4, 5.6)), dark, Vector3(0, 0.2, 0), z],
+		[_box("band", Vector3(4.5, 0.45, 4.5)), dark, Vector3(0, 0.95, 0), z],
+		[_box("lip", Vector3(4.6, 0.2, 4.6)), Tex.shared("orange"), Vector3(0, 3.45, 0), z],
+		[_box("roof", Vector3(2.6, 0.8, 2.6)), dark, Vector3(-0.5, 3.9, 0.3), z],
+		[_cyl("chimney", 0.42, 2.4), steel, Vector3(1.35, 4.6, -1.35), z],
+		[_cyl("chimney_cap", 0.52, 0.25), dark, Vector3(1.35, 5.75, -1.35), z],
+		[_cyl("rotor_ring", 1.15, 0.25), dark, Vector3(-0.85, 2.0, 2.25), Vector3(PI / 2, 0, 0)],
+		[_box("screen_frame", Vector3(1.5, 1.1, 0.12)), dark, Vector3(1.2, 2.2, 2.22), z],
+		[_cyl("pole", 0.06, 1.3), steel, Vector3(-1.7, 4.2, 1.7), z]]
+	if not OS.has_feature("web"):   # the browser build has a tight draw budget (see main.gd)
+		# side vents, a feed pipe along the back, hazard kick-plate, a lamp over the screen
+		for vz in [-1.2, 0.0, 1.2]:
+			parts.append([_box("vent", Vector3(0.08, 0.7, 0.8)), dark, Vector3(-2.22, 2.3, vz), z])
+			for vy in [2.1, 2.3, 2.5]:
+				parts.append([_box("slit", Vector3(0.1, 0.06, 0.66)), steel, Vector3(-2.24, vy, vz), z])
+		parts.append([_cyl("pipe", 0.16, 4.6), steel, Vector3(0, 2.9, -2.36), Vector3(0, 0, PI / 2)])
+		for px in [-2.2, 2.2]:
+			parts.append([_cyl("pipe_down", 0.16, 2.6), steel, Vector3(px, 1.65, -2.36), z])
+		parts.append([_box("kick", Vector3(5.62, 0.14, 0.06)), Tex.shared("hazard"), Vector3(0, 0.33, 2.81), z])
+		parts.append([_box("lamp_bar", Vector3(1.6, 0.08, 0.08)), Tex.glow(Color(1.0, 0.85, 0.6), 1.2), Vector3(0.2, 3.3, 2.24), z])
+	return parts
+
+# What the Enhanced (lod 1) and Ultra (lod 2) presets bolt on. Nothing here
+# replaces a core part: it is all added on top of the classic machine.
+static func _detail_parts(lod: int) -> Array:
+	var dark = Tex.shared("dark")
+	var steel = Tex.shared("steel")
+	var z = Vector3.ZERO
+	var parts = []
+	# a steel frame on the body's corners, bolted to the base
+	for cx in [-2.22, 2.22]:
+		for cz in [-2.22, 2.22]:
+			parts.append([_box("corner", Vector3(0.14, 3.0, 0.14)), steel, Vector3(cx, 1.9, cz), z])
+			parts.append([_box("foot", Vector3(0.34, 0.1, 0.34)), steel, Vector3(cx * 1.14, 0.45, cz * 1.14), z])
+	# roof: a cooling unit with a grille, and a cable tray along the front
+	parts.append([_box("ac", Vector3(1.0, 0.5, 1.2)), dark, Vector3(1.45, 3.8, 0.95), z])
+	for g in 4:
+		parts.append([_box("ac_slat", Vector3(0.84, 0.04, 0.12)), steel, Vector3(1.45, 4.07, 0.55 + g * 0.27), z])
+	parts.append([_box("tray", Vector3(4.4, 0.07, 0.1)), dark, Vector3(0, 3.08, 2.25), z])
+	# a service ladder up the back, a warning plate and a step under the screen
+	for lx in [-1.62, -1.12]:
+		parts.append([_box("rail", Vector3(0.05, 3.3, 0.05)), steel, Vector3(lx, 1.95, -2.27), z])
+	for r in 7:
+		parts.append([_box("rung", Vector3(0.5, 0.04, 0.04)), steel, Vector3(-1.37, 0.7 + r * 0.42, -2.27), z])
+	parts.append([_box("plate", Vector3(0.7, 0.34, 0.03)), Tex.shared("hazard"), Vector3(1.2, 1.38, 2.215), z])
+	parts.append([_box("step", Vector3(1.9, 0.08, 0.5)), steel, Vector3(1.2, 0.44, 2.55), z])
+	# rivet rows across the body, front and back
+	for ry in [1.3, 3.2]:
+		for i in 9:
+			for rz in [-2.215, 2.215]:
+				parts.append([_box("rivet", Vector3(0.07, 0.07, 0.03)), steel, Vector3(-2.0 + i * 0.5, ry, rz), z])
+	if lod >= 2:
+		# gauges, a second pipe run and a mast (the lit base strip is added per workload colour)
+		var face = Tex.glow(Color(0.9, 0.95, 1.0), 0.5)
+		for gx in [-0.5, 0.0, 0.5]:
+			parts.append([_cyl("gauge", 0.13, 0.06), dark, Vector3(1.2 + gx, 1.75, -2.24), Vector3(PI / 2, 0, 0)])
+			parts.append([_cyl("gauge_face", 0.1, 0.07), face, Vector3(1.2 + gx, 1.75, -2.25), Vector3(PI / 2, 0, 0)])
+		parts.append([_cyl("pipe_thin", 0.09, 4.5), steel, Vector3(-2.33, 1.25, 0), Vector3(PI / 2, 0, 0)])
+		for pz in [-2.0, 0.0, 2.0]:
+			parts.append([_box("clamp", Vector3(0.24, 0.24, 0.08)), dark, Vector3(-2.33, 1.25, pz), z])
+		parts.append([_cyl("mast", 0.025, 1.6), steel, Vector3(-1.2, 5.1, -0.4), z])
+		parts.append([_box("mast_tip", Vector3(0.08, 0.08, 0.08)), Tex.glow(Color(1.0, 0.3, 0.25), 2.0), Vector3(-1.2, 5.92, -0.4), z])
+		for hx in [-1.5, -0.9]:
+			parts.append([_box("hinge", Vector3(0.1, 0.5, 0.06)), steel, Vector3(hx, 2.2, -2.23), z])
+	return parts
+
+# Bake a list of parts into one ArrayMesh with a surface per material.
+static func _merge(parts: Array) -> ArrayMesh:
+	var by_mat = {}
+	for p in parts:
+		if not by_mat.has(p[1]):
+			by_mat[p[1]] = SurfaceTool.new()
+		by_mat[p[1]].append_from(p[0], 0, Transform3D(Basis.from_euler(p[3]), p[2]))
+	var mesh = ArrayMesh.new()
+	for mat in by_mat:
+		by_mat[mat].commit(mesh)
+		mesh.surface_set_material(mesh.get_surface_count() - 1, mat)
+	return mesh
+
 func _add(mesh: Mesh, material: Material, pos: Vector3, parent: Node3D = self) -> MeshInstance3D:
 	var mi = MeshInstance3D.new()
 	mi.mesh = mesh
@@ -64,40 +154,63 @@ func setup(p: Dictionary) -> void:
 
 	var wkey = p["ns"] + "/" + p["wname"]
 	var col = K.hue_color(wkey, 0.5, 0.9) if p["wname"] != "" else Color(0.75, 0.76, 0.78)
-	var dark = Tex.shared("dark")
-	_add(_box("base", Vector3(5.6, 0.4, 5.6)), dark, Vector3(0, 0.2, 0))
+	# Everything on a machine that never moves is merged into one mesh (a surface
+	# per material) and shared by every machine of the same workload, so a machine
+	# costs a handful of draws instead of dozens. The extra detail of the Enhanced
+	# and Ultra presets is a second merged mesh that drops out at a distance.
+	# Only the body carries the workload's colour, so everything else is one mesh
+	# shared by every machine in the world: the renderer draws all of them as
+	# instances of it.
+	var lod = Gfx.detail()
+	var key = "%d:%s" % [lod, OS.has_feature("web")]
+	if not _merged.has(key):
+		_merged[key] = [_merge(_core_parts()), _merge(_detail_parts(lod)) if lod > 0 else null]
+	var core = MeshInstance3D.new()
+	core.mesh = _merged[key][0]
+	add_child(core)
 	_add(_box("body", Vector3(4.4, 3.0, 4.4)), Tex.body(col), Vector3(0, 1.9, 0))
-	_add(_box("band", Vector3(4.5, 0.45, 4.5)), dark, Vector3(0, 0.95, 0))
-	_add(_box("lip", Vector3(4.6, 0.2, 4.6)), Tex.shared("orange"), Vector3(0, 3.45, 0))
-	_add(_box("roof", Vector3(2.6, 0.8, 2.6)), dark, Vector3(-0.5, 3.9, 0.3))
-	_add(_cyl("chimney", 0.42, 2.4), Tex.shared("steel"), Vector3(1.35, 4.6, -1.35))
-	_add(_cyl("chimney_cap", 0.52, 0.25), dark, Vector3(1.35, 5.75, -1.35))
+	if _merged[key][1] != null:
+		var extra = MeshInstance3D.new()
+		extra.mesh = _merged[key][1]
+		extra.visibility_range_end = 130.0
+		extra.visibility_range_end_margin = 20.0
+		extra.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		extra.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(extra)
+	if lod >= 2:
+		# a lit strip round the base in the workload's colour
+		var skey = "strip:" + col.to_html(false)
+		if not _merged.has(skey):
+			var strip = Tex.glow(col.lightened(0.15), 1.1)
+			var rows = []
+			for s in [-1.0, 1.0]:
+				rows.append([_box("strip_x", Vector3(5.5, 0.05, 0.05)), strip, Vector3(0, 0.43, 2.79 * s), Vector3.ZERO])
+				rows.append([_box("strip_z", Vector3(0.05, 0.05, 5.5)), strip, Vector3(2.79 * s, 0.43, 0), Vector3.ZERO])
+			_merged[skey] = _merge(rows)
+		var sm = MeshInstance3D.new()
+		sm.mesh = _merged[skey]
+		sm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		sm.visibility_range_end = 220.0
+		add_child(sm)
+	if Gfx.occlusion():
+		# the solid body hides whatever stands behind it from the renderer
+		var occ = OccluderInstance3D.new()
+		if not _m.has("occluder"):
+			var bo = BoxOccluder3D.new()
+			bo.size = Vector3(4.3, 3.2, 4.3)
+			_m["occluder"] = bo
+		occ.occluder = _m["occluder"]
+		occ.position = Vector3(0, 1.8, 0)
+		add_child(occ)
 
-	# Front face (+Z): spinning rotor and a status screen
-	var hub = _add(_cyl("rotor_ring", 1.15, 0.25), dark, Vector3(-0.85, 2.0, 2.25))
-	hub.rotation.x = PI / 2
+	# Front face (+Z): spinning rotor and a status screen (these change, so they stay separate)
 	_fan = Node3D.new()
 	_fan.position = Vector3(-0.85, 2.0, 2.42)
 	add_child(_fan)
 	for i in 3:
 		var blade = _add(_box("blade", Vector3(1.9, 0.26, 0.08)), Tex.shared("steel"), Vector3.ZERO, _fan)
 		blade.rotation.z = i * PI / 3.0
-	_add(_box("screen_frame", Vector3(1.5, 1.1, 0.12)), dark, Vector3(1.2, 2.2, 2.22))
 	_screen = _add(_box("screen", Vector3(1.3, 0.9, 0.06)), Tex.status_glow("warn"), Vector3(1.2, 2.2, 2.29))
-
-	if not OS.has_feature("web"):   # the browser build has a tight draw budget (see main.gd)
-		# detail: side vents, a feed pipe along the back, hazard kick-plates
-		for vz in [-1.2, 0.0, 1.2]:
-			_add(_box("vent", Vector3(0.08, 0.7, 0.8)), dark, Vector3(-2.22, 2.3, vz))
-			for vy in [2.1, 2.3, 2.5]:
-				_add(_box("slit", Vector3(0.1, 0.06, 0.66)), Tex.shared("steel"), Vector3(-2.24, vy, vz))
-		var pipe = _add(_cyl("pipe", 0.16, 4.6), Tex.shared("steel"), Vector3(0, 2.9, -2.36))
-		pipe.rotation.z = PI / 2
-		for px in [-2.2, 2.2]:
-			_add(_cyl("pipe_down", 0.16, 2.6), Tex.shared("steel"), Vector3(px, 1.65, -2.36))
-		_add(_box("kick", Vector3(5.62, 0.14, 0.06)), Tex.shared("hazard"), Vector3(0, 0.33, 2.81))
-		_add(_box("lamp_bar", Vector3(1.6, 0.08, 0.08)), Tex.glow(Color(1.0, 0.85, 0.6), 1.2), Vector3(0.2, 3.3, 2.24))
-	_add(_cyl("pole", 0.06, 1.3), Tex.shared("steel"), Vector3(-1.7, 4.2, 1.7))
 	if not _m.has("bulb"):
 		var s = SphereMesh.new()
 		s.radius = 0.3
