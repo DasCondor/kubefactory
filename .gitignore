@@ -11,3 +11,7 @@ dist/*
 .toolchain/
 agent/bin/
 
+
+# anything a program writes into the sample home folder during a screenshot run
+tests/fixtures/home/*
+!tests/fixtures/home/.kube/
