@@ -224,6 +224,12 @@ static func shared(key: String) -> StandardMaterial3D:
 	_cache["m_" + key] = m
 	return m
 
+# After the palette changes: the status lamps are rebuilt in the new colours.
+static func clear_status() -> void:
+	for k in _cache.keys():
+		if str(k).begins_with("g_"):
+			_cache.erase(k)
+
 static func status_glow(h: String) -> StandardMaterial3D:
 	if not _cache.has("g_" + h):
 		var K = load("res://scripts/kutil.gd")
