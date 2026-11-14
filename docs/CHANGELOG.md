@@ -6,6 +6,9 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Minimap** (`N`): a top-down view that turns with you, with node platforms,
+  machines in their health colours (failing ones pulse), the HUB, gates and
+  the Krew. Saved on or off; it steps aside for touch controls.
 - **Foreman** (key `H`): correlates the Krew's findings into incidents and a
   shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
   Claude, any OpenAI-compatible endpoint) answer plain-language questions from
