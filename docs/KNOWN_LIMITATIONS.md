@@ -49,6 +49,7 @@ exactly that: the code exists and has not been run against the real thing.
   "(K)"); a hint written another way keeps the default key's name.
 - Interface size applies when you press **Apply interface size**, so the menu
   does not jump under the pointer while dragging.
+
 ## Docker hosts
 
 - Docker contexts are listed without being contacted; one that does not answer
@@ -59,6 +60,7 @@ exactly that: the code exists and has not been run against the real thing.
   available (it needs `exec`), and neither are logs' follow mode or any action.
 - Read-only for another host is switched on when you connect; turning it off
   from the Esc menu is your choice, and only the proxy makes it binding.
+
 ## Komodo
 
 - **Not tested against a real Komodo Core**: the requests and answers follow
@@ -68,6 +70,21 @@ exactly that: the code exists and has not been run against the real thing.
 - Shown per server, not per Compose stack (container labels are not in
   Komodo's list); logs, capacity figures and storage doors are not available
   over a Komodo connection.
+
+## Linux and macOS
+
+- **Linux:** the exported game was run headless on Ubuntu 24.04 in a container
+  (the simulation loads, no script errors), the unit tests pass on the Linux
+  engine, and the companion answers there. Not played on a Linux desktop with
+  a GPU, and not tested against a real cluster from Linux.
+- **macOS:** the package is built (universal, ad-hoc signed) but has **not
+  been run on a Mac**. It is not notarized.
+- On both, the companion cannot keep tokens and keys yet: it seals them with
+  Windows' per-user protection only, so Grafana, Tautulli, AI provider and
+  Komodo credentials are refused rather than stored in the clear. Kubeconfig
+  connections, Docker and the simulation do not need it.
+- The helper scripts (install, dev cluster, packaging) are PowerShell on
+  Windows; Linux and macOS have `tools/package.sh` only.
 
 ## By design, for now
 

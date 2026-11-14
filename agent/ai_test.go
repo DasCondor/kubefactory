@@ -74,6 +74,13 @@ func TestAIProviders(t *testing.T) {
 	ops = map[string]handler{}
 	registerAll()
 	f := newFakeAI(t)
+	if !canSeal() {
+		// no protected storage here (Linux, macOS today): a key must be refused, never kept in the clear
+		if _, e := call(t, "ai.save", map[string]any{"type": "custom", "base_url": f.srv.URL, "model": "m", "key": testAIKey}); e == nil || e.Kind != "unsupported" {
+			t.Fatalf("a key was accepted without protected storage: %v", e)
+		}
+		t.Skip("keys are refused on this system, as checked; the rest needs protected storage")
+	}
 
 	// an OpenAI-compatible endpoint on this computer
 	p, e := call(t, "ai.save", map[string]any{"type": "custom", "base_url": f.srv.URL, "model": "model-a", "key": testAIKey})

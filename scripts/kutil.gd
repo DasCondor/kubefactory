@@ -624,7 +624,11 @@ static func policy_max_tier(policy: Dictionary, user: String, groups: Array) -> 
 # Installed build: the folder holding KubeFactory.exe. From source: the project folder.
 static func data_dir() -> String:
 	if OS.has_feature("template"):
-		return OS.get_executable_path().get_base_dir()
+		var d = OS.get_executable_path().get_base_dir()
+		# macOS: the game is KubeFactory.app/Contents/MacOS/KubeFactory; its files sit beside the .app
+		if d.ends_with(".app/Contents/MacOS"):
+			d = d.get_base_dir().get_base_dir().get_base_dir()
+		return d
 	return ProjectSettings.globalize_path("res://").trim_suffix("/")
 
 static func data_path(rel: String) -> String:

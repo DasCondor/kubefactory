@@ -29,6 +29,13 @@ against live infrastructure.
   server a Komodo Core manages is a platform, every container a machine; Bob,
   Sentinel and Scout read them. Only three read requests are ever sent; the
   API key and secret are sealed by the companion (`agent/komodo.go`).
+- **Linux and macOS builds.** Releases now include
+  `KubeFactory-<version>-linux-x86_64.tar.gz` and a universal
+  `KubeFactory-<version>-macos.zip` (Apple Silicon and Intel; the companion is
+  a universal binary), built by `tools/package.sh`.
+- **Verifiable releases.** Every package gets a `.sha256`, the release one
+  `SHA256SUMS`, and each package a Sigstore-signed build provenance
+  attestation (`gh attestation verify`).
 - **Foreman** (key `H`): correlates the Krew's findings into incidents and a
   shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
   Claude, any OpenAI-compatible endpoint) answer plain-language questions from
