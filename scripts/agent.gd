@@ -127,7 +127,7 @@ static func request(op: String, args: Dictionary = {}, timeout: float = 45.0) ->
 		return {"ok": true, "data": data if typeof(data) == TYPE_DICTIONARY else {}, "kind": "", "msg": "", "extra": {}}
 	var e = d.get("error", {})
 	var extra = e.get("extra")
-	return {"ok": false, "data": {}, "kind": str(e.get("kind", "other")), "msg": str(e.get("msg", "failed")),
+	return {"ok": false, "data": {}, "kind": str(e.get("kind", "other")), "msg": K.tidy_text(str(e.get("msg", "failed"))),
 		"extra": extra if typeof(extra) == TYPE_DICTIONARY else {}}
 
 # Events since the last call (not LiveView frames: see take_frame).

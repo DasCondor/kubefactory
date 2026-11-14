@@ -350,7 +350,7 @@ func bp_text(bp) -> String:
 # "who am I here" line: identity, tool limit, visibility scope, who else is online
 func refresh_who() -> void:
 	var st = cluster.state
-	var txt = "YOU  %s  ·  tools up to MK.%d" % [cluster.user_name(), cluster.max_tier()]
+	var txt = "YOU  %s  ·  tools up to MK.%d" % [cluster.display_name(), cluster.max_tier()]
 	if str(st.get("scoped_ns", "")) != "":
 		txt += "  ·  namespace %s only" % st["scoped_ns"]
 	if st.get("multiuser", false):
@@ -452,6 +452,7 @@ func set_progress(f: float) -> void:
 func notify(msg: String, kind: String = "info") -> void:
 	if msg.strip_edges() == "":
 		return
+	msg = K.tidy_text(msg)       # a path in a note never shows the account's folder
 	var col = {"ok": K.health_color("ok"), "warn": K.health_color("warn"), "bad": RED}.get(kind, ORANGE)
 	var pc = PanelContainer.new()
 	var s = _sb(BG, col, 0, 9)
@@ -630,7 +631,7 @@ func _confirm(text: String, cb: Callable, must_type: String = "") -> void:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size.x = 560
 	body.add_child(l)
-	body.add_child(_lbl("Target: %s (%s)   ·   You: %s" % [cluster.state["context"], cluster.state["source"], cluster.user_name()], 13, DIM))
+	body.add_child(_lbl("Target: %s (%s)   ·   You: %s" % [cluster.state["context"], cluster.state["source"], cluster.display_name()], 13, DIM))
 	var ok = _btn("Confirm", func():
 		close_modal()
 		cb.call(), "mk5" if must_type != "" else "danger", must_type == "")
@@ -1655,7 +1656,7 @@ func open_connect(focus_profile: String = "", failure: Dictionary = {}) -> void:
 	body.add_child(sc)
 	var profs = Connections.profiles()
 	if profs.is_empty():
-		list.add_child(_lbl("No kubeconfig yet. Nothing was found in the default place (%s)." % OS.get_environment("USERPROFILE").path_join(".kube\\config"), 15, DIM))
+		list.add_child(_lbl("No kubeconfig yet. Nothing was found in the default place (%s)." % "~/.kube/config", 15, DIM))
 	for pr in profs:
 		var pc = PanelContainer.new()
 		var focus = str(pr["id"]) == focus_profile
@@ -2907,7 +2908,7 @@ func open_welcome() -> void:
 		g.add_child(_lbl(row[1], 14))
 	body.add_child(g)
 	body.add_child(_tier_legend())
-	var note = _lbl("You are signed in as %s. Tools above your allowed tier are locked; every change is written to the audit log." % cluster.user_name(), 13, DIM)
+	var note = _lbl("You are signed in as %s. Tools above your allowed tier are locked; every change is written to the audit log." % cluster.display_name(), 13, DIM)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size.x = 850
 	body.add_child(note)

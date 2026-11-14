@@ -47,6 +47,10 @@ against live infrastructure.
 - `docs/ARCHITECTURE.md`, `FEATURE_PARITY.md`, `KNOWN_LIMITATIONS.md`.
 
 ### Fixed
+- The game no longer shows your Windows account name: paths under your user
+  folder are shown as `~` (also inside error messages and notes), and on the
+  local Docker engine you are shown as *local user*. The benchmark table no
+  longer names the graphics card.
 - An explicitly selected desktop simulation no longer probes Docker, discovers
   kubeconfigs or restores real provider screens on startup. Local connection
   discovery is available from the cluster switcher. Simulated actions no longer
