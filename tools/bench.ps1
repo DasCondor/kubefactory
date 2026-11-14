@@ -8,7 +8,8 @@
 # benchmark script (scripts\bench.gd, which only uses things the game has always
 # had) is dropped into it, and it flies the same camera route with vsync off.
 # Each configuration runs -Runs times and the median run is reported.
-param([string]$Baseline = "de600e8", [int]$Runs = 3, [string]$Resolution = "1920x1080", [string]$World = "kubernetes")
+# The GPU's model is left out of the published table unless -ShowGpu is given.
+param([string]$Baseline = "de600e8", [int]$Runs = 3, [string]$Resolution = "1920x1080", [string]$World = "kubernetes", [switch]$ShowGpu)
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = (Resolve-Path (Join-Path $here "..")).Path
@@ -64,7 +65,7 @@ if ($saved) { [IO.File]::WriteAllText($settings, $saved) }
 $base = $all[0]
 $md = @("# Graphics benchmark", "",
     "Baseline: release ``$Baseline``. $Resolution, vsync off, the ``$World`` demo world ($($base.machines) machines), a fixed 18-second camera route.",
-    "GPU: $($base.gpu). Median of $Runs runs each. Reproduce with ``tools\bench.ps1``.", "",
+    "GPU: $(if ($ShowGpu) { $base.gpu } else { 'not recorded (run with -ShowGpu to name it)' }). Median of $Runs runs each. Reproduce with ``tools\bench.ps1``.", "",
     "| Build | Avg fps | vs release | Frame ms | 1% low fps | Draw calls | Objects | Primitives | Video mem MB |",
     "|---|---:|---:|---:|---:|---:|---:|---:|---:|")
 foreach ($r in $all) {

@@ -237,6 +237,9 @@ line2\" injected: true"]])
 	check.call("screen ray: behind the screen", K.ray_hits_screen(Vector3(0, 0, -4), Vector3.BACK, screen, 70), false)
 	check.call("screen ray: beyond reach", K.ray_hits_screen(Vector3(0, 0, 4), Vector3.FORWARD, screen, 3), false)
 	check.call("screen ray: parallel", K.ray_hits_screen(Vector3(0, 0, 4), Vector3.RIGHT, screen, 70), false)
+	check.call("a path inside a message is tidied too", K.tidy_text("cannot read C:\\Users\\someone\\.kube\\config: denied", "C:\\Users\\someone"), "cannot read ~\\.kube\\config: denied")
+	check.call("... in either slash style and any case", K.tidy_text("Saved to c:/users/SOMEONE/AppData/x.log and C:\\Users\\someone\\y", "C:\\Users\\someone"), "Saved to ~/AppData/x.log and ~\\y")
+	check.call("a message without it is untouched", K.tidy_text("pod not found", "C:\\Users\\someone"), "pod not found")
 	# ---- tables: contains and sort by column
 	var trows = [{"n": "web", "r": 3, "i": "nginx:1.27"}, {"n": "Cart", "r": 12, "i": "shop/cart"}, {"n": "api", "r": 2, "i": "shop/api"}, {"n": "db", "r": 12, "i": "postgres:16"}]
 	var tget = {"n": func(x): return x["n"], "r": func(x): return x["r"], "i": func(x): return x["i"]}

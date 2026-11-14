@@ -85,6 +85,17 @@ func user_name() -> String:
 	var u = OS.get_environment("USERNAME")
 	return u if u != "" else OS.get_environment("USER")
 
+# The name shown on screen. A cluster identity is what the cluster calls you,
+# so it is shown as it is. On the local Docker engine there is no such
+# identity, only this computer's account name: that stays out of the picture
+# (it still goes in the audit log, which is a record kept on this computer).
+func display_name() -> String:
+	if OS.has_feature("web") or (backend != null and backend.label == "simulation"):
+		return DEMO_USER
+	if backend != null and backend.get("user") != null and str(backend.user) != "":
+		return K.short_user(str(backend.user))
+	return "local user"
+
 # Highest tool tier allowed on this cluster: the cluster's own policy (if the
 # admin installed one) and any local per-context rule, whichever is stricter.
 func max_tier(ns: String = "") -> int:
@@ -458,7 +469,7 @@ func act(a: Dictionary) -> void:
 		if not cap(a["op"]):
 			if backend.label == "kubernetes":
 				audit("BLOCKED (no cluster permission): " + describe(a))
-				action_done.emit(false, "Your account (%s) is not permitted to do that on this cluster" % user_name())
+				action_done.emit(false, "Your account (%s) is not permitted to do that on this cluster" % display_name())
 			else:
 				action_done.emit(false, "Not supported by the %s source" % backend.label)
 			return

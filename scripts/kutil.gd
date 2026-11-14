@@ -192,6 +192,27 @@ static func tidy_path(p: String, home: String = "") -> String:
 		return "~" + a.substr(h.length())
 	return p
 
+# Any text on its way to the screen: wherever the user's own folder appears in
+# it (an error from a tool, a "saved to" note), it is written as "~".
+static func tidy_text(s: String, home: String = "") -> String:
+	if home == "":
+		home = OS.get_environment("USERPROFILE")
+		if home == "":
+			home = OS.get_environment("HOME")
+	var h = home.rstrip("/\\")
+	if h.length() < 4:
+		return s
+	var out = s
+	for form in [h, h.replace("\\", "/"), h.replace("/", "\\"), h.replace("\\", "\\\\")]:
+		var low = out.to_lower()
+		var f = form.to_lower()
+		var i = low.find(f)
+		while i >= 0:
+			out = out.substr(0, i) + "~" + out.substr(i + form.length())
+			low = out.to_lower()
+			i = low.find(f, i + 1)
+	return out
+
 # Tables: keep the rows that contain `filter` in any column, then order them by
 # one column. getters: {column id: Callable(row) -> value}. Numbers sort as
 # numbers, everything else as text without regard to case; rows that compare
