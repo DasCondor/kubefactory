@@ -179,6 +179,46 @@ static func fmt_bytes(n: float) -> String:
 		return "%.1f MiB" % (n / 1048576.0)
 	return "%.2f GiB" % (n / 1073741824.0)
 
+# Tables: keep the rows that contain `filter` in any column, then order them by
+# one column. getters: {column id: Callable(row) -> value}. Numbers sort as
+# numbers, everything else as text without regard to case; rows that compare
+# equal keep the order they came in. A table of TABLE_LIMIT rows or more is
+# handed back untouched: it is too long to sort and filter on every keystroke.
+const TABLE_LIMIT = 10000
+
+static func table_rows(rows: Array, col: String, desc: bool, filter: String, getters: Dictionary) -> Array:
+	if rows.size() >= TABLE_LIMIT:
+		return rows
+	var want = filter.strip_edges().to_lower()
+	var kept = []
+	for i in rows.size():
+		var r = rows[i]
+		if want != "":
+			var hit = false
+			for id in getters:
+				if str(getters[id].call(r)).to_lower().contains(want):
+					hit = true
+					break
+			if not hit:
+				continue
+		kept.append([r, i])
+	if col != "" and getters.has(col):
+		var g: Callable = getters[col]
+		kept.sort_custom(func(a, b):
+			var x = g.call(a[0])
+			var y = g.call(b[0])
+			var numbers = typeof(x) in [TYPE_INT, TYPE_FLOAT] and typeof(y) in [TYPE_INT, TYPE_FLOAT]
+			if not numbers:
+				x = str(x).to_lower()
+				y = str(y).to_lower()
+			if x == y:
+				return a[1] < b[1]
+			return (x > y) if desc else (x < y))
+	var out = []
+	for k in kept:
+		out.append(k[0])
+	return out
+
 # A path inside a mounted volume, cleaned: "" if it would leave the mount.
 static func path_inside(root: String, rel: String) -> String:
 	var parts = []

@@ -44,19 +44,47 @@ homelab use.
 - 🧯 **Guard rails on the dangerous parts.** Read-only mode, tool tiers, hold-to-confirm, typed confirmation for the worst actions, and an audit log of everything you do.
 - 👥 **Use it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows.
 - 🧪 **Try it safely first.** Four simulated demo worlds let you use every tool without touching anything real.
-- 🎨 **No art assets.** Every model, texture and sound is generated in code. Built with Godot 4.3.
+- 📺 **Screens that show the real thing.** Each machine's screen steps through its application's own page, its metrics, its log and its storage. Click it to open it full size.
+- 🎨 **Built with Godot 4.3.** Desktop machines, tools, Porter and Bob come from the bundled model library; the browser build draws everything in code. Textures, icons and sounds are generated.
 
 ## 📸 Screenshots
 
 | | |
 |---|---|
-| ![Overview of a simulated cluster with an alarm beam over a failing pod](docs/overview.png) Nodes are platforms, pods are machines; red beams mark failing pods | ![Holding the Mk.4 Dismantler on a pod](docs/dismantler.png) Tiered tools: stronger actions take a longer hold |
-| ![The six handheld tools](docs/tools.png) Six tools, each its own model: scanner, datapad, build gun, wrench, dismantler, demolisher | ![The datapad showing cluster warning events as a ledger](docs/datapad.png) The datapad: pod logs, cluster events, audit trail |
-| ![Bob at his repair stand, with the fix list on the board behind him](docs/bob-stand.png) Bob's repair stand: the board lists what is broken, and he has something to say about it | ![Bob's fix list: each failing pod with a diagnosis, his advice and a fix button](docs/bob.png) Bob's fix list: what is wrong, why, and what to do |
-| ![Bob's case file: the log lines that matter on a build that ran out of memory](docs/bob-case.png) Bob 2.0 reads the log: the line that killed it, what it means, what to do | ![The demo chooser with four worlds](docs/demos.png) Four demo worlds: Kubernetes, Home Assistant, Dev containers, Media suite |
-| ![The media suite demo: Plex, the arr apps and Grafana all running](docs/demo-media.png) The media suite world: Plex, Sonarr, Radarr, Jackett and friends, all healthy | |
-| ![Porter, the Portainer dock robot](docs/porter.png) Porter builds complete app setups and installs from app lists | ![Typed confirmation before deleting a workload](docs/confirm.png) Mk.5 actions ask you to type the target's name |
-| ![Two other players shown as robot avatars](docs/multiuser.png) Other people on the cluster appear as avatars | |
+| ![Overview of a simulated cluster with an alarm beam over a failing pod](docs/overview.png) Nodes are platforms, pods are machines; red beams mark failing pods | ![A database machine: type plate, the pod's real name with its icon, and its screen](docs/machines.png) Every machine says what it is: a type plate, the real pod name with an icon for what it runs, and a screen |
+| ![One screen stepping through dashboard, metrics, logs and storage](docs/screens.png) One screen, four views: dashboard, metrics, logs, storage. `R` steps through them | ![A machine's log opened full size](docs/screen-window.png) Click a screen to open it full size and switch views there |
+| ![A machine with its storage door open and the file browser beside it](docs/storage.png) Open a machine's door (`F`) to browse its volumes, read-only | ![The demo's simulated Grafana dashboard, opened full size](docs/demo-grafana.png) The demo's Grafana and media screens show simulated content, marked as such |
+| ![The six handheld tools, each with its own display](docs/tools.png) Six tools; each one's display shows what it is pointed at and what the trigger would do | ![Holding the Mk.4 Dismantler on a pod](docs/dismantler.png) Hold to act: stronger tools take longer |
+| ![The connection wizard listing kubeconfig contexts](docs/connect.png) Connect with a kubeconfig, no kubectl: `KubeFactory.exe --kubeconfig <file>` | ![The datapad showing cluster warning events as a ledger](docs/datapad.png) The datapad: logs, events and the audit ledger |
+| ![Bob at his repair stand, with the fix list on the board behind him](docs/bob-stand.png) Bob's repair stand: the board lists what is broken, and he has something to say about it | ![Bob's fix list](docs/bob.png) His fix list: what is broken, why, and what to do |
+| ![Bob's case file: the log lines that matter on a build that ran out of memory](docs/bob-case.png) Bob 2.0 reads the log: the line that killed it, what it means, what to do | ![The demo chooser](docs/demos.png) Four demo worlds to try everything safely |
+| ![The media suite demo: Plex, the arr apps and Grafana all running](docs/demo-media.png) The media suite world: Plex, Sonarr, Radarr, Jackett and friends, all healthy | ![Porter, the Portainer dock robot](docs/porter.png) Porter builds complete app setups and installs from app lists |
+| ![Typed confirmation before deleting a workload](docs/confirm.png) Mk.5 actions make you type the target's name | ![Two other players shown as robot avatars](docs/multiuser.png) Other people on the cluster appear as avatars |
+## 📱 On a phone or tablet (browser demo)
+
+The browser demo has touch controls. They appear the first time you touch the
+screen; a desktop browser with a mouse and keyboard keeps the desktop controls.
+
+| Control | What it does |
+|---|---|
+| Left thumb joystick | move and strafe |
+| Drag anywhere else | look around |
+| **ACTION** | whatever the crosshair offers: open screen, inspect, logs, build. Hold it for a tool's action |
+| **JUMP** | jump; twice quickly for the hoverpack |
+| **AIM** | turn to the nearest machine ahead |
+| Bottom bar | Scanner, Datapad, Build Gun, All tools |
+| **MENU** | the game menu: touch controls on/off, look sensitivity |
+
+Landscape is the comfortable way to play; portrait works too. Choosing a tool
+never uses it, and the strong tools keep their hold and typed confirmation.
+Add `?touch=1` to the address to force the controls on, `?touch=0` to keep
+them off on a laptop with a touch screen. The browser demo is the simulation
+only, and says so on screen the whole time.
+
+![Touch controls in landscape and portrait, and a machine's screen opened full size](docs/mobile.png)
+
+Not yet tried on a real iPhone or Android phone: see
+[docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
 ## 🌐 Play in the browser (sandbox demo)
 
@@ -124,10 +152,10 @@ for troubleshooting. `check-requirements.ps1` checks for the optional cloud CLIs
 
 ## 🔌 Connecting to a cluster (no kubectl needed)
 
-> **2.0 is in development.** Connecting and managing have been run against a
-> real Kubernetes API server, but not yet against a cluster that runs
-> containers or any cloud provider; storage inspection and LiveView are
-> verified against the simulation and a local test page only. See
+> **2.0 is in development.** Connecting, managing and storage inspection are
+> verified on a real cluster with running containers (kind) and on a real
+> Docker engine. Not yet tried: any cloud provider, and LiveView on a real
+> application through a port-forward. See
 > [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
 The short version:
@@ -170,10 +198,43 @@ It uses the container's own `ls` and `head`, so an image without them
 (distroless) says "unsupported" rather than guessing. It never starts a helper
 pod and never mounts anything. A neighbouring machine in the way stops the door.
 
+## 🖥️ Machine screens: dashboard, metrics, logs, storage
+
+Every machine has a screen, and it can show four things:
+
+| View | What it shows |
+|---|---|
+| **Dashboard** | the application's own page through LiveView, a Grafana or Tautulli provider, or in a demo world the simulated dashboard |
+| **Metrics** | what the pod is using, as graphs: CPU, memory, network and disk I/O, then its state and each container |
+| **Logs** | the end of its log, refreshed while it is up |
+| **Storage** | what is mounted into it |
+
+- **`R`** while looking at a machine steps its screen to the next view.
+- **Click the screen** (or press **`V`** on the machine) to open it full size,
+  switch views there, and jump on to the full log, the file browser or the
+  live page.
+- Metrics, logs and storage are the cluster's own data (or the simulation's,
+  marked as such), never made up. Usage figures come from the cluster's
+  metrics API (CPU and memory; it needs metrics-server) or from `docker stats`
+  (all four). A figure the source does not report shows as **unavailable**
+  with the reason, not as 0.
+- A screen is for reading: no tool acts through it, whatever you are holding.
+- Beside each machine's name is an **icon for what it runs**: database, cache,
+  media server, proxy, monitoring and so on, chosen from the container image.
+- The text under the crosshair now sits below the screen you are reading, and
+  floating name labels show only from across the yard.
+
+### Tables
+
+Lists with columns (workloads, clusters, files in a volume, Grafana dashboards
+and panels) have a **CONTAINS** box and clickable headings: click once to sort,
+again to reverse, a third time to go back to the original order.
+
 ## 📺 LiveView: the application's own page (key `V`)
 
-Point at a machine and press `V` to put its web page on the machine's screen,
-or open it in a window. It is the real page: your mouse and keyboard work, so
+Press `V` anywhere for the LiveView list, or on a machine to open that
+machine's screen. From there a running application's web page goes on the
+machine's screen or opens in a window. It is the real page: your mouse and keyboard work, so
 you can use Grafana, Portainer or Sonarr from inside the factory.
 
 - Docker: published ports are offered straight away.
@@ -182,8 +243,9 @@ you can use Grafana, Portainer or Sonarr from inside the factory.
 - Simulated worlds have no real application behind them, so LiveView has no
   page to open there. Instead, the demo's Grafana machines show a dashboard of
   the simulated cluster's own figures, and its Plex and Tautulli machines show
-  simulated streams. Every such screen carries a SIMULATED banner, and none of
-  it appears on a real cluster.
+  simulated streams. Each has two views you can switch between when it is open
+  full size. Every such screen carries a SIMULATED banner, and none of it
+  appears on a real cluster.
 
 ### Grafana and Tautulli
 
@@ -295,7 +357,9 @@ tier colours mark every button in the panels.
 
 Other keys: WASD, Shift sprint, Space jump (double-tap for hoverpack, Ctrl to
 descend), E inspect, MMB copy a machine as blueprint, Tab cluster codex,
-L datapad, G jump to next problem, B belts, F11 fullscreen, Esc menu.
+L datapad, G jump to next problem, B belts, F open a machine's storage door,
+V open a machine's screen (or the LiveView list), R next view on a machine's
+screen, F11 fullscreen, Esc menu.
 
 ## 🎨 Graphics presets
 
@@ -509,6 +573,8 @@ More tests and checks:
     powershell -ExecutionPolicy Bypass -File tools\build-agent.ps1 -Test                                          companion tests (Go)
     powershell -ExecutionPolicy Bypass -File tools\live-test.ps1                                                  companion against a real, disposable kube-apiserver (no Docker)
     powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Grafana [-GrafanaVersion 13.0.0]               Grafana provider against a real, disposable Grafana
+    powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Kind                                           companion against a real cluster with running containers (after tools\dev-cluster.ps1)
+    engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tests/live/docker_backend_test.gd           Docker backend against a real throw-away container
     powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Tautulli                                       Tautulli provider against a real, disposable Tautulli
     engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tools/model_audit.gd                        audits every model, writes docs/MODEL_AUDIT.md
 

@@ -31,6 +31,11 @@ is no server, no account and no telemetry.
 | `scripts/models.gd` | the model library: catalog, tier choice, door, display surfaces and type plate taken from the catalog's anchors |
 | `scripts/hud.gd` | HUD, connection wizard, storage browser, LiveView window, Porter and Bob |
 | `scripts/liveview.gd` | LiveView sessions: frames in, input out, frame rate by distance |
+| `scripts/machine_screens.gd` | what each machine's screen shows: dashboard, metrics (usage graphs), logs, storage |
+| `scripts/demo_screens.gd` | the simulated Grafana and stream screens of the demo worlds |
+| `scripts/providers.gd` | Grafana and Tautulli providers: requests to the companion, pinned summaries |
+| `scripts/icons.gd` | application icons, drawn in code |
+| `scripts/mobile_controls.gd` | touch controls, browser build only |
 | `scripts/connections.gd` | saved kubeconfig profiles and which exec helpers you have trusted |
 | `scripts/agent.gd` | starts `kf-agent`, sends requests, collects events and frames |
 | `scripts/gfx.gd`, `scenery.gd`, `bench.gd` | Standard / Enhanced / Ultra presets, surroundings, benchmark |

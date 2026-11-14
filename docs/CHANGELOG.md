@@ -25,6 +25,17 @@ against live infrastructure.
 - **Grafana and Tautulli providers** for LiveView: pick a dashboard or panel;
   see Plex activity as totals and pin it to a machine. Tokens are sealed by
   Windows and never reach the game.
+- **Machine screens with four views**: dashboard, metrics, logs and storage.
+  `R` steps through them; clicking a screen (or `V` on the machine) opens it
+  full size.
+- **Application icons** beside each machine's name.
+- **Sortable tables**: click a column heading to sort, type in CONTAINS to
+  filter (workloads, clusters, storage files, Grafana dashboards and panels).
+- **Bob's and Porter's portraits** show their current models.
+- **Usage graphs** in the Metrics view: CPU, memory, network and disk I/O,
+  from the cluster's metrics API or `docker stats`; unavailable figures say so.
+- **Touch controls for the browser demo**: joystick, drag to look, a context
+  ACTION button, jump, aim, a tool bar and a menu, in landscape and portrait.
 - **Demo screens:** in the simulated worlds, Grafana machines show a dashboard
   of the simulated cluster's figures and Plex / Tautulli machines show
   simulated streams, each marked SIMULATED. Works in the browser demo.
@@ -35,12 +46,22 @@ against live infrastructure.
 - `KubeFactory.exe --kubeconfig <file>`: one step from download to a cluster.
 - `docs/ARCHITECTURE.md`, `FEATURE_PARITY.md`, `KNOWN_LIMITATIONS.md`.
 
+### Fixed
+- Storage inspection followed a link that sat inside a volume: a linked file
+  (and, on Docker, a linked folder) was read through to wherever it pointed.
+  Links are now never followed. Found by the new live tests.
+- A stopped Docker container no longer shows usage figures of zero.
+
 ### Changed
 - A machine's model is chosen truthfully: pods are PODs, containers are
   CONTAINERs, and a role model is used only when the image is that software
   (a CoreDNS pod pulled from registry.k8s.io is no longer a "registry").
 - Machine screens are neutral with a small status line; health colours the
   beacon only. The selection highlight is thin corner brackets.
+- The text under the crosshair sits below the screen being read; floating
+  names show only from a distance.
+- Code-drawn machines (the browser build): the oversized fan is replaced by a
+  small fan and vent, and the screen is twice as wide.
 - Kubernetes uses the companion by default; `--kubectl-cli` keeps the old path.
 - The StatefulSet and database-server display fault of the first library is
   gone in V6; the load-time correction for it was removed.

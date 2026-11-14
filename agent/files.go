@@ -194,6 +194,19 @@ func (s *session) guard(a fileArgs) (string, *mountInfo, error) {
 				}
 			}
 		}
+		// nor may the target itself be one: a linked file or folder inside the
+		// volume can point anywhere in the container, and reading "through" it
+		// would leave the volume without the path ever saying so
+		o, _, e := s.run(a.Namespace, a.Pod, a.Container, []string{"ls", "-ldn", "--", full}, 4096)
+		if e != nil {
+			if strings.Contains(e.Error(), "No such file") || strings.Contains(e.Error(), "exit code 1") || strings.Contains(e.Error(), "exit code 2") {
+				return "", nil, fail("notfound", "there is no such file or folder in this volume")
+			}
+			return "", nil, noTools(e)
+		}
+		if strings.HasPrefix(strings.TrimSpace(o), "l") {
+			return "", nil, fail("invalid", "that is a link, which is not followed: it may point outside the volume")
+		}
 	}
 	return full, m, nil
 }

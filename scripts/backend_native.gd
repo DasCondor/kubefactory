@@ -247,6 +247,9 @@ func _app_action(a: Dictionary) -> Dictionary:
 		# ---- new with the native backend
 		"forward":
 			return forward(a["ns"], a["service"], int(a["port"]))
+		"pod_metrics":
+			var mr = _call("kube.pod_metrics", {"namespace": a["ns"], "pod": a["name"]}, 15.0)
+			return {"ok": mr["ok"], "msg": mr["msg"], "kind": mr["kind"], "data": mr["data"]}
 		"file_mounts":
 			var r = _call("files.mounts", {"namespace": a["ns"], "pod": a["name"]})
 			return {"ok": r["ok"], "msg": r["msg"], "kind": r["kind"], "data": r["data"]}

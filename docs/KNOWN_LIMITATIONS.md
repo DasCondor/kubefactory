@@ -5,25 +5,33 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Not verified against live infrastructure
 
-- **Native Kubernetes connectivity** has been run against a real Kubernetes API
-  server, but not against a cluster that runs containers. `tools\live-test.ps1`
-  starts the Kubernetes project's own kube-apiserver 1.32 and etcd and drives
-  the companion through 40 steps (connect, watches, server-side apply, scale,
-  restart, delete, cordon, RBAC refusal, presence): all pass. The game itself
-  was then connected to the same server and its action tour succeeded. That
-  server has no working nodes, so **logs, drain with pods to evict, exec and
-  port-forward are not tested**, and neither is any cloud provider (EKS, AKS,
-  GKE), Rancher, k3s or OpenShift, nor a sign-in helper actually signing in.
-  Docker Desktop's engine would not start on the build machine, which is why
-  no kind cluster was used.
-- **Storage inspection** is verified in simulation only. Against the real API
-  server, listing a pod's mounts works and the refusals are right (path outside
-  the volume, container not running); reading actual files needs a running
-  container and is not tested.
+- **Native Kubernetes connectivity is verified live on a real cluster with
+  running containers** (kind 1.37 in Docker, three nodes):
+  `tools\live-test.ps1 -Kind` passes 29 of 29. It covers connecting without
+  kubectl, pods reaching Running, real log lines, storage inspection on a real
+  volume, a port-forward that carries HTTP, scale, rolling restart with every
+  pod replaced, draining a worker that has pods on it, and deleting a pod.
+  The game itself was then run on that cluster. The control-plane-only test
+  (`tools\live-test.ps1`, 40 of 40) still covers apply, RBAC refusal and
+  presence. **Not tested:** any cloud provider (EKS, AKS, GKE), Rancher, k3s
+  or OpenShift, and a sign-in helper actually signing in.
+- **Storage inspection is verified live** on that cluster and on a real Docker
+  container (`tests/live/docker_backend_test.gd`, 19 of 19): real folder
+  listings and file contents, `..` refused, the service-account token never
+  read, and links never followed. The live tests found a real gap, now closed:
+  a link *inside* a volume (to a file, or on Docker to a folder) used to be
+  read through to wherever it pointed. Images without `ls` and `head`
+  (distroless) are still untested.
+- **Usage figures:** verified live on Docker (`docker stats`: CPU, memory,
+  network and disk, with a stopped container giving no figures rather than
+  zeros). On Kubernetes only the "this cluster has no metrics API" answer has
+  been seen for real: installing metrics-server on the test cluster was not
+  permitted in the session that wrote this, so **reading real figures from the
+  metrics API is not tested**.
 - **LiveView** is verified against a local test page (click, typing, blocked
   external link, 20 frames in 2 s). It has not been run against Grafana, or
   against a Kubernetes Service through a port-forward.
-- **Port-forward** has no test of its own.
+- **Port-forward** is verified live (nginx answering through a loopback port on the kind cluster). LiveView through it onto a machine screen has not been run.
 - No clean-Windows-machine installation test was done. No large-cluster
   benchmark (hundreds of nodes, thousands of pods) was done.
 
@@ -119,10 +127,45 @@ exactly that: the code exists and has not been run against the real thing.
   in the browser demo) a Grafana machine shows a hand-drawn dashboard of the
   simulated cluster's own figures and a Plex or Tautulli machine shows
   invented stream activity, each under a SIMULATED banner. They are not
-  Grafana or Tautulli pages and cannot be clicked. On a real cluster or Docker
-  engine these screens stay neutral until a real page or provider is put on
-  them. Checked on the desktop renderer and on the Compatibility renderer the
-  browser build uses; the exported browser build itself was not run.
+  Grafana or Tautulli pages: clicking one opens it full size with two views to
+  switch between, not a web page. On a real cluster or Docker engine these
+  screens stay neutral until a real page or provider is put on them.
+- **The exported browser build was run**: it loads, the world chooser works,
+  the media world loads, and the browser console shows no errors. The tool
+  used to drive it could not send keys or capture the mouse, so walking up to
+  a screen and pressing `R` / `V` was checked on the Compatibility renderer
+  the browser build uses, not inside the browser itself.
+- **Touch controls are untested on real phones.** They were driven with real
+  touch events at phone sizes (844 x 390 and 390 x 844) on the Compatibility
+  renderer the browser build uses: two thumbs independently, dead zone, release
+  on lift, tool choice doing nothing by itself, ACTION opening a screen with
+  the Demolisher in hand and nothing destroyed, the menu, switching them off.
+  The exported browser build was also opened at phone size with the controls
+  on: the dialogs filled the screen and the on-screen ACTION button worked.
+  **No iPhone or Android device was used**, so notch and home-indicator
+  margins, browser toolbars, rotation while playing, frame rate and memory on a
+  phone are all unmeasured. Dialogs other than a machine's screen are scaled
+  up to fill the phone but were designed for a desktop: their text is small,
+  in portrait especially. There is no native mobile build.
+- **Usage figures (Metrics view):** Kubernetes reports CPU and memory only;
+  network and disk show as unavailable there. The kubectl mode has no usage
+  figures.
+- **Screen views:** at most 8 machines show metrics, logs or storage at once
+  (the oldest goes back to its dashboard). Logs show the last 13 lines of the
+  first container. Logs and storage on a machine's screen were seen working on
+  the real kind cluster (etcd's own log lines, its real mounts). Putting a live page or a provider on a machine while it
+  shows another view does not switch it back to the dashboard by itself.
+- **Tables:** the workload list, cluster list, storage file list and the
+  Grafana dashboard and panel lists sort by a clicked column and filter with a
+  CONTAINS box. Bob's fix list and Porter's lists are cards, not tables, and do
+  not. A table of 10,000 rows or more is shown unsorted and unfiltered; 9,999
+  rows sort in about a tenth of a second.
+- **Bob and Porter portraits** use their current models on the desktop; the
+  browser build keeps the drawn portraits, as it keeps the drawn figures.
+- **Application icons** are generic symbols by kind (database, cache, media
+  server...), drawn in code from the container image name. They are not the
+  applications' own logos, and an image it does not recognise gets a plain
+  block.
 - The asset reviewer that came with the library is added to the Pages build at
   `model-viewer/`. It was checked locally (loads, no external requests, no
   console errors); it goes live only when this branch is merged and Pages

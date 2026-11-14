@@ -12,19 +12,26 @@ extends Node
 # cluster or a Docker engine: there the screens stay neutral until a real page
 # or a real provider is put on them.
 # It needs no companion and no network, so it works in the browser build.
+#
+# Each screen has two views; V on the machine opens it large, where the view
+# can be switched (the machine's own screen follows).
 
 const K = preload("res://scripts/kutil.gd")
 const Models = preload("res://scripts/models.gd")
 
 const SIZE = Vector2i(640, 448)
 const HISTORY = 40
+const VIEWS = {"grafana": ["Cluster overview", "Nodes"], "streams": ["Activity", "Bandwidth"]}
 
 var world = null
 var live = null
 var providers = null
+var mode_screens = null     # the screen-mode switcher: metrics / logs / storage take the screen while shown
 
-var _screens = {}      # machine uid -> {kind, vp, panel}
+var _screens = {}      # machine uid -> {kind, vp, panel, name}
 var _cpu_hist = []     # share of CPU requested, one sample per state update
+var _bw_hist = []      # simulated total bandwidth (kbps), one sample per state update
+var _figures = {}
 var _t = 0.0
 
 # What a simulated machine's screen shows: "grafana", "streams" or "".
@@ -42,8 +49,8 @@ static func kind_of(pod: Dictionary) -> String:
 # Simulated stream activity at time t (seconds): a few streams that come and go.
 # Deterministic, so a test can say what it should be.
 static func streams_at(t: float) -> Dictionary:
-	var n = 2 + int(round(1.5 + 1.5 * sin(t / 37.0)))          # 2..5 streams
-	var transcode = clampi(int(round(n * (0.35 + 0.25 * sin(t / 53.0 + 1.0)))), 0, n)
+	var n = 2 + int(round(1.5 + 1.5 * sin(t / 11.0)))          # 2..5 streams
+	var transcode = clampi(int(round(n * (0.35 + 0.25 * sin(t / 17.0 + 1.0)))), 0, n)
 	var direct_stream = clampi(int(round((n - transcode) * 0.3)), 0, n - transcode)
 	var direct_play = n - transcode - direct_stream
 	var wan = transcode * 4200 + direct_stream * 6500
@@ -77,10 +84,41 @@ static func cluster_figures(state: Dictionary) -> Dictionary:
 				bad += 1
 	return {"cpu": cpu_req / maxf(cpu, 0.001), "mem": mem_req / maxf(mem, 0.001), "running": ok, "pending": pending, "failing": bad, "nodes": nodes}
 
+func has(uid: String) -> bool:
+	return _screens.has(uid)
+
+# [{uid, kind, name}] for the list in the LiveView panel
+func screens() -> Array:
+	var res = []
+	for uid in _screens:
+		res.append({"uid": uid, "kind": _screens[uid]["kind"], "name": _screens[uid]["name"]})
+	return res
+
+func texture_of(uid: String) -> Texture2D:
+	return _screens[uid]["vp"].get_texture() if _screens.has(uid) else null
+
+func view_of(uid: String) -> int:
+	return int(_screens[uid]["panel"].view) if _screens.has(uid) else 0
+
+func set_view(uid: String, v: int) -> void:
+	if _screens.has(uid):
+		_screens[uid]["panel"].view = v
+		_screens[uid]["panel"].queue_redraw()
+
+# A second, larger copy of a machine's panel for the window (same data, same view).
+func make_panel(uid: String) -> Control:
+	if not _screens.has(uid):
+		return null
+	var p = ScreenPanel.new()
+	p.kind = _screens[uid]["kind"]
+	p.source = _screens[uid]["panel"]
+	return p
+
 func clear() -> void:
 	for uid in _screens.keys():
 		_drop(uid)
 	_cpu_hist.clear()
+	_bw_hist.clear()
 
 func _drop(uid: String) -> void:
 	var s = _screens[uid]
@@ -93,6 +131,8 @@ func _drop(uid: String) -> void:
 
 # a real page or a real provider on that screen always wins
 func _taken(uid: String) -> bool:
+	if mode_screens != null and mode_screens.holds(uid):
+		return true
 	if providers != null and providers.pins.has(uid):
 		return true
 	if live != null:
@@ -105,15 +145,18 @@ func _taken(uid: String) -> bool:
 func sync(state: Dictionary) -> void:
 	if world == null:
 		return
-	var fig = cluster_figures(state)
-	_cpu_hist.append(fig["cpu"])
-	if _cpu_hist.size() > HISTORY:
-		_cpu_hist.pop_front()
+	_figures = cluster_figures(state)
+	var st = streams_at(_t)
+	_cpu_hist.append(_figures["cpu"])
+	_bw_hist.append(float(st["total_kbps"]))
+	for h in [_cpu_hist, _bw_hist]:
+		if h.size() > HISTORY:
+			h.pop_front()
 	var want = {}
 	for p in state.get("pods", []):
 		var kind = kind_of(p)
 		if kind != "" and world.machines.has(str(p["uid"])):
-			want[str(p["uid"])] = kind
+			want[str(p["uid"])] = [kind, str(p["name"])]
 	for uid in _screens.keys():
 		if not want.has(uid):
 			_drop(uid)
@@ -126,14 +169,15 @@ func sync(state: Dictionary) -> void:
 			vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 			add_child(vp)
 			var panel = ScreenPanel.new()
-			panel.kind = want[uid]
+			panel.kind = want[uid][0]
 			panel.size = Vector2(SIZE)
 			vp.add_child(panel)
-			_screens[uid] = {"kind": want[uid], "vp": vp, "panel": panel}
+			_screens[uid] = {"kind": want[uid][0], "vp": vp, "panel": panel, "name": want[uid][1]}
 		var s = _screens[uid]
-		s["panel"].figures = fig
+		s["panel"].figures = _figures
 		s["panel"].history = _cpu_hist
-		s["panel"].streams = streams_at(_t)
+		s["panel"].bw_history = _bw_hist
+		s["panel"].streams = st
 		s["panel"].queue_redraw()
 		if not _taken(uid):
 			world.machines[uid].set_screen_texture(s["vp"].get_texture())
@@ -142,102 +186,132 @@ func _process(delta: float) -> void:
 	_t += delta
 
 # One screen's picture, drawn by hand so it costs a single small viewport.
+# Laid out on a 640 x 448 sheet in large print (it is read from across a
+# walkway) and scaled to whatever size the control has.
 class ScreenPanel extends Control:
 	var kind = ""
+	var view = 0
 	var figures = {}
 	var history = []
+	var bw_history = []
 	var streams = {}
+	var source: Control = null     # the window's copy mirrors the machine's panel
 
 	const BG = Color(0.067, 0.082, 0.102)
 	const CARD = Color(0.106, 0.129, 0.157)
-	const TXT = Color(0.9, 0.93, 0.96)
-	const DIM = Color(0.58, 0.64, 0.7)
+	const TXT = Color(0.92, 0.95, 0.98)
+	const DIM = Color(0.62, 0.68, 0.74)
 	const ORANGE = Color(0.957, 0.647, 0.227)
 	const GREEN = Color(0.35, 0.82, 0.5)
 	const AMBER = Color(0.95, 0.75, 0.25)
 	const RED = Color(0.93, 0.36, 0.3)
 	const BLUE = Color(0.36, 0.62, 0.95)
 
-	func _text(pos: Vector2, s: String, size: int, col: Color, width: float = -1.0, align: int = HORIZONTAL_ALIGNMENT_LEFT) -> void:
-		draw_string(ThemeDB.fallback_font, pos, s, align, width, size, col)
+	func _process(_d: float) -> void:
+		if source != null and is_instance_valid(source):
+			view = source.view
+			figures = source.figures
+			history = source.history
+			bw_history = source.bw_history
+			streams = source.streams
+			queue_redraw()
+
+	func _text(pos: Vector2, s: String, px: int, col: Color, width: float = -1.0, align: int = HORIZONTAL_ALIGNMENT_LEFT) -> void:
+		draw_string(ThemeDB.fallback_font, pos, s, align, width, px, col)
 
 	func _card(r: Rect2, title: String) -> void:
 		draw_rect(r, CARD)
-		_text(r.position + Vector2(10, 20), title, 13, DIM)
+		_text(r.position + Vector2(12, 24), title, 17, DIM)
 
-	func _draw() -> void:
-		draw_rect(Rect2(Vector2.ZERO, size), BG)
-		# the banner: on every panel, always
-		draw_rect(Rect2(0, 0, size.x, 30), Color(0.2, 0.14, 0.05))
-		_text(Vector2(12, 21), "SIMULATED  ·  demo content, not a real " + ("Grafana" if kind == "grafana" else "media server"), 14, ORANGE)
-		if kind == "grafana":
-			_grafana()
-		else:
-			_streams()
+	func _level(v: float) -> Color:
+		return GREEN if v < 0.7 else (AMBER if v < 0.9 else RED)
 
-	func _grafana() -> void:
-		_text(Vector2(12, 56), "Cluster overview", 20, TXT)
-		# requested CPU over time
-		var chart = Rect2(12, 68, 400, 170)
-		_card(chart, "CPU REQUESTED  (share of the cluster)")
-		var plot = Rect2(chart.position + Vector2(12, 32), chart.size - Vector2(24, 44))
+	func _line(plot: Rect2, values: Array, top: float, col: Color) -> void:
 		for i in 3:
 			var y = plot.position.y + plot.size.y * i / 2.0
-			draw_line(Vector2(plot.position.x, y), Vector2(plot.end.x, y), Color(1, 1, 1, 0.07), 1.0)
-		if history.size() >= 2:
-			var pts = PackedVector2Array()
-			for i in history.size():
-				pts.append(Vector2(plot.position.x + plot.size.x * i / float(maxi(history.size() - 1, 1)), plot.end.y - plot.size.y * clampf(history[i], 0.0, 1.0)))
-			draw_polyline(pts, BLUE, 2.5, true)
-		_text(Vector2(chart.end.x - 80, chart.position.y + 20), "%d%%" % int(round(float(figures.get("cpu", 0.0)) * 100.0)), 15, TXT, 70, HORIZONTAL_ALIGNMENT_RIGHT)
-		# memory gauge
-		var g = Rect2(424, 68, 204, 170)
-		_card(g, "MEMORY REQUESTED")
-		var mem = clampf(float(figures.get("mem", 0.0)), 0.0, 1.0)
-		var c = g.position + Vector2(g.size.x / 2.0, 118)
-		draw_arc(c, 58, PI, TAU, 40, Color(1, 1, 1, 0.1), 12.0, true)
-		draw_arc(c, 58, PI, PI + PI * mem, 40, GREEN if mem < 0.7 else (AMBER if mem < 0.9 else RED), 12.0, true)
-		_text(c + Vector2(-50, 6), "%d%%" % int(round(mem * 100.0)), 26, TXT, 100, HORIZONTAL_ALIGNMENT_CENTER)
-		# pod state tiles
-		var tiles = [["RUNNING", int(figures.get("running", 0)), GREEN], ["PENDING", int(figures.get("pending", 0)), AMBER], ["FAILING", int(figures.get("failing", 0)), RED]]
-		for i in tiles.size():
-			var r = Rect2(12 + i * 138, 250, 126, 84)
-			_card(r, tiles[i][0])
-			_text(r.position + Vector2(10, 66), str(tiles[i][1]), 36, tiles[i][2] if tiles[i][1] > 0 or i == 0 else DIM)
-		# per-node load
-		var nr = Rect2(426, 250, 202, 186)
-		_card(nr, "NODE CPU REQUESTED")
-		var nodes: Array = figures.get("nodes", [])
-		for i in mini(nodes.size(), 6):
-			var y = nr.position.y + 36 + i * 24
-			var share = clampf(float(nodes[i]["load"]), 0.0, 1.0)
-			_text(Vector2(nr.position.x + 10, y + 11), str(nodes[i]["name"]).right(12), 11, DIM)
-			draw_rect(Rect2(nr.position.x + 100, y, 92, 12), Color(1, 1, 1, 0.08))
-			draw_rect(Rect2(nr.position.x + 100, y, 92 * share, 12), GREEN if share < 0.7 else (AMBER if share < 0.9 else RED))
-		_text(Vector2(12, 362), "These are the simulated cluster's own figures,", 13, DIM)
-		_text(Vector2(12, 380), "the same ones the HUD shows, drawn as a dashboard.", 13, DIM)
-		_text(Vector2(12, 410), "On a real cluster this screen shows your real Grafana.", 13, DIM)
+			draw_line(Vector2(plot.position.x, y), Vector2(plot.end.x, y), Color(1, 1, 1, 0.08), 1.0)
+		if values.size() < 2:
+			return
+		var pts = PackedVector2Array()
+		for i in values.size():
+			pts.append(Vector2(plot.position.x + plot.size.x * i / float(values.size() - 1), plot.end.y - plot.size.y * clampf(float(values[i]) / maxf(top, 0.001), 0.0, 1.0)))
+		draw_polyline(pts, col, 4.0, true)
 
-	func _streams() -> void:
-		_text(Vector2(12, 56), "Media activity", 20, TXT)
+	func _draw() -> void:
+		var fit = minf(size.x / 640.0, size.y / 448.0)
+		draw_set_transform((size - Vector2(640, 448) * fit) * 0.5, 0.0, Vector2(fit, fit))
+		draw_rect(Rect2(0, 0, 640, 448), BG)
+		# the banner: on every panel, always
+		draw_rect(Rect2(0, 0, 640, 36), Color(0.22, 0.15, 0.05))
+		_text(Vector2(12, 26), "SIMULATED", 22, ORANGE)
+		_text(Vector2(150, 25), "demo content, not a real " + ("Grafana" if kind == "grafana" else "media server"), 17, Color(0.9, 0.78, 0.6))
+		_text(Vector2(12, 70), VIEWS_OF[kind][view], 26, TXT)
+		if kind == "grafana":
+			if view == 0:
+				_overview()
+			else:
+				_nodes()
+		elif view == 0:
+			_activity()
+		else:
+			_bandwidth()
+
+	const VIEWS_OF = {"grafana": ["Cluster overview", "Nodes"], "streams": ["Media activity", "Bandwidth"], "": ["", ""]}
+
+	func _overview() -> void:
+		var chart = Rect2(12, 84, 616, 176)
+		_card(chart, "CPU REQUESTED")
+		_line(Rect2(chart.position + Vector2(14, 40), Vector2(440, 122)), history, 1.0, BLUE)
+		_text(Vector2(480, 200), "%d%%" % int(round(float(figures.get("cpu", 0.0)) * 100.0)), 64, TXT, 140, HORIZONTAL_ALIGNMENT_RIGHT)
+		var mem = clampf(float(figures.get("mem", 0.0)), 0.0, 1.0)
+		var tiles = [["RUNNING", str(int(figures.get("running", 0))), GREEN], ["PENDING", str(int(figures.get("pending", 0))), AMBER if int(figures.get("pending", 0)) > 0 else DIM],
+			["FAILING", str(int(figures.get("failing", 0))), RED if int(figures.get("failing", 0)) > 0 else DIM], ["MEMORY", "%d%%" % int(round(mem * 100.0)), _level(mem)]]
+		for i in tiles.size():
+			var r = Rect2(12 + i * 156, 272, 148, 164)
+			_card(r, tiles[i][0])
+			_text(r.position + Vector2(8, 118), tiles[i][1], 62, tiles[i][2], 132, HORIZONTAL_ALIGNMENT_CENTER)
+
+	func _nodes() -> void:
+		var nodes: Array = figures.get("nodes", [])
+		var rows = mini(nodes.size(), 5)
+		var h = 352.0 / maxi(rows, 1)
+		for i in rows:
+			var y = 84 + i * h
+			var share = clampf(float(nodes[i]["load"]), 0.0, 1.0)
+			draw_rect(Rect2(12, y, 616, h - 8), CARD)
+			_text(Vector2(24, y + h * 0.5 + 4), str(nodes[i]["name"]).right(16), 22, TXT)
+			draw_rect(Rect2(250, y + h * 0.5 - 16, 280, 26), Color(1, 1, 1, 0.08))
+			draw_rect(Rect2(250, y + h * 0.5 - 16, 280 * share, 26), _level(share))
+			_text(Vector2(540, y + h * 0.5 + 6), "%d%%" % int(round(share * 100.0)), 26, TXT, 80, HORIZONTAL_ALIGNMENT_RIGHT)
+
+	func _activity() -> void:
 		var n = int(streams.get("streams", 0))
-		var big = Rect2(12, 68, 200, 150)
+		var big = Rect2(12, 84, 220, 352)
 		_card(big, "STREAMS")
-		_text(big.position + Vector2(10, 118), str(n), 84, TXT)
+		_text(big.position + Vector2(0, 250), str(n), 190, TXT, 220, HORIZONTAL_ALIGNMENT_CENTER)
 		var kinds = [["DIRECT PLAY", int(streams.get("direct_play", 0)), GREEN], ["DIRECT STREAM", int(streams.get("direct_stream", 0)), BLUE], ["TRANSCODE", int(streams.get("transcode", 0)), AMBER]]
-		var kr = Rect2(224, 68, 404, 150)
-		_card(kr, "HOW THEY ARE SERVED")
+		var kr = Rect2(244, 84, 384, 226)
+		draw_rect(kr, CARD)
 		for i in kinds.size():
-			var y = kr.position.y + 42 + i * 34
-			_text(Vector2(kr.position.x + 10, y + 16), kinds[i][0], 14, DIM)
-			draw_rect(Rect2(kr.position.x + 150, y, 200, 20), Color(1, 1, 1, 0.08))
-			draw_rect(Rect2(kr.position.x + 150, y, 200.0 * kinds[i][1] / float(maxi(n, 1)), 20), kinds[i][2])
-			_text(Vector2(kr.position.x + 360, y + 16), str(kinds[i][1]), 16, TXT)
+			var y = kr.position.y + 16 + i * 68
+			_text(Vector2(kr.position.x + 14, y + 22), kinds[i][0], 20, DIM)
+			draw_rect(Rect2(kr.position.x + 14, y + 32, 290, 24), Color(1, 1, 1, 0.08))
+			draw_rect(Rect2(kr.position.x + 14, y + 32, 290.0 * kinds[i][1] / float(maxi(n, 1)), 24), kinds[i][2])
+			_text(Vector2(kr.position.x + 312, y + 56), str(kinds[i][1]), 36, TXT, 60, HORIZONTAL_ALIGNMENT_RIGHT)
+		var br = Rect2(244, 322, 384, 114)
+		_card(br, "BANDWIDTH")
+		_text(br.position + Vector2(12, 92), "%.1f Mbps" % (float(streams.get("total_kbps", 0)) / 1000.0), 54, TXT)
+
+	func _bandwidth() -> void:
 		var bw = [["TOTAL", streams.get("total_kbps", 0)], ["LAN", streams.get("lan_kbps", 0)], ["WAN", streams.get("wan_kbps", 0)]]
 		for i in bw.size():
-			var r = Rect2(12 + i * 208, 230, 198, 92)
-			_card(r, "BANDWIDTH  " + bw[i][0])
-			_text(r.position + Vector2(10, 70), "%.1f Mbps" % (float(bw[i][1]) / 1000.0), 30, TXT)
-		_text(Vector2(12, 356), "Invented activity, to show what this screen is for.", 13, DIM)
-		_text(Vector2(12, 374), "Totals only: no viewer, address or title, as with a real Tautulli.", 13, DIM)
-		_text(Vector2(12, 404), "On a real server: LiveView > Grafana and Tautulli.", 13, DIM)
+			var r = Rect2(12 + i * 208, 84, 200, 130)
+			_card(r, bw[i][0])
+			_text(r.position + Vector2(10, 92), "%.1f" % (float(bw[i][1]) / 1000.0), 54, TXT)
+			_text(r.position + Vector2(10, 118), "Mbps", 17, DIM)
+		var chart = Rect2(12, 226, 616, 210)
+		_card(chart, "TOTAL OVER TIME")
+		var top = 1.0
+		for v in bw_history:
+			top = maxf(top, float(v))
+		_line(Rect2(chart.position + Vector2(14, 44), Vector2(588, 150)), bw_history, top * 1.15, GREEN)

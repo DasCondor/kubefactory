@@ -7,6 +7,7 @@ const Sfx = preload("res://scripts/sfx.gd")
 
 const Gfx = preload("res://scripts/gfx.gd")
 const Models = preload("res://scripts/models.gd")
+const Icons = preload("res://scripts/icons.gd")
 
 static var _m = {}
 static var _merged = {}   # workload colour + detail level -> [core mesh, extra-detail mesh or null]
@@ -78,8 +79,14 @@ static func _core_parts() -> Array:
 		[_box("roof", Vector3(2.6, 0.8, 2.6)), dark, Vector3(-0.5, 3.9, 0.3), z],
 		[_cyl("chimney", 0.42, 2.4), steel, Vector3(1.35, 4.6, -1.35), z],
 		[_cyl("chimney_cap", 0.52, 0.25), dark, Vector3(1.35, 5.75, -1.35), z],
-		[_cyl("rotor_ring", 1.15, 0.25), dark, Vector3(-0.85, 2.0, 2.25), Vector3(PI / 2, 0, 0)],
-		[_box("screen_frame", Vector3(1.5, 1.1, 0.12)), dark, Vector3(1.2, 2.2, 2.22), z],
+		# front face: a wide screen, with a small cooling fan and a vent grille beside it
+		[_cyl("rotor_ring", 0.5, 0.2), dark, Vector3(-1.55, 2.75, 2.25), Vector3(PI / 2, 0, 0)],
+		[_box("front_vent", Vector3(1.0, 0.95, 0.08)), dark, Vector3(-1.55, 1.55, 2.24), z],
+		[_box("front_slit", Vector3(0.84, 0.07, 0.06)), steel, Vector3(-1.55, 1.25, 2.29), z],
+		[_box("front_slit", Vector3(0.84, 0.07, 0.06)), steel, Vector3(-1.55, 1.45, 2.29), z],
+		[_box("front_slit", Vector3(0.84, 0.07, 0.06)), steel, Vector3(-1.55, 1.65, 2.29), z],
+		[_box("front_slit", Vector3(0.84, 0.07, 0.06)), steel, Vector3(-1.55, 1.85, 2.29), z],
+		[_box("screen_frame", Vector3(2.9, 1.95, 0.12)), dark, Vector3(0.6, 2.1, 2.22), z],
 		[_cyl("pole", 0.06, 1.3), steel, Vector3(-1.7, 4.2, 1.7), z]]
 	if not OS.has_feature("web"):   # the browser build has a tight draw budget (see main.gd)
 		# side vents, a feed pipe along the back, hazard kick-plate, a lamp over the screen
@@ -91,7 +98,7 @@ static func _core_parts() -> Array:
 		for px in [-2.2, 2.2]:
 			parts.append([_cyl("pipe_down", 0.16, 2.6), steel, Vector3(px, 1.65, -2.36), z])
 		parts.append([_box("kick", Vector3(5.62, 0.14, 0.06)), Tex.shared("hazard"), Vector3(0, 0.33, 2.81), z])
-		parts.append([_box("lamp_bar", Vector3(1.6, 0.08, 0.08)), Tex.glow(Color(1.0, 0.85, 0.6), 1.2), Vector3(0.2, 3.3, 2.24), z])
+		parts.append([_box("lamp_bar", Vector3(1.6, 0.08, 0.08)), Tex.glow(Color(1.0, 0.85, 0.6), 1.2), Vector3(0.6, 3.22, 2.24), z])
 	return parts
 
 # What the Enhanced (lod 1) and Ultra (lod 2) presets bolt on. Nothing here
@@ -264,6 +271,23 @@ func _build_model(p: Dictionary, col: Color) -> bool:
 	# the model's other displays carry real data: this pod's name, its containers
 	_name_plate = _plate(tpl.get("name_surface"), Color(0.86, 0.95, 1.0), HORIZONTAL_ALIGNMENT_CENTER)
 	_list_plate = _plate(tpl.get("list_surface"), Color(0.8, 0.92, 0.86), HORIZONTAL_ALIGNMENT_LEFT)
+	# what it runs, as an icon at the head of the name display
+	if _name_plate != null:
+		var ns = tpl["name_surface"]
+		var ih = ns["size"].y * 0.88
+		var iq = QuadMesh.new()
+		iq.size = Vector2(ih, ih)
+		var im = StandardMaterial3D.new()
+		im.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		im.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		im.albedo_texture = Icons.texture(Icons.kind_of(p))
+		var icon = MeshInstance3D.new()
+		icon.mesh = iq
+		icon.material_override = im
+		icon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		icon.position = ns["pos"] + Vector3(-ns["size"].x * 0.5 + ih * 0.8, 0, 0.002)
+		_body.add_child(icon)
+		_name_plate.set_meta("size", Vector2(ns["size"].x - ih * 3.4, ns["size"].y))
 	# (the type plate is lettered in the model itself)
 	# the pod's state as one small line on the LiveView glass while no page is shown
 	_status_plate = _plate(tpl.get("screen"), Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
@@ -411,7 +435,7 @@ func set_screen_texture(tex: Texture2D) -> void:
 			if tex == null:
 				return
 			var q = QuadMesh.new()
-			q.size = Vector2(1.26, 0.86)
+			q.size = Vector2(2.62, 1.67)
 			_screen_quad = MeshInstance3D.new()
 			_screen_quad.mesh = q
 			_screen_quad.position = _screen.position + Vector3(0, 0, 0.034)
@@ -431,8 +455,6 @@ func set_screen_texture(tex: Texture2D) -> void:
 			_screen.visible = false
 			if _status_plate != null:
 				_status_plate.visible = true
-		else:
-			_screen.material_override = Tex.status_glow(_health if _health != "" else "warn")
 		return
 	if not _live or _live_mat == null:
 		_live_mat = StandardMaterial3D.new()
@@ -447,8 +469,14 @@ func set_screen_texture(tex: Texture2D) -> void:
 
 # Where the screen is in the world and how big, for aiming at it: {pos, right, up, size}
 func screen_rect() -> Dictionary:
-	if _screen == null or not (_screen.mesh is QuadMesh):
+	if _screen == null or _screen.mesh == null:
 		return {}
+	if not (_screen.mesh is QuadMesh):
+		# the code-drawn machine: its screen is the front of a box
+		var gb = _screen.global_transform
+		var bs: Vector3 = _screen.mesh.size
+		return {"pos": gb.origin + gb.basis.z.normalized() * bs.z * 0.5, "right": gb.basis.x.normalized(), "up": gb.basis.y.normalized(),
+			"size": Vector2(bs.x, bs.y) * gb.basis.get_scale().x, "normal": gb.basis.z.normalized()}
 	var g = _screen.global_transform
 	return {"pos": g.origin, "right": g.basis.x.normalized(), "up": g.basis.y.normalized(),
 		"size": _screen.mesh.size * g.basis.get_scale().x, "normal": g.basis.z.normalized()}
@@ -507,12 +535,12 @@ func _build_classic(col: Color) -> void:
 
 	# Front face (+Z): spinning rotor and a status screen (these change, so they stay separate)
 	_fan = Node3D.new()
-	_fan.position = Vector3(-0.85, 2.0, 2.42)
+	_fan.position = Vector3(-1.55, 2.75, 2.37)
 	add_child(_fan)
 	for i in 3:
-		var blade = _add(_box("blade", Vector3(1.9, 0.26, 0.08)), Tex.shared("steel"), Vector3.ZERO, _fan)
+		var blade = _add(_box("blade", Vector3(0.82, 0.12, 0.05)), Tex.shared("steel"), Vector3.ZERO, _fan)
 		blade.rotation.z = i * PI / 3.0
-	_screen = _add(_box("screen", Vector3(1.3, 0.9, 0.06)), Tex.status_glow("warn"), Vector3(1.2, 2.2, 2.29))
+	_screen = _add(_box("screen", Vector3(2.7, 1.75, 0.06)), Tex.mat(Color(0.05, 0.065, 0.085), 0.35), Vector3(0.6, 2.1, 2.29))
 	if not _m.has("bulb"):
 		var s = SphereMesh.new()
 		s.radius = 0.3
@@ -538,6 +566,10 @@ func _finish_setup(p: Dictionary) -> void:
 	_sub.visibility_range_end = 60.0
 	add_child(_sub)
 
+	# up close the name is on the machine (or under the crosshair when you aim at
+	# it); the floating text is for finding a machine from across the yard
+	_label.visibility_range_begin = 16.0
+	_sub.visibility_range_begin = 16.0
 	_smoke = CPUParticles3D.new()
 	_smoke.position = Vector3(1.35, 5.9, -1.35)
 	_smoke.amount = 10
@@ -576,6 +608,17 @@ func _finish_setup(p: Dictionary) -> void:
 		_smoke.gravity = Vector3(0.2, 0.5, -0.6)
 		_label.position.y = _top + 2.0
 		_sub.position.y = _top + 1.45
+		# up close the machine's own displays carry its name and state, so the
+		# floating text is for finding it from across the yard only
+	else:
+		# the code-drawn machine has no name display: its icon rides beside the floating name
+		var sp = Sprite3D.new()
+		sp.texture = Icons.texture(Icons.kind_of(p))
+		sp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sp.pixel_size = 0.011
+		sp.position = Vector3(0, 7.95, 0)
+		sp.visibility_range_end = 60.0
+		add_child(sp)
 
 	# Alarm: a red light column + warning sign, visible from across the factory.
 	if not _m.has("beam"):
@@ -638,8 +681,6 @@ func update(p: Dictionary) -> void:
 	_sub.modulate = K.health_color(h)
 	if h != _health:
 		_health = h
-		if not _live and model_id == "":
-			_screen.material_override = Tex.status_glow(h)
 		_beacon.material_override = Tex.status_glow(h)
 		_smoke.emitting = h == "ok"
 		_alarm.visible = h == "bad"

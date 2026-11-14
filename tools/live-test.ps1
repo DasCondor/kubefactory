@@ -9,7 +9,7 @@
 # -Grafana instead runs the Grafana provider against a real Grafana OSS (11.2.0, or -GrafanaVersion <x.y.z>): it is
 # downloaded (checksum-verified) into .toolchain\, started on 127.0.0.1 with a throw-away
 # data folder and a random admin password, and removed again. See tests\live\grafana_test.py.
-param([switch]$Grafana, [string]$GrafanaVersion = "11.2.0", [switch]$Tautulli, [string]$TautulliVersion = "2.19.1")
+param([switch]$Grafana, [string]$GrafanaVersion = "11.2.0", [switch]$Tautulli, [string]$TautulliVersion = "2.19.1", [switch]$Kind)
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "..")).Path
 $tc = Join-Path $root ".toolchain"
@@ -32,6 +32,12 @@ if ($Grafana) {
         Remove-Item (Join-Path $tc "grafana_x") -Recurse -Force; Remove-Item $z
     }
     python (Join-Path $root "tests\live\grafana_test.py") $root (Join-Path $root "agent\bin\kf-agent.exe") $gh
+    exit $LASTEXITCODE
+}
+if ($Kind) {
+    # a real cluster with running containers: the disposable kind cluster from tools\dev-cluster.ps1
+    if ((kind get clusters) -notcontains "kubefactory") { Write-Host "No kind cluster yet: run tools\dev-cluster.ps1 first (it needs Docker)." -ForegroundColor Red; exit 1 }
+    python (Join-Path $root "tests\live\kind_test.py") $root (Join-Path $root "agent\bin\kf-agent.exe")
     exit $LASTEXITCODE
 }
 if ($Tautulli) {
