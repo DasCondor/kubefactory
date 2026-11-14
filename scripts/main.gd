@@ -647,6 +647,8 @@ func _run_toolshots(dir: String) -> void:
 		player.flying = true
 		player.teleport(Vector3(-40, 26, 8), Vector3(0, 2, -62))
 		await _shot(dir, "demo_%s" % d["id"])
+		player.teleport(Vector3(-22, 17, -18), Vector3(6, 12, -40))   # in among the belts
+		await _shot(dir, "demo_%s_belts" % d["id"])
 		for j in K.issues(cluster.state):
 			if j["kind"] == "pod" and j["status"] != "ImagePullBackOff":
 				hud.open_bob_case(j["uid"])
