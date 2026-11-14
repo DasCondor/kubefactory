@@ -44,6 +44,7 @@ var _live = false
 var _live_mat: StandardMaterial3D = null
 var _name_plate: Label3D = null     # the model's resource-name display
 var _list_plate: Label3D = null     # the model's container list display
+var _status_plate: Label3D = null   # the pod's state, on the LiveView glass while it shows no page
 
 static func _box(key: String, size: Vector3) -> BoxMesh:
 	if not _m.has(key):
@@ -252,7 +253,7 @@ func _build_model(p: Dictionary, col: Color) -> bool:
 		_screen = MeshInstance3D.new()
 		_screen.mesh = q
 		_screen.position = sc["pos"] + screen_off
-		_screen.material_override = Tex.status_glow("warn")
+		_screen.visible = false     # the glass stays neutral until a real page is on it: health never tints it
 		_screen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_screen.name = "LiveViewSurface"
 		screen_parent.add_child(_screen)
@@ -262,17 +263,9 @@ func _build_model(p: Dictionary, col: Color) -> bool:
 	# the model's other displays carry real data: this pod's name, its containers
 	_name_plate = _plate(tpl.get("name_surface"), Color(0.86, 0.95, 1.0), HORIZONTAL_ALIGNMENT_CENTER)
 	_list_plate = _plate(tpl.get("list_surface"), Color(0.8, 0.92, 0.86), HORIZONTAL_ALIGNMENT_LEFT)
-	if tpl.has("type_label") and str(tpl["type_label"]["text"]) != "":
-		var tl = tpl["type_label"]
-		var l = Label3D.new()
-		l.text = str(tl["text"])
-		l.font_size = 48
-		l.modulate = Color(0.08, 0.09, 0.11)
-		l.outline_size = 0
-		l.shaded = true
-		l.position = Vector3(tl["pos"].x, tl["pos"].y, tl["front"] + 0.003)
-		K.fit_label(l, tl["size"].x * 0.9, tl["size"].y * 0.72, 0.004)
-		_body.add_child(l)
+	# (the type plate is lettered in the model itself)
+	# the pod's state as one small line on the LiveView glass while no page is shown
+	_status_plate = _plate(tpl.get("screen"), Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
 	_fan = Node3D.new()
 	add_child(_fan)
 	var b: AABB = tpl["bounds"]
@@ -414,7 +407,12 @@ func set_screen_texture(tex: Texture2D) -> void:
 		return
 	if tex == null:
 		_live = false
-		_screen.material_override = Tex.status_glow(_health if _health != "" else "warn")
+		if model_id != "":
+			_screen.visible = false
+			if _status_plate != null:
+				_status_plate.visible = true
+		else:
+			_screen.material_override = Tex.status_glow(_health if _health != "" else "warn")
 		return
 	if not _live or _live_mat == null:
 		_live_mat = StandardMaterial3D.new()
@@ -422,6 +420,9 @@ func set_screen_texture(tex: Texture2D) -> void:
 		_live_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_live_mat.albedo_texture = tex
 	_screen.material_override = _live_mat
+	_screen.visible = true
+	if _status_plate != null:
+		_status_plate.visible = false
 	_live = true
 
 # Where the screen is in the world and how big, for aiming at it: {pos, right, up, size}
@@ -617,7 +618,7 @@ func update(p: Dictionary) -> void:
 	_sub.modulate = K.health_color(h)
 	if h != _health:
 		_health = h
-		if not _live:
+		if not _live and model_id == "":
 			_screen.material_override = Tex.status_glow(h)
 		_beacon.material_override = Tex.status_glow(h)
 		_smoke.emitting = h == "ok"
@@ -629,6 +630,10 @@ func update(p: Dictionary) -> void:
 	_warn.text = "!  " + p["status"]
 	var conts = p["containers"]
 	_plate_text(_name_plate, str(p["name"]))
+	if _status_plate != null:
+		_plate_text(_status_plate, str(p["status"]))
+		_status_plate.pixel_size = minf(_status_plate.pixel_size, 0.0014)
+		_status_plate.modulate = K.health_color(h)
 	if _list_plate != null:
 		var rows = PackedStringArray()
 		for i in mini(conts.size(), 6):

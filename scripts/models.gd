@@ -71,44 +71,43 @@ static func tier() -> String:
 
 # ---- which machine model stands for which workload
 
-# Chosen from what the pod actually is: its image first (a database is a
-# database whatever controller runs it), then its workload kind.
-static func machine_for(pod: Dictionary) -> String:
-	var images = ""
-	for c in pod.get("containers", []):
-		images += str(c.get("image", "")).to_lower() + " "
-	var name = (str(pod.get("wname", "")) + " " + str(pod.get("name", ""))).to_lower()
-	var both = images + name
-	var by_image = [
-		[["postgres", "mysql", "mariadb", "mongo", "cockroach", "influxdb", "clickhouse", "mssql", "timescale", "catalog-db"], "database_server"],
-		[["redis", "memcached", "valkey", "sccache", "dragonfly"], "cache_server"],
-		[["kafka", "rabbitmq", "nats", "mosquitto", "pulsar", "activemq"], "broker_rack"],
-		[["prometheus", "grafana", "alertmanager", "tautulli", "uptime-kuma", "cadvisor"], "monitoring_server"],
-		[["loki", "fluent", "promtail", "logstash", "vector", "node-exporter", "filebeat"], "log_collector"],
-		[["registry", "harbor", "minio", "nexus", "artifactory"], "registry_rack"],
-		[["nginx", "traefik", "envoy", "haproxy", "ingress", "caddy", "kube-proxy", "frontend"], "load_balancer"],
-		[["coredns", "dns", "pihole", "adguard", "wireguard", "tailscale", "zigbee2mqtt", "zwave"], "network_appliance"],
-		[["buildkit", "woodpecker", "drone", "jenkins", "runner", "kaniko", "devcontainer", "code-server", "builder", "gitea"], "build_station"],
-	]
-	for row in by_image:
-		for key in row[0]:
-			if both.contains(key):
-				return row[1]
-	match str(pod.get("wkind", "")):
-		"StatefulSet":
-			return "statefulset"
-		"DaemonSet":
-			return "daemonset"
-		"Job":
-			return "job_station"
-		"CronJob":
-			return "cronjob_station"
-		"Deployment":
-			return "deployment_line"
-		"Compose":
-			return "compose_stack"
-	return "container_machine" if str(pod.get("wkind", "")) != "Pod" else "pod_machine"
+# A machine in the world is one pod (or one Docker container), and the model's
+# plate says what it is, so the choice has to be true:
+#   - a pod is a POD and a Docker container a CONTAINER, whatever owns it. A
+#     Deployment's pod is not "a Deployment", so the workload models are not used
+#     for pods
+#   - a pod gets a role model (DATABASE SERVER, CACHE SERVER...) only when the
+#     image it runs is that software. The image's own name decides: the last part
+#     of its path, without registry host, organisation or tag. "registry.k8s.io/
+#     coredns/coredns" is coredns, not a registry; a pod called "frontend" is not
+#     a load balancer
+# Health never picks the model: the beacon and the status line show it.
+const ROLES = [
+	[["postgres", "postgresql", "mysql", "mariadb", "mongo", "mongodb", "cockroach", "influxdb", "clickhouse", "mssql", "timescaledb"], "database_server"],
+	[["redis", "memcached", "valkey", "dragonfly", "sccache"], "cache_server"],
+	[["kafka", "rabbitmq", "nats", "mosquitto", "pulsar", "activemq"], "broker_rack"],
+	[["prometheus", "grafana", "alertmanager", "tautulli", "uptime-kuma"], "monitoring_server"],
+	[["loki", "fluentd", "fluent-bit", "promtail", "logstash", "vector", "filebeat"], "log_collector"],
+	[["registry", "harbor-core", "harbor-registry", "nexus", "nexus3", "artifactory"], "registry_rack"],
+	[["traefik", "haproxy", "envoy", "nginx-ingress", "nginx-ingress-controller"], "load_balancer"],
+	[["coredns", "pihole", "adguardhome", "wireguard", "tailscale", "kube-proxy"], "network_appliance"],
+	[["buildkit", "kaniko", "jenkins", "gitlab-runner", "act_runner", "woodpecker-agent", "drone-runner-docker"], "build_station"],
+]
 
+# "registry.k8s.io/coredns/coredns:v1.11.3" -> "coredns"
+static func image_name(image: String) -> String:
+	var s = image.to_lower().get_slice("@", 0)
+	var last = s.get_slice("/", s.get_slice_count("/") - 1)
+	return last.get_slice(":", 0)
+
+static func machine_for(pod: Dictionary) -> String:
+	var conts: Array = pod.get("containers", [])
+	if not conts.is_empty():
+		var name = image_name(str(conts[0].get("image", "")))     # the pod's main container
+		for row in ROLES:
+			if name in row[0]:
+				return row[1]
+	return "container_machine" if str(pod.get("wkind", "")) in ["Compose", "Container"] else "pod_machine"
 # ---- loading
 
 static func _load_scene(id: String, t: String) -> Node3D:

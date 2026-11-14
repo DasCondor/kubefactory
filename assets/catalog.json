@@ -1349,7 +1349,7 @@
       "id": "gauge",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8764,
@@ -1507,9 +1507,9 @@
               "role": "player"
             }
           },
-          "bytes": 236456,
+          "bytes": 236688,
           "path": "assets/krew/gauge_standard.glb",
-          "sha256": "573eef7ac284d95874457ed02225969fd853ab8c3cd9da3a8c69dad7ee2eadb3"
+          "sha256": "e67b8b7669974cbfb1fddafc8a902b90cf43781e6f41188d7bdbfddac4f2633a"
         },
         "enhanced": {
           "triangles": 12428,
@@ -1667,9 +1667,9 @@
               "role": "player"
             }
           },
-          "bytes": 308616,
+          "bytes": 308848,
           "path": "assets/krew/gauge_enhanced.glb",
-          "sha256": "01454126493824688134e8630b6be28e9ad79ad399ee1193285460230bcabb61"
+          "sha256": "a69654e6a82cad10a0bb8949e979844ad71579856fc3c1060c6a2fde812427f9"
         },
         "ultra": {
           "triangles": 19020,
@@ -1827,11 +1827,12 @@
               "role": "player"
             }
           },
-          "bytes": 458424,
+          "bytes": 458656,
           "path": "assets/krew/gauge_ultra.glb",
-          "sha256": "a0a6a49326c2ef5249210e15f21ddf3ace71eeae89b4f9e7d9ee236272fc6942"
+          "sha256": "fe579fec43abb19100e9e109e3bee2a02ab1a9d9a155e923aa993a47287a81db"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "scrappy",
@@ -2114,7 +2115,7 @@
       "id": "blueprint",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8390,
@@ -2255,9 +2256,9 @@
               "role": "player"
             }
           },
-          "bytes": 227064,
+          "bytes": 227296,
           "path": "assets/krew/blueprint_standard.glb",
-          "sha256": "99ab44a52d5cf40662cfc4ff18ca32d74864db26accdea4a1d6dc3bed2886521"
+          "sha256": "5ba3569b530ad79580bc1c882150510dd9798c4cb4e7e1c36347de58fe581ada"
         },
         "enhanced": {
           "triangles": 12030,
@@ -2398,9 +2399,9 @@
               "role": "player"
             }
           },
-          "bytes": 298940,
+          "bytes": 299172,
           "path": "assets/krew/blueprint_enhanced.glb",
-          "sha256": "7e504e882410dd60c5a75d1779aea47eb55a02ba3f927c7f7081e0ef0608c9a3"
+          "sha256": "90ba553f72db44d02b95e3c42fcae20252d633468e67701230eae04061b8dd10"
         },
         "ultra": {
           "triangles": 17630,
@@ -2541,17 +2542,18 @@
               "role": "player"
             }
           },
-          "bytes": 420020,
+          "bytes": 420252,
           "path": "assets/krew/blueprint_ultra.glb",
-          "sha256": "0389d746424045ce0a7b273423dea93e34f20188c3cda0988481e2d6416c77a7"
+          "sha256": "564d71ae13d0c178e375d0d2eb4f74569a9753e7dceeb32599c0bb88ce8978a1"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "foreman_offline",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8078,
@@ -2692,9 +2694,9 @@
               "role": "player"
             }
           },
-          "bytes": 216284,
+          "bytes": 216516,
           "path": "assets/krew/foreman_offline_standard.glb",
-          "sha256": "aee5a29ac1fbeaed5680b909b4dfceb43365f3162a1d0f9a9e1e62e287fb42aa"
+          "sha256": "066621c9a8b2c104a468392a5bc289b4f34ffc7fea02e91055d1d7c1ff0cadae"
         },
         "enhanced": {
           "triangles": 11798,
@@ -2835,9 +2837,9 @@
               "role": "player"
             }
           },
-          "bytes": 288352,
+          "bytes": 288584,
           "path": "assets/krew/foreman_offline_enhanced.glb",
-          "sha256": "11a90ad2e77509815827f9217d173368c2840708d4866b6a0968462164cbcab4"
+          "sha256": "ec776db5b7a80280ad648d530981069528379e8dcb5734fadfb344bb0f51d2ba"
         },
         "ultra": {
           "triangles": 16374,
@@ -2978,17 +2980,18 @@
               "role": "player"
             }
           },
-          "bytes": 383236,
+          "bytes": 383468,
           "path": "assets/krew/foreman_offline_ultra.glb",
-          "sha256": "3683d461b9204941deb7e0db1a98708c50fd147d20fa681bbb430a86576f2799"
+          "sha256": "d9cc371b138e7de5269f071bb8b64d2ea064e62ead8523eb3ca11b0ec6de0777"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "foreman_ollama",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8234,
@@ -3129,9 +3132,9 @@
               "role": "player"
             }
           },
-          "bytes": 217180,
+          "bytes": 217412,
           "path": "assets/krew/foreman_ollama_standard.glb",
-          "sha256": "2ce70723d490e7569a0aa39204028231008655bf6d03d0e8075a5ecd299cf9b0"
+          "sha256": "dddba0b05691ad4392de6237ac4888b6c15e005de6ccd43b9c2ae9a902997754"
         },
         "enhanced": {
           "triangles": 12018,
@@ -3272,9 +3275,9 @@
               "role": "player"
             }
           },
-          "bytes": 293308,
+          "bytes": 293540,
           "path": "assets/krew/foreman_ollama_enhanced.glb",
-          "sha256": "830ee3f9d54aad33a838536b511db1e2e74d672ba2e266834a5010c18a71fb4e"
+          "sha256": "eb8b58cb912b226a28f6489b6219e91d05823a1a169b39c3e4a6b9b38979ed97"
         },
         "ultra": {
           "triangles": 15730,
@@ -3415,17 +3418,18 @@
               "role": "player"
             }
           },
-          "bytes": 361576,
+          "bytes": 361808,
           "path": "assets/krew/foreman_ollama_ultra.glb",
-          "sha256": "62176387910677dc0136db11e5ff04d0b5b204f9e1e7c398d63cd99059845872"
+          "sha256": "928ca488787a40b38c677c81f895119f9253fab6dd410d7de1bd7eba09084a0e"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "foreman_lmstudio",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 9474,
@@ -3583,9 +3587,9 @@
               "role": "player"
             }
           },
-          "bytes": 252756,
+          "bytes": 252988,
           "path": "assets/krew/foreman_lmstudio_standard.glb",
-          "sha256": "b8e4a2b209871babe4371a151bdb4c3dcb4cec6bb825cbc8d27823720bcdc730"
+          "sha256": "2f8a5ed7615a56fadf817847c78e7293b63fc4d347418cd3917b0a491c39643d"
         },
         "enhanced": {
           "triangles": 13226,
@@ -3743,9 +3747,9 @@
               "role": "player"
             }
           },
-          "bytes": 326948,
+          "bytes": 327180,
           "path": "assets/krew/foreman_lmstudio_enhanced.glb",
-          "sha256": "53281c2e83892523d965808c018478767450a263349ab70bf39bca492fd43587"
+          "sha256": "0735e02d0e19a2e62d34587207d7a2d9e6b5b30882da204147293ad3cfab117f"
         },
         "ultra": {
           "triangles": 19466,
@@ -3903,17 +3907,18 @@
               "role": "player"
             }
           },
-          "bytes": 469812,
+          "bytes": 470044,
           "path": "assets/krew/foreman_lmstudio_ultra.glb",
-          "sha256": "a8b2be6dc6920c37ad3a444d7527182bef9981d56ae1b94a4f027dcb0d3c0697"
+          "sha256": "3634da57909a793f92c3111afcfc8b7eb97b33d54f39284880428dc7305318b6"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "foreman_openai",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8318,
@@ -4054,9 +4059,9 @@
               "role": "player"
             }
           },
-          "bytes": 223280,
+          "bytes": 223512,
           "path": "assets/krew/foreman_openai_standard.glb",
-          "sha256": "a65efe1f51c3253439cae12433226262ac4a4b87c37a75f659c6957a67fe75cf"
+          "sha256": "2c72b4acff0d459420161ffbc24bddadb02da0fac69267e6bdc00400e7c06ae9"
         },
         "enhanced": {
           "triangles": 12134,
@@ -4197,9 +4202,9 @@
               "role": "player"
             }
           },
-          "bytes": 296320,
+          "bytes": 296552,
           "path": "assets/krew/foreman_openai_enhanced.glb",
-          "sha256": "ea7e80cc73f66135af21d8e1c6bae106b290361c33d784c3c4f27d52b7c8a1e0"
+          "sha256": "8037aba5c7cfd02dce1c157f5e9af7dd97228a1cd94a72d1eb42aaf15b3f8c33"
         },
         "ultra": {
           "triangles": 16998,
@@ -4340,17 +4345,18 @@
               "role": "player"
             }
           },
-          "bytes": 396128,
+          "bytes": 396360,
           "path": "assets/krew/foreman_openai_ultra.glb",
-          "sha256": "cd216087cb915be2260e0d3d47a10c4461f84e47ec9d5b9dbb96ec1e378c895c"
+          "sha256": "88cc3f158c45d16ad818da9b7b301bb99d6566c345ea64816762b39743e7924b"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "foreman_claude",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 7218,
@@ -4491,9 +4497,9 @@
               "role": "player"
             }
           },
-          "bytes": 194468,
+          "bytes": 194700,
           "path": "assets/krew/foreman_claude_standard.glb",
-          "sha256": "2c330d232814c10fd69255f5c84b245c0b274891c10d8a6f8aa5d265101a93e7"
+          "sha256": "174b9689700e0991d9d45bfc4ca2c44894d137957fd6f44f97d7245ac9fcdf0e"
         },
         "enhanced": {
           "triangles": 10746,
@@ -4634,9 +4640,9 @@
               "role": "player"
             }
           },
-          "bytes": 266060,
+          "bytes": 266292,
           "path": "assets/krew/foreman_claude_enhanced.glb",
-          "sha256": "7f536c49361058594a934ee82b48159cc42bf01aded0c054150da6a1beb0c1ea"
+          "sha256": "aa00d1fbc23713eaa7fc49e1fe34eb9315339d8a25d2ea3252fba80a1fcaafd4"
         },
         "ultra": {
           "triangles": 13882,
@@ -4777,17 +4783,18 @@
               "role": "player"
             }
           },
-          "bytes": 319348,
+          "bytes": 319580,
           "path": "assets/krew/foreman_claude_ultra.glb",
-          "sha256": "74fcdd78438eec6b504e994153bdb8b669624e94fb8f0d5447832445c0e1a8cb"
+          "sha256": "8c95c79fe18e28cea1098abc361ae4d134a1f9738348752fedaf140ca98df505"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "foreman_custom",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8766,
@@ -4928,9 +4935,9 @@
               "role": "player"
             }
           },
-          "bytes": 236276,
+          "bytes": 236508,
           "path": "assets/krew/foreman_custom_standard.glb",
-          "sha256": "cce1208fbdac6a2f8420b3ba345a01b99c14c2d335100c6db654d67df2ec4f08"
+          "sha256": "b81fe5950094d7d096eccf144bb8d6b8bba0857e9168aa3885fa93ad4233d0f6"
         },
         "enhanced": {
           "triangles": 12534,
@@ -5071,9 +5078,9 @@
               "role": "player"
             }
           },
-          "bytes": 311652,
+          "bytes": 311884,
           "path": "assets/krew/foreman_custom_enhanced.glb",
-          "sha256": "619dd684979fe0b7b92c0d760b6f06c87e01ba8c96758b02f3b3062213a646d2"
+          "sha256": "3cd83bf21bfa7ce855808ca30e1cd62fd1e6165b38b0260c087c52f4e4763d8b"
         },
         "ultra": {
           "triangles": 18134,
@@ -5214,20 +5221,21 @@
               "role": "player"
             }
           },
-          "bytes": 432736,
+          "bytes": 432968,
           "path": "assets/krew/foreman_custom_ultra.glb",
-          "sha256": "c59b6498252b6e99de1f8bd747e2ce03ba92036044a5fb6c11e7edffeaafff07"
+          "sha256": "783dda9bb0fee1c7471237d44b8bc27654c80784cfc21c4a168fb8e13ec9b581"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "container_machine",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7194,
+          "triangles": 7041,
           "bounds": [
             [
               -1.0,
@@ -5312,12 +5320,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 281360,
+          "bytes": 360476,
           "path": "assets/machines/container_machine_standard.glb",
-          "sha256": "4d12b6915e5b06258351be59cb83e7d5378ce5237f0fe3000405189a088b8edd"
+          "sha256": "64d7f77d946d580a21a438db58bcc84aa2ab27b56fceead43ee25f82b72b1d60"
         },
         "enhanced": {
-          "triangles": 9034,
+          "triangles": 8881,
           "bounds": [
             [
               -1.0,
@@ -5402,12 +5410,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 332624,
+          "bytes": 411740,
           "path": "assets/machines/container_machine_enhanced.glb",
-          "sha256": "de71c9d6a1b468517c1927e010946f8fe9cab43dcd225f4f9a1969e52b1ceca5"
+          "sha256": "ad28477bd5a0181f782553fbb9a763e249889eccb0c7b9bb2651b3aee0913c68"
         },
         "ultra": {
-          "triangles": 10490,
+          "triangles": 10337,
           "bounds": [
             [
               -1.0,
@@ -5492,20 +5500,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 369568,
+          "bytes": 448684,
           "path": "assets/machines/container_machine_ultra.glb",
-          "sha256": "370f98b9b354a2e2deb501130cd95f35bf173b8ccf343e26b9f8a45de51bc211"
+          "sha256": "968cb92ad8bf8fbf43490002f53dbf51bd3330881491fac6305ab385016a6cb3"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "pod_machine",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7140,
+          "triangles": 6983,
           "bounds": [
             [
               -1.0,
@@ -5590,12 +5599,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 275808,
+          "bytes": 348660,
           "path": "assets/machines/pod_machine_standard.glb",
-          "sha256": "6ecafafc5b4bddf68b36ca1a637ad4514e3185af977f06784eabc6a62882a9fe"
+          "sha256": "48339f92e6a077ea37d326168e2f3376712700a9a82d234e77e96537c319dfb2"
         },
         "enhanced": {
-          "triangles": 8980,
+          "triangles": 8823,
           "bounds": [
             [
               -1.0,
@@ -5680,12 +5689,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 327072,
+          "bytes": 399924,
           "path": "assets/machines/pod_machine_enhanced.glb",
-          "sha256": "89a85c38b8feb48bd3fa6f090297b46b66ff87cc29c6a273360facea62fbc6b5"
+          "sha256": "a4e0418d58ec5bc659e78fd0707df39bb6d89e87dd28c7f174010727600b60dc"
         },
         "ultra": {
-          "triangles": 10436,
+          "triangles": 10279,
           "bounds": [
             [
               -1.0,
@@ -5770,20 +5779,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 364016,
+          "bytes": 436868,
           "path": "assets/machines/pod_machine_ultra.glb",
-          "sha256": "58431e81e2ae5a8770e498c4354cb2a7c984231af7c5ad593975b3338f34d330"
+          "sha256": "4689bfff3b4e077b9f81d3f485118992a50a5d1923efa6fcc9be7b0cf8309314"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "deployment_line",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7805,
+          "triangles": 7677,
           "bounds": [
             [
               -1.5,
@@ -5884,12 +5894,12 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 314316,
+          "bytes": 419844,
           "path": "assets/machines/deployment_line_standard.glb",
-          "sha256": "9e5fe55d2b8776fb01057d6ac05c1fa425ab6ed8117b8686b7ea7060d806e74e"
+          "sha256": "6782fe7b2c82c3a310349b8ea2edd970cbf129e25572b7f48f8bd10a44c73cfd"
         },
         "enhanced": {
-          "triangles": 9645,
+          "triangles": 9517,
           "bounds": [
             [
               -1.5,
@@ -5990,12 +6000,12 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 361788,
+          "bytes": 467316,
           "path": "assets/machines/deployment_line_enhanced.glb",
-          "sha256": "8a79c514f939a726802f031a9024685f497379d5b033f7ae1811562be024e3b0"
+          "sha256": "a48de13030afdbe44d16a193f2c5bfed0a6b81fa564c28854344813501673a6d"
         },
         "ultra": {
-          "triangles": 11101,
+          "triangles": 10973,
           "bounds": [
             [
               -1.5,
@@ -6096,20 +6106,21 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 401008,
+          "bytes": 506540,
           "path": "assets/machines/deployment_line_ultra.glb",
-          "sha256": "175b2bda36a55dad8d820f39c78d0982a63b5e3723447a1a76cb7341a3c4992e"
+          "sha256": "f80da14c1fa82f95620710415a514e15329651c58dc9f34f2c197930a9a1261c"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "replica_group",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7851,
+          "triangles": 7719,
           "bounds": [
             [
               -1.5,
@@ -6210,12 +6221,12 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 319260,
+          "bytes": 429328,
           "path": "assets/machines/replica_group_standard.glb",
-          "sha256": "8c968cc34050bfd613013e1ec3444cf9a79d53e1ea33b779da0bacf42698fa1f"
+          "sha256": "05905dd241ab989bc7f1b4484cb16ae6102e5125bc7ba1f8dbca5f0344ec6586"
         },
         "enhanced": {
-          "triangles": 9691,
+          "triangles": 9559,
           "bounds": [
             [
               -1.5,
@@ -6316,12 +6327,12 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 366732,
+          "bytes": 476800,
           "path": "assets/machines/replica_group_enhanced.glb",
-          "sha256": "41ec3b45e20e26ae4b585328e3af6083bcd58a0236f19442baf9752d009380da"
+          "sha256": "bf8bae55cf1ecc6f64e5c7abe35b0fd2afa2caee4c79a96f701c02e53ee8942b"
         },
         "ultra": {
-          "triangles": 11147,
+          "triangles": 11015,
           "bounds": [
             [
               -1.5,
@@ -6422,20 +6433,21 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 405952,
+          "bytes": 516020,
           "path": "assets/machines/replica_group_ultra.glb",
-          "sha256": "63d7e2e5e90c2c43153237ac9da5e9cbfcd8f7b64c2183e95d6511e0b9b773fd"
+          "sha256": "e7fe743113e381525ed7158004db8953dc8d73687662a4c107cedcb7b6779ad4"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "compose_stack",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7788,
+          "triangles": 7658,
           "bounds": [
             [
               -1.2,
@@ -6536,12 +6548,12 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 328176,
+          "bytes": 450660,
           "path": "assets/machines/compose_stack_standard.glb",
-          "sha256": "234ce985e3004face3d763f1448a72e865791aae90150f57bc1d5b91c1a9a687"
+          "sha256": "1155e388b0bca5e040eaa4ddb96df79c2f208741c45e58a6498eea243432ef9b"
         },
         "enhanced": {
-          "triangles": 9628,
+          "triangles": 9498,
           "bounds": [
             [
               -1.2,
@@ -6642,12 +6654,12 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 377928,
+          "bytes": 500412,
           "path": "assets/machines/compose_stack_enhanced.glb",
-          "sha256": "a6869e3d38bea7861a5711b4f869ecab4b9f1221cb21fd0e2955d076e2598aaf"
+          "sha256": "67b9bd69ddde2d4d8e006a61991a9e2b2b687ef91fd9cbd23810203e446e6cb2"
         },
         "ultra": {
-          "triangles": 11084,
+          "triangles": 10954,
           "bounds": [
             [
               -1.2,
@@ -6748,20 +6760,21 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 414872,
+          "bytes": 537356,
           "path": "assets/machines/compose_stack_ultra.glb",
-          "sha256": "9a9c44f3bdc57e24d8ad850968fc33430fe1568b7fc2897d63a03d88bdfa0844"
+          "sha256": "a72d82c0f20cbe5a488602065785daecce77f4ba0f657af0fb0a45bd1fb56c2b"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "statefulset",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7672,
+          "triangles": 7540,
           "bounds": [
             [
               -1.2,
@@ -6862,12 +6875,12 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 315904,
+          "bytes": 425644,
           "path": "assets/machines/statefulset_standard.glb",
-          "sha256": "b4393490bacfdd9c87bf42b8b6b613b8add968c146d1fbf10fbdc674622e686e"
+          "sha256": "714fe3e58e850ae3edff269ab2f7172457fb154bdfe4c9fa4951907cd1d37327"
         },
         "enhanced": {
-          "triangles": 9512,
+          "triangles": 9380,
           "bounds": [
             [
               -1.2,
@@ -6968,12 +6981,12 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 365656,
+          "bytes": 475396,
           "path": "assets/machines/statefulset_enhanced.glb",
-          "sha256": "c504e72296d03c8072d2831c0904929fccceb94ec0fafe3fb04aa86d712a7165"
+          "sha256": "b537e403286403fe9ea5c50304cc28c3ea60c1d9013a16c2b53150828d294b52"
         },
         "ultra": {
-          "triangles": 10968,
+          "triangles": 10836,
           "bounds": [
             [
               -1.2,
@@ -7074,20 +7087,21 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 402596,
+          "bytes": 512336,
           "path": "assets/machines/statefulset_ultra.glb",
-          "sha256": "4cecb80a1f9bfe677d3cade4218c41b102aa8c8ca043845c68d84ed0d3737925"
+          "sha256": "273f1ccdeb6d333a43a3f55d9c7f4938dd9e5d9328e331ceef6f8a6ca265f8c9"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "daemonset",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7831,
+          "triangles": 7703,
           "bounds": [
             [
               -1.5,
@@ -7188,12 +7202,12 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 317116,
+          "bytes": 425452,
           "path": "assets/machines/daemonset_standard.glb",
-          "sha256": "82deaeb315e1d89eb5d7e1160b7379c9dddd632bb121e64a97fda0b5862c0499"
+          "sha256": "97f4aca425526b8b0fe7a525f3caa94a1cc57d2f75662b9c3a861464939fee7a"
         },
         "enhanced": {
-          "triangles": 9671,
+          "triangles": 9543,
           "bounds": [
             [
               -1.5,
@@ -7294,12 +7308,12 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 364588,
+          "bytes": 472924,
           "path": "assets/machines/daemonset_enhanced.glb",
-          "sha256": "f0bfc72345cb5ef12eae6fee5931513c1710e8c028136b33f45de92d4181e354"
+          "sha256": "6b14fedd0f37128276672c78fb5c06f1c7ed8efb5be4d27136c7b26270dd8c9a"
         },
         "ultra": {
-          "triangles": 11127,
+          "triangles": 10999,
           "bounds": [
             [
               -1.5,
@@ -7400,20 +7414,21 @@
               "z_max": 0.6244999999999999
             }
           },
-          "bytes": 403808,
+          "bytes": 512144,
           "path": "assets/machines/daemonset_ultra.glb",
-          "sha256": "3068ef247e51fe2153afc79f8b5b5485115898ee4d211a3821c87f5aad62e55b"
+          "sha256": "32668c6daec39226736de1eaf1d9576c41500d19301019353030f59fe2c46742"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "job_station",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7254,
+          "triangles": 7099,
           "bounds": [
             [
               -1.0,
@@ -7498,12 +7513,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 287840,
+          "bytes": 373220,
           "path": "assets/machines/job_station_standard.glb",
-          "sha256": "b293863ed1971b99a1badb025361346c56aff052ccd87d52ee6ba26b45e18e86"
+          "sha256": "79034fde495a4afae732fb4216dabfcc7ac0ecd961406a537db161e2ea8e394a"
         },
         "enhanced": {
-          "triangles": 9094,
+          "triangles": 8939,
           "bounds": [
             [
               -1.0,
@@ -7588,12 +7603,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 339104,
+          "bytes": 424484,
           "path": "assets/machines/job_station_enhanced.glb",
-          "sha256": "33c3a9db36f8410655063d547174d5eedf23f2cd957e287c1dde7fc8ffc8851d"
+          "sha256": "09bc66b356dd42f8cf16d27c2689ad08639314d7172a934257ca23655fe69d8a"
         },
         "ultra": {
-          "triangles": 10550,
+          "triangles": 10395,
           "bounds": [
             [
               -1.0,
@@ -7678,20 +7693,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 376048,
+          "bytes": 461428,
           "path": "assets/machines/job_station_ultra.glb",
-          "sha256": "ab6dd675c047b4f489a2dce08af1abfbfc5ea0cbdb028d001605da84b83eef9b"
+          "sha256": "d5d1191f971b106213d445640df72084cdef49d91592942c26301c70b9d056dd"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "cronjob_station",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7359,
+          "triangles": 7206,
           "bounds": [
             [
               -1.0,
@@ -7776,12 +7792,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 299208,
+          "bytes": 396148,
           "path": "assets/machines/cronjob_station_standard.glb",
-          "sha256": "6ddd4e001a0207f3b5d9e8b5bac374c4d7016135c2605185f244b38e637b18b5"
+          "sha256": "f2cb201d038ba330bf8e96bf9ff1d9a44bae00298ebf16aad4e447f3126dc8e4"
         },
         "enhanced": {
-          "triangles": 9199,
+          "triangles": 9046,
           "bounds": [
             [
               -1.0,
@@ -7866,12 +7882,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 350472,
+          "bytes": 447408,
           "path": "assets/machines/cronjob_station_enhanced.glb",
-          "sha256": "193627f555bc1861ed9c88b7c582a2da250ac11f784fd78084f1c035d1714835"
+          "sha256": "b3292cb800dc9e7911c43a9bb02d808e0fde5d9e4f9fc42e524e31fa5776f5bc"
         },
         "ultra": {
-          "triangles": 10655,
+          "triangles": 10502,
           "bounds": [
             [
               -1.0,
@@ -7956,20 +7972,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 387416,
+          "bytes": 484352,
           "path": "assets/machines/cronjob_station_ultra.glb",
-          "sha256": "313cc58522761a30bce8dbaaece8463ea1bbe3940ae77bbfa666dcd15da88a35"
+          "sha256": "a0aab1c3982457e4af2fd8bb7fc9f3df2561cb9c36b516f07783ad56f61293c8"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "init_container",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7210,
+          "triangles": 7059,
           "bounds": [
             [
               -1.0,
@@ -8054,12 +8071,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 283100,
+          "bytes": 364160,
           "path": "assets/machines/init_container_standard.glb",
-          "sha256": "b23df58a8069b5160ba6f2390637c4daf93815cb2f5d3149f882262901bca1fc"
+          "sha256": "2f02f079308f067dd0b98bd4767c357f2bc61bc41db4b124ca97afef80671494"
         },
         "enhanced": {
-          "triangles": 9050,
+          "triangles": 8899,
           "bounds": [
             [
               -1.0,
@@ -8144,12 +8161,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 334364,
+          "bytes": 415424,
           "path": "assets/machines/init_container_enhanced.glb",
-          "sha256": "c5e338bbe2d592826513382252e22268a18b4d5efbb64fa789c80d9b9a56d4ae"
+          "sha256": "6ba5b104a9f29ee35ea23b0f798d10ea2911b4f3e32fe37a8d4bb9a15920b9f4"
         },
         "ultra": {
-          "triangles": 10506,
+          "triangles": 10355,
           "bounds": [
             [
               -1.0,
@@ -8234,20 +8251,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 371308,
+          "bytes": 452368,
           "path": "assets/machines/init_container_ultra.glb",
-          "sha256": "7693a92d1d05cdba87922c1b5b95a9ef23a452b334b50914751544556e12f56f"
+          "sha256": "dc873836264ea43b5824b6139d2e6c987365ac0eda5bf9b1d39e11445a787c01"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "sidecar_machine",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7128,
+          "triangles": 6975,
           "bounds": [
             [
               -0.725,
@@ -8332,12 +8350,12 @@
               "z_max": 0.4945
             }
           },
-          "bytes": 288788,
+          "bytes": 379788,
           "path": "assets/machines/sidecar_machine_standard.glb",
-          "sha256": "7f7fcfd9e8f5bceff74ea05ba81db424a3f4c0547cbe6c4c77937c29b41c7e80"
+          "sha256": "60cfb5821d8e60203004c178505a86046dc339005cd43d43eff1885a48b69ada"
         },
         "enhanced": {
-          "triangles": 8968,
+          "triangles": 8815,
           "bounds": [
             [
               -0.725,
@@ -8422,12 +8440,12 @@
               "z_max": 0.4945
             }
           },
-          "bytes": 339980,
+          "bytes": 430976,
           "path": "assets/machines/sidecar_machine_enhanced.glb",
-          "sha256": "a5e8a1dcc9c56e17d7f9ebfca155b8dd2d22d1cdf5b1d29f07c744920c1150cc"
+          "sha256": "8274760a1801e81fc3d08f7bac8323ab21c60f600dcd2a78b1d921ca1ccf9bd1"
         },
         "ultra": {
-          "triangles": 10424,
+          "triangles": 10271,
           "bounds": [
             [
               -0.725,
@@ -8512,20 +8530,21 @@
               "z_max": 0.4945
             }
           },
-          "bytes": 376920,
+          "bytes": 467920,
           "path": "assets/machines/sidecar_machine_ultra.glb",
-          "sha256": "27ebc171cd14f8ec489ff90550701cead13a96bf396faeb48e437652d4399713"
+          "sha256": "6845d777ff79fb982682d5fb3f4b53aed237a6160721ef7dee66d61e5ff0fc59"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "failed_machine",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7199,
+          "triangles": 7046,
           "bounds": [
             [
               -1.0,
@@ -8610,12 +8629,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 282184,
+          "bytes": 361840,
           "path": "assets/machines/failed_machine_standard.glb",
-          "sha256": "1902608ae84f592fb01b00e90597a7fdced01695f16f3c3b00d7dc738b966b80"
+          "sha256": "bd54df45cd5b6887d6d0e043e9e914bdff72f916c485853fef9c08710c39dfd9"
         },
         "enhanced": {
-          "triangles": 9039,
+          "triangles": 8886,
           "bounds": [
             [
               -1.0,
@@ -8700,12 +8719,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 333448,
+          "bytes": 413104,
           "path": "assets/machines/failed_machine_enhanced.glb",
-          "sha256": "d4efd9c78a2c4539b52957913a8214afbf577db729e848a4fccdf86f76c86440"
+          "sha256": "bfaa6d0052fa66a87c30648f2ff94ec187f4e6dbdae906eeff7a6ee98a939128"
         },
         "ultra": {
-          "triangles": 10495,
+          "triangles": 10342,
           "bounds": [
             [
               -1.0,
@@ -8790,20 +8809,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 370392,
+          "bytes": 450048,
           "path": "assets/machines/failed_machine_ultra.glb",
-          "sha256": "2781781065a2ac5be8a21628d97375e71723755f96683b609e4d44123d0d4bef"
+          "sha256": "d17c490de97810f853e846b80c678c5a827d400c4a80141f1a21b015a198efeb"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "paused_machine",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7279,
+          "triangles": 7126,
           "bounds": [
             [
               -1.0,
@@ -8888,12 +8908,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 290540,
+          "bytes": 378836,
           "path": "assets/machines/paused_machine_standard.glb",
-          "sha256": "dd879e16889b325449bb01e26074003a6cad2855b5381ec3fff88440e2b6f632"
+          "sha256": "24abdfeddfa8627affb4138e3b4e63a25a27c7c0070072166b0c444d54654360"
         },
         "enhanced": {
-          "triangles": 9119,
+          "triangles": 8966,
           "bounds": [
             [
               -1.0,
@@ -8978,12 +8998,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 341804,
+          "bytes": 430100,
           "path": "assets/machines/paused_machine_enhanced.glb",
-          "sha256": "590cbd1c4915d933eee306b73082bd5f33aadd23a71f23d1e41f411e36bfc98c"
+          "sha256": "926c883948c4aee904d626934e150813c5204cc67a79ed7a2d153efb2586e694"
         },
         "ultra": {
-          "triangles": 10575,
+          "triangles": 10422,
           "bounds": [
             [
               -1.0,
@@ -9068,20 +9088,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 378748,
+          "bytes": 467044,
           "path": "assets/machines/paused_machine_ultra.glb",
-          "sha256": "02e42f33887d2b7c63399087af1d0e755e57abd700c0952b260a49bc9f817500"
+          "sha256": "9b9fc44ca7aa0e8f3246ddee5e841a942d5a820e6f42d1978ae7463e92ceb364"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "registry_rack",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7190,
+          "triangles": 7033,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9166,12 +9187,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 298676,
+          "bytes": 391188,
           "path": "assets/machines/registry_rack_standard.glb",
-          "sha256": "b96ecd31f3349c708c09a1f579a4f4f9f58f1dcbc7f3b8005af3a89eccd20be8"
+          "sha256": "09aa2d18c0c2707c678825c1b37f67e6779fd86a1da1689df3a10c6a331f2e0e"
         },
         "enhanced": {
-          "triangles": 9030,
+          "triangles": 8873,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9256,12 +9277,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 347232,
+          "bytes": 439744,
           "path": "assets/machines/registry_rack_enhanced.glb",
-          "sha256": "8460678fa55ed2ecded7eb81a4280536e25af99af6b60d976bff1b464920814f"
+          "sha256": "00aa6929a86281eee8980e16b5e0567351828df090b9ae099a36c53cfe136d5f"
         },
         "ultra": {
-          "triangles": 10486,
+          "triangles": 10329,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9346,20 +9367,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 384176,
+          "bytes": 476684,
           "path": "assets/machines/registry_rack_ultra.glb",
-          "sha256": "9d3e5aa362b0dd4fc80957e558044ef142417a63a885d261616cf56742546b8a"
+          "sha256": "5c413b94cecede8c0af59b927f22b4fe26d6f5d1270e8f5b102524229dc37a8d"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "image_rack",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7077,
+          "triangles": 6922,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9444,12 +9466,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 286480,
+          "bytes": 367004,
           "path": "assets/machines/image_rack_standard.glb",
-          "sha256": "e304d9e1cab5dd24ff39b50e194379ea7297edb200d5a904109a00d9d8b40d60"
+          "sha256": "a9b60d2e9f2060c7c93d1f3cd433a6a01457099fbb147eadc12b4637456d763c"
         },
         "enhanced": {
-          "triangles": 8917,
+          "triangles": 8762,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9534,12 +9556,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 335036,
+          "bytes": 415560,
           "path": "assets/machines/image_rack_enhanced.glb",
-          "sha256": "e2bb6933d828c2ffdb3e10c0859a17647bd291702b196ce4d3f8f936a6b5e463"
+          "sha256": "659b86aba7d32de1fb300fa4e19157453a885e2e99832f38984636734d7fe6ed"
         },
         "ultra": {
-          "triangles": 10373,
+          "triangles": 10218,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9624,20 +9646,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 371980,
+          "bytes": 452500,
           "path": "assets/machines/image_rack_ultra.glb",
-          "sha256": "c37cf49d342f4a2c1834911b64b81b5b27f1cab8e644b594df57a4c45c18cc48"
+          "sha256": "4fa5c568ba418a9bac79fe5c04fc10e4e4261b0cd2ceab8707077fe1c0b232d9"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "node_rack",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7087,
+          "triangles": 6932,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9722,12 +9745,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 287552,
+          "bytes": 369152,
           "path": "assets/machines/node_rack_standard.glb",
-          "sha256": "400a20e63f49110f597b0cd9fed01055fb51cf29c41404be673d79eaa771abbf"
+          "sha256": "345b2bf5bc92b06eb0d292893af9814cc8328be013999b3ba67ca373433e513e"
         },
         "enhanced": {
-          "triangles": 8927,
+          "triangles": 8772,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9812,12 +9835,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 336108,
+          "bytes": 417708,
           "path": "assets/machines/node_rack_enhanced.glb",
-          "sha256": "1994625337f51fa4d9e4aafadec7d37e052c4861040185dd5e6ab51b6cc4170e"
+          "sha256": "71d85424d6771f4e7ee1bb49d0753e3bbc74d2f86a25d83bdbc0fb7af71972d9"
         },
         "ultra": {
-          "triangles": 10383,
+          "triangles": 10228,
           "bounds": [
             [
               -0.7999999999999999,
@@ -9902,20 +9925,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 373048,
+          "bytes": 454652,
           "path": "assets/machines/node_rack_ultra.glb",
-          "sha256": "4ce44e44fe36fabb18153212b4f9ee1c4c7cb747b8de00c23e924cf116abf2fb"
+          "sha256": "f4d173137316f426247e6d3c29e48147008609539085b07289a5a87787caa0cb"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "database_server",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 9611,
+          "triangles": 9454,
           "bounds": [
             [
               -1.259,
@@ -10000,12 +10024,12 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 365120,
+          "bytes": 462920,
           "path": "assets/machines/database_server_standard.glb",
-          "sha256": "d08ec36598ec6a74beef9d496b4738e2ad5f6ae7771ed1eb55c9ab64461dc5f9"
+          "sha256": "03b436d535ca635330b08c01a830df1c8348c870545c8f46cb28a5a2241f3943"
         },
         "enhanced": {
-          "triangles": 12027,
+          "triangles": 11870,
           "bounds": [
             [
               -1.259,
@@ -10090,12 +10114,12 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 432416,
+          "bytes": 530216,
           "path": "assets/machines/database_server_enhanced.glb",
-          "sha256": "dbe31fff1cbee3344db7e3b2770b2cf7779a1a4aa5cfd5be3239eff93b487b5f"
+          "sha256": "62d9d706e2ef3770577b239c3dbd4f545c8324f836ad879c125c86c8329055db"
         },
         "ultra": {
-          "triangles": 18091,
+          "triangles": 17934,
           "bounds": [
             [
               -1.259,
@@ -10180,20 +10204,21 @@
               "z_max": 0.6945
             }
           },
-          "bytes": 596348,
+          "bytes": 694148,
           "path": "assets/machines/database_server_ultra.glb",
-          "sha256": "786e4fc99ca737512d8ad0be2c996dbaa56b83aa566e76962a560118590e13ff"
+          "sha256": "4dab32defa2f46cd85f58ea35e9fd568cbe1a62f746687729730fb4d835153f4"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "cache_server",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7294,
+          "triangles": 7137,
           "bounds": [
             [
               -1.0,
@@ -10278,12 +10303,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 292160,
+          "bytes": 381644,
           "path": "assets/machines/cache_server_standard.glb",
-          "sha256": "76bc96645937463b9fe95aff99ab4243b00304e2fd11d09d25b7ddb5f9f6e5d5"
+          "sha256": "750726e758ff108f2694725b0a7961ad15f2c2dd03ab4627a9afd4b5c90bba7f"
         },
         "enhanced": {
-          "triangles": 9134,
+          "triangles": 8977,
           "bounds": [
             [
               -1.0,
@@ -10368,12 +10393,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 343424,
+          "bytes": 432908,
           "path": "assets/machines/cache_server_enhanced.glb",
-          "sha256": "b8a5b529fbd781caa74e8dd99f311b1ed102dfd04cab77c0451e5cdfbd981b59"
+          "sha256": "7cca8f7a6bb6720fdeec7e77a3e94a23032495bd0cc96ddc2d8dfdd1d194d8c2"
         },
         "ultra": {
-          "triangles": 10590,
+          "triangles": 10433,
           "bounds": [
             [
               -1.0,
@@ -10458,20 +10483,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 374440,
+          "bytes": 463924,
           "path": "assets/machines/cache_server_ultra.glb",
-          "sha256": "e01ad0beafe9361fc5911c50a0aaa03cb7a5d9abec3b7fd4810f4a1bd9098184"
+          "sha256": "915d6dd44a6a18e5b37b7b294d04d2976197c428f5c8d5e0db54038387a3be92"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "log_collector",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7313,
+          "triangles": 7156,
           "bounds": [
             [
               -1.0,
@@ -10556,12 +10582,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 294072,
+          "bytes": 385604,
           "path": "assets/machines/log_collector_standard.glb",
-          "sha256": "6043bf407a61bde46e8d26280abdcd5844d2ae2123640a3fdcc9d82abcb6c257"
+          "sha256": "ba8edbc5ea970a8bbe4afba7668c20033417b273a9789b4db313e159b112d68e"
         },
         "enhanced": {
-          "triangles": 9153,
+          "triangles": 8996,
           "bounds": [
             [
               -1.0,
@@ -10646,12 +10672,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 345336,
+          "bytes": 436868,
           "path": "assets/machines/log_collector_enhanced.glb",
-          "sha256": "76e2f10675ff4aab8829e89b8260f9c6a6cc8b90ba634fe13c51d45adfaedffb"
+          "sha256": "2055058303a67a9d27b5a764aa4347b26c064bbb3d04ec374f27deeec3bfa179"
         },
         "ultra": {
-          "triangles": 10609,
+          "triangles": 10452,
           "bounds": [
             [
               -1.0,
@@ -10736,20 +10762,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 382276,
+          "bytes": 473812,
           "path": "assets/machines/log_collector_ultra.glb",
-          "sha256": "a6446c2f6e1af4e0a7e0245d504b01cd4459de19430f9f2d15f57f11652a6345"
+          "sha256": "7fd69fc7f40ed6d1a10c10bb8b961b405472f464e4f0b9b95ff59cd4874d2545"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "monitoring_server",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7365,
+          "triangles": 7214,
           "bounds": [
             [
               -1.0,
@@ -10834,12 +10861,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 299828,
+          "bytes": 397628,
           "path": "assets/machines/monitoring_server_standard.glb",
-          "sha256": "b8481212e41242589b3898abbaff2c5de158e7e9082dcd5731ccca6e28542d39"
+          "sha256": "f5e8dd75149e2a46678cf0f94a3985e198c7416295d1fb89072dcbc71a537cb6"
         },
         "enhanced": {
-          "triangles": 9205,
+          "triangles": 9054,
           "bounds": [
             [
               -1.0,
@@ -10924,12 +10951,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 351092,
+          "bytes": 448892,
           "path": "assets/machines/monitoring_server_enhanced.glb",
-          "sha256": "2fdc9f03fee30ff2b1d13bd8a26241ad3f406f72a6350e54838b3b0d5140a12e"
+          "sha256": "5310c7eb271791fcee3050f3442ec0071c971f25f27dda132dca6938f368cfb4"
         },
         "ultra": {
-          "triangles": 10661,
+          "triangles": 10510,
           "bounds": [
             [
               -1.0,
@@ -11014,20 +11041,21 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 388032,
+          "bytes": 485836,
           "path": "assets/machines/monitoring_server_ultra.glb",
-          "sha256": "75bfc709032d936393977cc686b4f27e5fbbbc62c20566f4eb2867bc47ae5e03"
+          "sha256": "98582c7403a0926ccd0d5edc125f23dc2cf200bcc254fa7e8084e789a426f2be"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "broker_rack",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7173,
+          "triangles": 7016,
           "bounds": [
             [
               -0.7999999999999999,
@@ -11112,12 +11140,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 296868,
+          "bytes": 387540,
           "path": "assets/machines/broker_rack_standard.glb",
-          "sha256": "c2798e382b258b12d5ba32d70bb7de50a8f363186ded93e912e32ea12ff3a89f"
+          "sha256": "2859078a850265a87653daa9a1370da28a0d6df7fc5bbb0203a7777cfd819b0c"
         },
         "enhanced": {
-          "triangles": 9013,
+          "triangles": 8856,
           "bounds": [
             [
               -0.7999999999999999,
@@ -11202,12 +11230,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 345424,
+          "bytes": 436096,
           "path": "assets/machines/broker_rack_enhanced.glb",
-          "sha256": "b3091ac77890bdfa98a6bb72ade9011a75aedd9be7ff58842085bf3befe587b9"
+          "sha256": "0769ba1172e393bb84f9f00c90365e2e9d338e160ebe431d1d820faa5719e75f"
         },
         "ultra": {
-          "triangles": 10469,
+          "triangles": 10312,
           "bounds": [
             [
               -0.7999999999999999,
@@ -11292,20 +11320,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 382364,
+          "bytes": 473040,
           "path": "assets/machines/broker_rack_ultra.glb",
-          "sha256": "03bebebc70e13671844bb47a9e807b245de677108f966b175c01081f46e63a99"
+          "sha256": "a164de61cc4f1def3ace3925172436c4980f3218586b6bfa4f1705bbe369dfc9"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "cooling_unit",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7612,
+          "triangles": 7459,
           "bounds": [
             [
               -1.0,
@@ -11360,12 +11389,12 @@
               ]
             }
           },
-          "bytes": 275848,
+          "bytes": 359064,
           "path": "assets/machines/cooling_unit_standard.glb",
-          "sha256": "5675d17600a398d2093ec8398ea4c4ad2a3cfee4969ff1c5dd45fc47a19ec60f"
+          "sha256": "67f1ed4bfbbf975ca81419aa58b20e629b52806dfad7ec7d962ca2fee39efbf6"
         },
         "enhanced": {
-          "triangles": 9724,
+          "triangles": 9571,
           "bounds": [
             [
               -1.0,
@@ -11420,12 +11449,12 @@
               ]
             }
           },
-          "bytes": 329328,
+          "bytes": 412548,
           "path": "assets/machines/cooling_unit_enhanced.glb",
-          "sha256": "e0ec2fe62fc6c7000fe02584dfc33f5373aa3598615c9db2beeb7f3e8b43456a"
+          "sha256": "700c06cf3172d6cd41913f9aabb7a83fc71888fc6d8042c4c163b297dd113f46"
         },
         "ultra": {
-          "triangles": 11628,
+          "triangles": 11475,
           "bounds": [
             [
               -1.0,
@@ -11480,20 +11509,21 @@
               ]
             }
           },
-          "bytes": 370620,
+          "bytes": 453840,
           "path": "assets/machines/cooling_unit_ultra.glb",
-          "sha256": "3fa47837b1cdc2fc144789d7cc865ff3c847dafc51f56ea6c685ee8d0ae7525a"
+          "sha256": "4e15382571bdaa76d42a3e1c3ad5266ad81e6a3f6f6c336a69b9dfc7ad3b9cc9"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "load_balancer",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 6611,
+          "triangles": 6456,
           "bounds": [
             [
               -1.0,
@@ -11548,12 +11578,12 @@
               ]
             }
           },
-          "bytes": 265884,
+          "bytes": 354396,
           "path": "assets/machines/load_balancer_standard.glb",
-          "sha256": "0f18980fbfae22e509b5d0bf78a03e48ebf053009e4bd37d9a7dd8e7702faf04"
+          "sha256": "947c40a644c9eb0086043ee91093950e3a2ea43e31524acd9af597d550983ff6"
         },
         "enhanced": {
-          "triangles": 8243,
+          "triangles": 8088,
           "bounds": [
             [
               -1.0,
@@ -11608,12 +11638,12 @@
               ]
             }
           },
-          "bytes": 313612,
+          "bytes": 402124,
           "path": "assets/machines/load_balancer_enhanced.glb",
-          "sha256": "d08e969642c7e4aa569104f19f1e67165aebb836af92b2d32960d013083c8ee9"
+          "sha256": "f9ce77124a64b59f868a85b41760b7a44fc536509b90d430ec6b3e33527999a6"
         },
         "ultra": {
-          "triangles": 9507,
+          "triangles": 9352,
           "bounds": [
             [
               -1.0,
@@ -11668,20 +11698,21 @@
               ]
             }
           },
-          "bytes": 347220,
+          "bytes": 435732,
           "path": "assets/machines/load_balancer_ultra.glb",
-          "sha256": "ba384d261c62a4a995b12bb6d6ccdbee6aead63efde0b28c9691638ecb5d487d"
+          "sha256": "7d2d52109b11f165506ef7cbc2d4b2fb2d80fea6366ad058e67247043634cce5"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "network_appliance",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 6611,
+          "triangles": 6462,
           "bounds": [
             [
               -1.0,
@@ -11736,12 +11767,12 @@
               ]
             }
           },
-          "bytes": 265892,
+          "bytes": 355052,
           "path": "assets/machines/network_appliance_standard.glb",
-          "sha256": "6848fb96580069d02c36934f80759cfe685b0532fd3c6bd241fa7ca8ee1c3172"
+          "sha256": "ad80015146c62a32fd347642cc471707567b8277800e62eb9fc0fc24678270f4"
         },
         "enhanced": {
-          "triangles": 8243,
+          "triangles": 8094,
           "bounds": [
             [
               -1.0,
@@ -11796,12 +11827,12 @@
               ]
             }
           },
-          "bytes": 313620,
+          "bytes": 402780,
           "path": "assets/machines/network_appliance_enhanced.glb",
-          "sha256": "75bdd9488979c778eb3047eca2565c2972be062db91d7f80ef25d6348f0a30db"
+          "sha256": "ba6a08d45b59289776b7b33a1cedffa4296e9acb4433c7f19aaef1c927e8ea03"
         },
         "ultra": {
-          "triangles": 9507,
+          "triangles": 9358,
           "bounds": [
             [
               -1.0,
@@ -11856,20 +11887,21 @@
               ]
             }
           },
-          "bytes": 347228,
+          "bytes": 436388,
           "path": "assets/machines/network_appliance_ultra.glb",
-          "sha256": "e4b7e33e55ec2e641bbc4dcbdab902f14ae6f5aa81d10e533bd4abacf0cf9664"
+          "sha256": "edcdfef135c421b36fc2f1cb659830b32be29ab3ab44725cb9f759922a2f7270"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "build_station",
       "category": "machines",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7266,
+          "triangles": 7111,
           "bounds": [
             [
               -1.0,
@@ -11954,12 +11986,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 289164,
+          "bytes": 375840,
           "path": "assets/machines/build_station_standard.glb",
-          "sha256": "3a27a72ab856b7a328376927445b242462e576e1504f9dc478ddffe7ddd2b05a"
+          "sha256": "9beef86e05480a096f38f77dbfa95d0c134e5814ee51ca5a130f5420c0ce09dd"
         },
         "enhanced": {
-          "triangles": 9106,
+          "triangles": 8951,
           "bounds": [
             [
               -1.0,
@@ -12044,12 +12076,12 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 340424,
+          "bytes": 427100,
           "path": "assets/machines/build_station_enhanced.glb",
-          "sha256": "c56f2e0a7e6c22405ec18a1858ac0e458eedc8deffb7104a604306e1d5a878fb"
+          "sha256": "25a570c21f95d8aa86c60faa4b1dae932eecb62cc5dc3cfce29c788b22f915ff"
         },
         "ultra": {
-          "triangles": 10562,
+          "triangles": 10407,
           "bounds": [
             [
               -1.0,
@@ -12134,17 +12166,18 @@
               "z_max": 0.6044999999999999
             }
           },
-          "bytes": 377368,
+          "bytes": 464044,
           "path": "assets/machines/build_station_ultra.glb",
-          "sha256": "ffb3c2b55c61189a1d30d78b57bcb05f34ac0f9e64aef4a32089f38e19bf3ae0"
+          "sha256": "f0494b4cde0ef446efee5221b46049ae0d7e39b2b06c058e05ff00209c7779d7"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "scanner",
       "category": "tools",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 1086,
@@ -12211,9 +12244,9 @@
               "role": "target"
             }
           },
-          "bytes": 36996,
+          "bytes": 37228,
           "path": "assets/tools/scanner_standard.glb",
-          "sha256": "f10e721fe22c5d9a9f673ccb654356c75f878e9e43cdb2400293c3c3a426aacb"
+          "sha256": "3bbb6062ea9f9f1e57c9451af321b8e3d73d3bfd42c7425fd9cb1028e8a90f57"
         },
         "enhanced": {
           "triangles": 1438,
@@ -12280,9 +12313,9 @@
               "role": "target"
             }
           },
-          "bytes": 46796,
+          "bytes": 47028,
           "path": "assets/tools/scanner_enhanced.glb",
-          "sha256": "7ff34cd7bb17d75687a687477cefd817285f1daacc535d5da7983df3d3d42d09"
+          "sha256": "05dd61a8b69fd8665125c20d94c91286cce2484e31d0bbb8003591a879928ca0"
         },
         "ultra": {
           "triangles": 1566,
@@ -12349,17 +12382,18 @@
               "role": "target"
             }
           },
-          "bytes": 49360,
+          "bytes": 49592,
           "path": "assets/tools/scanner_ultra.glb",
-          "sha256": "ec503c7dca6864380626e6e2a842507cb98178574b7885df09495ca92c0ddeed"
+          "sha256": "1d329dab87d995694151831148f951e4d01868aee7720f1465e224bcd4143635"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "datapad",
       "category": "tools",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 717,
@@ -12426,9 +12460,9 @@
               "role": "target"
             }
           },
-          "bytes": 35968,
+          "bytes": 36200,
           "path": "assets/tools/datapad_standard.glb",
-          "sha256": "63f7aafaabba895f47c8d57820f921801c50bed873f4171014be099cab73f505"
+          "sha256": "fa6cca815762438580909e431a74de4ca005c9da9c3a7124b86915b0c379dff7"
         },
         "enhanced": {
           "triangles": 1117,
@@ -12495,9 +12529,9 @@
               "role": "target"
             }
           },
-          "bytes": 50168,
+          "bytes": 50400,
           "path": "assets/tools/datapad_enhanced.glb",
-          "sha256": "af5930448ddd8e92eea7a6e08a4a8dc7de058e586876c8dd68db5cb5b5a06687"
+          "sha256": "6b28c008191e6a82882a5b09bf7d2d25efd4c1ab5443ad2161ab890dc4b855db"
         },
         "ultra": {
           "triangles": 1405,
@@ -12564,17 +12598,18 @@
               "role": "target"
             }
           },
-          "bytes": 59784,
+          "bytes": 60016,
           "path": "assets/tools/datapad_ultra.glb",
-          "sha256": "09792135f3d605929edb93cee2bc11aeb22d5ff8c842bf43cec22976b8560f6d"
+          "sha256": "08ae36667258deecf42c5e42adca65b71e4b2ae8f2772cc6a8cefe7e12351203"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "build_gun",
       "category": "tools",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 1166,
@@ -12641,9 +12676,9 @@
               "role": "target"
             }
           },
-          "bytes": 40824,
+          "bytes": 41056,
           "path": "assets/tools/build_gun_standard.glb",
-          "sha256": "4a8edde903e3997a49f9573c5cb9f2cf003c4b853168d6642379b301d16f7111"
+          "sha256": "4983c6bbd182c5f754eedfcb8a2f2f8542419d7fffb7efbc4be450a4cd3036d1"
         },
         "enhanced": {
           "triangles": 1566,
@@ -12710,9 +12745,9 @@
               "role": "target"
             }
           },
-          "bytes": 52740,
+          "bytes": 52972,
           "path": "assets/tools/build_gun_enhanced.glb",
-          "sha256": "4d1d4a71706dd42e942b2b234433822431ce0edc1e95c8a0917f0dbb2aa4bb3f"
+          "sha256": "c5af767eeb679d799549d2be9c5a6ca466331eb917d9d926bf8bc968a2726418"
         },
         "ultra": {
           "triangles": 1758,
@@ -12779,11 +12814,12 @@
               "role": "target"
             }
           },
-          "bytes": 58124,
+          "bytes": 58356,
           "path": "assets/tools/build_gun_ultra.glb",
-          "sha256": "af097bf0bd779ad75113bff8c015b4bf60f46df963a204803dcd0f79d1c9d578"
+          "sha256": "58d21a24cc7e20fc5e41df5630b80211e0aea3c1d1d8e4b3b5278265d5a64560"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "wrench",
@@ -12923,7 +12959,7 @@
       "id": "dismantler",
       "category": "tools",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 1086,
@@ -12990,9 +13026,9 @@
               "role": "target"
             }
           },
-          "bytes": 36784,
+          "bytes": 37016,
           "path": "assets/tools/dismantler_standard.glb",
-          "sha256": "7f67b54bee5184e80910fb1c67e3fba6b9a4bad41b83f33b80539158c1daf128"
+          "sha256": "6eb41c51ef6dfbe7c1b12921d9a42cd05e4f5bc96915b621f5f0434c467f6d8a"
         },
         "enhanced": {
           "triangles": 1438,
@@ -13059,9 +13095,9 @@
               "role": "target"
             }
           },
-          "bytes": 46584,
+          "bytes": 46816,
           "path": "assets/tools/dismantler_enhanced.glb",
-          "sha256": "799fe6c62c2d8487400852eefd7e348a8371470322501813f3a53ad5512b118e"
+          "sha256": "62ee8f4e2b4a9bc864702f55bcefea26b783076c01725b3729bae9f2e910487a"
         },
         "ultra": {
           "triangles": 1566,
@@ -13128,17 +13164,18 @@
               "role": "target"
             }
           },
-          "bytes": 49152,
+          "bytes": 49384,
           "path": "assets/tools/dismantler_ultra.glb",
-          "sha256": "839f5cc38a1ae330ebe3723c56349c28b3055bd52ea82b1b1638a26433e84fd5"
+          "sha256": "a01a9b6ea87cee81fc158cdc9c72e95c57479bf5f7a222d1f7f4cec9ce90f5e6"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "demolisher",
       "category": "tools",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 1086,
@@ -13205,9 +13242,9 @@
               "role": "target"
             }
           },
-          "bytes": 36984,
+          "bytes": 37216,
           "path": "assets/tools/demolisher_standard.glb",
-          "sha256": "4c42d9e987ba1392fe4c718aee51274286936f89e4984ca21aabf0af4e3430e3"
+          "sha256": "f09600be4879154e9e5e3c43a69c9873fe9eae8bbd41b6817a5859b53ba69b41"
         },
         "enhanced": {
           "triangles": 1438,
@@ -13274,9 +13311,9 @@
               "role": "target"
             }
           },
-          "bytes": 46784,
+          "bytes": 47016,
           "path": "assets/tools/demolisher_enhanced.glb",
-          "sha256": "d3585752f8191bd8608c11f9bce790f6d270060ece536f2edff94b05774c0dc9"
+          "sha256": "f2fe0cfcc54789fe1f2f3f2e3d649374fbf99cf833c768ec0f4dca5d562e64b8"
         },
         "ultra": {
           "triangles": 1566,
@@ -13343,11 +13380,12 @@
               "role": "target"
             }
           },
-          "bytes": 49348,
+          "bytes": 49580,
           "path": "assets/tools/demolisher_ultra.glb",
-          "sha256": "d69deceeb501a0417cf1ff8219b46000917108bc16f0908955942dbec1dec7f1"
+          "sha256": "2a00556e09f6399fc1f29b44be39d0c8095b4c87a3700f1e7516f47737af694e"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "foundation",
@@ -14133,10 +14171,10 @@
       "id": "factory_gateway",
       "category": "structures",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 1215,
+          "triangles": 1219,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14159,12 +14197,12 @@
               ]
             }
           },
-          "bytes": 60796,
+          "bytes": 85800,
           "path": "assets/structures/factory_gateway_standard.glb",
-          "sha256": "71fd2680f08bc8cd55c832a1b32cbf2f00dac9f5b08a98bc8bf0e181ae5eaec4"
+          "sha256": "9cb8e4e549f3247f66ec8c9192dfe1436578a6dea7efd4ef9071ff1752a4a581"
         },
         "enhanced": {
-          "triangles": 1471,
+          "triangles": 1475,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14187,12 +14225,12 @@
               ]
             }
           },
-          "bytes": 67496,
+          "bytes": 92504,
           "path": "assets/structures/factory_gateway_enhanced.glb",
-          "sha256": "570a23ee77b27c9bec468185287b519db01acf52dd7b6e3e1f2e7ad6f8ebfaea"
+          "sha256": "1ae6e10dc0f15ec34559298296abfa1e1b631340e8f575409ef1e3b6472a7026"
         },
         "ultra": {
-          "triangles": 1663,
+          "triangles": 1667,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14215,20 +14253,21 @@
               ]
             }
           },
-          "bytes": 70828,
+          "bytes": 95832,
           "path": "assets/structures/factory_gateway_ultra.glb",
-          "sha256": "a20837ae9f566cb116021ff68e877b8eaa47cd49cb224261078363885cc39de0"
+          "sha256": "a187a42566c67795cd78e7444c3d4f83fc9316d355c5fccbf5943573961c8421"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "ingress_gate",
       "category": "structures",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 1248,
+          "triangles": 1250,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14251,12 +14290,12 @@
               ]
             }
           },
-          "bytes": 64356,
+          "bytes": 92708,
           "path": "assets/structures/ingress_gate_standard.glb",
-          "sha256": "e56d996c4b938048a07cd25a0334780d70dcdc8cbef6505fd4c72f7ee86a497e"
+          "sha256": "f3ecbd21bdbd3a4571339cc2299b83900b049c1dc269d3e9e6b36db52ada00be"
         },
         "enhanced": {
-          "triangles": 1504,
+          "triangles": 1506,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14279,12 +14318,12 @@
               ]
             }
           },
-          "bytes": 71060,
+          "bytes": 99412,
           "path": "assets/structures/ingress_gate_enhanced.glb",
-          "sha256": "a643ca398618bf694a427576d0bac32bbd685b1a86c15c735906fcd68f16e0b9"
+          "sha256": "b1e264b156ef14ee26ebbc7c167c0d8f19d03d214dc67e7c72e2aafd33cc39b0"
         },
         "ultra": {
-          "triangles": 1696,
+          "triangles": 1698,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14307,20 +14346,21 @@
               ]
             }
           },
-          "bytes": 74388,
+          "bytes": 102744,
           "path": "assets/structures/ingress_gate_ultra.glb",
-          "sha256": "7b7b6c0bdd98da14c8a8ed2e50862634312770579344c9bae9db2a7fc3a3e180"
+          "sha256": "6b3cfaa83d2acc72f6b6281644c505be89e1d909d0f0187a12823c2bd471396b"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "host_gateway",
       "category": "structures",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 1182,
+          "triangles": 1186,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14343,12 +14383,12 @@
               ]
             }
           },
-          "bytes": 57224,
+          "bytes": 78664,
           "path": "assets/structures/host_gateway_standard.glb",
-          "sha256": "db7715585c8770fcb57c7d6c22b6399200e1d3c253e8cf9e132944e4c2b29068"
+          "sha256": "c8cf7ac58776fd7d6cb359626e12c9aaa514e98713daccb9f17e3c6dee1c6b32"
         },
         "enhanced": {
-          "triangles": 1438,
+          "triangles": 1442,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14371,12 +14411,12 @@
               ]
             }
           },
-          "bytes": 63928,
+          "bytes": 85368,
           "path": "assets/structures/host_gateway_enhanced.glb",
-          "sha256": "fb5985c30b494e6e2ace3dd9c03bbd29446921ca8be74eb6a942c35f80052409"
+          "sha256": "6b2641333f781e5ec617bb46e0c5bf57de72df46116bf8e2921a83daf4464fca"
         },
         "ultra": {
-          "triangles": 1630,
+          "triangles": 1634,
           "bounds": [
             [
               -1.5700000524520874,
@@ -14399,20 +14439,21 @@
               ]
             }
           },
-          "bytes": 67260,
+          "bytes": 88700,
           "path": "assets/structures/host_gateway_ultra.glb",
-          "sha256": "acf4d78a6eb95d911d258d1555acf420e51f9744082838194eba96aeaa065e03"
+          "sha256": "5c26852f5b289675d64797588022423b3a5dd9dc00ea2947ec2cb3843af2e313"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "warehouse",
       "category": "structures",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 1185,
+          "triangles": 1189,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14435,12 +14476,12 @@
               ]
             }
           },
-          "bytes": 57380,
+          "bytes": 78712,
           "path": "assets/structures/warehouse_standard.glb",
-          "sha256": "3121c25afbc054fcaae89fb8f3ccf8b9a47f5adb9c099cfb76667409aee37779"
+          "sha256": "2595521ff55d4d35e51014aad2a1b4099a26e6d95976cb561f84bf6d3200ea8e"
         },
         "enhanced": {
-          "triangles": 1537,
+          "triangles": 1541,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14463,12 +14504,12 @@
               ]
             }
           },
-          "bytes": 68364,
+          "bytes": 89696,
           "path": "assets/structures/warehouse_enhanced.glb",
-          "sha256": "25fec8389239868086f0b4eab62c9e43ffeb86ef93707e73c3a23875202e1954"
+          "sha256": "66a0b4fbe39cc4d10e0ec1a7864bb786e2b2b4ad9d68a7896a0baef3afec322a"
         },
         "ultra": {
-          "triangles": 1921,
+          "triangles": 1925,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14491,20 +14532,21 @@
               ]
             }
           },
-          "bytes": 78268,
+          "bytes": 99600,
           "path": "assets/structures/warehouse_ultra.glb",
-          "sha256": "d13899bdbd8ee3dce384e702a308e99e6002cc5d250aef31beed4b0b4d91b480"
+          "sha256": "9786378f616f14fffdc0ea2cdb93eb507f3cc67c1b2fe5245abc1b3992c1fe1c"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "control_center",
       "category": "structures",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 1246,
+          "triangles": 1250,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14527,12 +14569,12 @@
               ]
             }
           },
-          "bytes": 64160,
+          "bytes": 92080,
           "path": "assets/structures/control_center_standard.glb",
-          "sha256": "80b91e544b2fadef423fcfe420ec0b1db62f830d2b71e466a8974f3635da242f"
+          "sha256": "48fba8b6cb5ed3e731e3b170ea49d2b80a03ceb47d76c78368cc04f62888ceea"
         },
         "enhanced": {
-          "triangles": 1598,
+          "triangles": 1602,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14555,12 +14597,12 @@
               ]
             }
           },
-          "bytes": 75144,
+          "bytes": 103064,
           "path": "assets/structures/control_center_enhanced.glb",
-          "sha256": "e5144f396720c7e0c097bc741038cc218be04f76e1358fe779d6b3faba5e8326"
+          "sha256": "ff930014f18b0de362a3e8966c8e8776a43c14705062c696543e5a0d3e06f608"
         },
         "ultra": {
-          "triangles": 1982,
+          "triangles": 1986,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14583,20 +14625,21 @@
               ]
             }
           },
-          "bytes": 85048,
+          "bytes": 112968,
           "path": "assets/structures/control_center_ultra.glb",
-          "sha256": "ef15c19a503130f13a11d3370873bbf2f8e85161683275e6068ae5145e04c83d"
+          "sha256": "4588adb2975d10df6d9df1921ee138d1949ebf9cb857dc7e0886c611f00430d7"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "krew_hq",
       "category": "structures",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 1107,
+          "triangles": 1111,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14619,12 +14662,12 @@
               ]
             }
           },
-          "bytes": 49152,
+          "bytes": 62060,
           "path": "assets/structures/krew_hq_standard.glb",
-          "sha256": "27a2f207e742c3e2cc34c5a4026ed76017793003667179383f094afc2dc5be40"
+          "sha256": "da76523befd41b40270cc439b8beb3bbd2cd439ca7d8abdf67dbb7fc61ab74ab"
         },
         "enhanced": {
-          "triangles": 1459,
+          "triangles": 1463,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14647,12 +14690,12 @@
               ]
             }
           },
-          "bytes": 60136,
+          "bytes": 73044,
           "path": "assets/structures/krew_hq_enhanced.glb",
-          "sha256": "f1fe38a300b2061546bc1aab5e72045ede86b6ee837c1d3981fa7fd09cbcb891"
+          "sha256": "f292d50c41a02a5167ff653aa7662831cb66050402bc867bd4098281f257f94e"
         },
         "ultra": {
-          "triangles": 1843,
+          "triangles": 1847,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14675,20 +14718,21 @@
               ]
             }
           },
-          "bytes": 70040,
+          "bytes": 82948,
           "path": "assets/structures/krew_hq_ultra.glb",
-          "sha256": "5bbcd40c0421b511faf3843df0f41f73c0d971dc135ed6a7246432912f45c80e"
+          "sha256": "77c3b6be4f5639f10c2e45ce8ca3f6c15f668a02864bcf0a466be1e6e3514729"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "compose_building",
       "category": "structures",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 1332,
+          "triangles": 1336,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14711,12 +14755,12 @@
               ]
             }
           },
-          "bytes": 73440,
+          "bytes": 110652,
           "path": "assets/structures/compose_building_standard.glb",
-          "sha256": "0d867314be05edefdf14ce28fe6a31e8ba4f383d728f28943d05b9279870effb"
+          "sha256": "90e061b3d0dd7cfeac40702bb36e2c944fbbacaab3e38a9fd9660773a37e286e"
         },
         "enhanced": {
-          "triangles": 1684,
+          "triangles": 1688,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14739,12 +14783,12 @@
               ]
             }
           },
-          "bytes": 84424,
+          "bytes": 121640,
           "path": "assets/structures/compose_building_enhanced.glb",
-          "sha256": "dddbd7547f8486584692c6c7464a0ed490b08923d93d9b78602b4f0286f0775d"
+          "sha256": "b5587ab5496bb7fae487de221db705d73e2db3db6555112ca33d90f169577070"
         },
         "ultra": {
-          "triangles": 2068,
+          "triangles": 2072,
           "bounds": [
             [
               -2.6500000953674316,
@@ -14767,17 +14811,18 @@
               ]
             }
           },
-          "bytes": 94328,
+          "bytes": 131544,
           "path": "assets/structures/compose_building_ultra.glb",
-          "sha256": "1c3477dd05f48d933ad19299be19e95e464ef06a17a22097673b67cf6ac7cdf4"
+          "sha256": "5b211a16c800b4d4b83f11370e233f1a973796aa255c3df3288741fba3089866"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "factory_hall",
       "category": "structures",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 1160,
@@ -14803,9 +14848,9 @@
               ]
             }
           },
-          "bytes": 54680,
+          "bytes": 72880,
           "path": "assets/structures/factory_hall_standard.glb",
-          "sha256": "4b645238fbb9b683d777b30ea401c590569547c1643bacafc1b3f420b4c63a1f"
+          "sha256": "5b72bd955da76d8e83d5f0434a608bc8b8437e9bfa9bc0621cac22f985e71fb0"
         },
         "enhanced": {
           "triangles": 1512,
@@ -14831,9 +14876,9 @@
               ]
             }
           },
-          "bytes": 65664,
+          "bytes": 83864,
           "path": "assets/structures/factory_hall_enhanced.glb",
-          "sha256": "d32e2630425327f1fdf71e90090241e723982f8e83c5ed97b88ad32ca0be206a"
+          "sha256": "bbefcb50830dcf322a084048115f6c784a46349fe404aec499f578817fd348fc"
         },
         "ultra": {
           "triangles": 1896,
@@ -14859,11 +14904,12 @@
               ]
             }
           },
-          "bytes": 75568,
+          "bytes": 93768,
           "path": "assets/structures/factory_hall_ultra.glb",
-          "sha256": "75a84430265e54b63a24d55b39c6c48cb9322b35dd1d86b53fb2e1dc0ba2191b"
+          "sha256": "04fb9de4d3ae68f8195adefc7e9ff8f5cba8c0f614d521aeb4824af495b2fedc"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "support_column",
@@ -15714,10 +15760,10 @@
       "id": "network_switch",
       "category": "network",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 6594,
+          "triangles": 6447,
           "bounds": [
             [
               -1.0,
@@ -15772,12 +15818,12 @@
               ]
             }
           },
-          "bytes": 264048,
+          "bytes": 351588,
           "path": "assets/network/network_switch_standard.glb",
-          "sha256": "514bea4156cafc85f7814e1d5e6f0bd2cfe0eccc70f810f178012259b81802b2"
+          "sha256": "29877c135cb85d99a236d851e6d1964700a374404ef781a79427ca72aa761f82"
         },
         "enhanced": {
-          "triangles": 8226,
+          "triangles": 8079,
           "bounds": [
             [
               -1.0,
@@ -15832,12 +15878,12 @@
               ]
             }
           },
-          "bytes": 311772,
+          "bytes": 399312,
           "path": "assets/network/network_switch_enhanced.glb",
-          "sha256": "03d3ce5deff83cc9d25d08a658a59071dd0c7ace3e054f9291077f38bd409b2d"
+          "sha256": "38c0e123dd1c7d529e66c583929d29a5ebc9d7432744d8ec7b79a08ac56673c9"
         },
         "ultra": {
-          "triangles": 9490,
+          "triangles": 9343,
           "bounds": [
             [
               -1.0,
@@ -15892,20 +15938,21 @@
               ]
             }
           },
-          "bytes": 345384,
+          "bytes": 432924,
           "path": "assets/network/network_switch_ultra.glb",
-          "sha256": "55f9ba5c828bc1f7349b19e56695664cef9cdcc25cd3e37091e27f79058c777a"
+          "sha256": "6834cdcf021e113e405d200fedb4eb456e487debe2a40d2debd2e2884042017d"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "distribution_station",
       "category": "network",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 6729,
+          "triangles": 6576,
           "bounds": [
             [
               -1.0,
@@ -15960,12 +16007,12 @@
               ]
             }
           },
-          "bytes": 278632,
+          "bytes": 380112,
           "path": "assets/network/distribution_station_standard.glb",
-          "sha256": "78d01cb161d3f0d5d402a597e52801e637452a64da85d0c6356a5b28e3d685b7"
+          "sha256": "f44c80ca905407469835d1172ac122cf83b751bff4057fa4783ad119c41b4af0"
         },
         "enhanced": {
-          "triangles": 8361,
+          "triangles": 8208,
           "bounds": [
             [
               -1.0,
@@ -16020,12 +16067,12 @@
               ]
             }
           },
-          "bytes": 326360,
+          "bytes": 427836,
           "path": "assets/network/distribution_station_enhanced.glb",
-          "sha256": "1a6aa5a63f1c484a2bee1796d056d42d068dc990dd7c042f699043fe3ad838be"
+          "sha256": "17c23701109a28214afd55e8704e31b75dc215beb3e291021b77019f82eddfba"
         },
         "ultra": {
-          "triangles": 9625,
+          "triangles": 9472,
           "bounds": [
             [
               -1.0,
@@ -16080,20 +16127,21 @@
               ]
             }
           },
-          "bytes": 359968,
+          "bytes": 461448,
           "path": "assets/network/distribution_station_ultra.glb",
-          "sha256": "4d6a92da5dbd88c1eaf2398e7b974ecd7917961e1d518ed214951ce0396392e5"
+          "sha256": "c2447ac6635b7d1904f937b7c3498c647c0d4cd355f20397e29d7c5caa2cd4c0"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "service_station",
       "category": "network",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 6639,
+          "triangles": 6484,
           "bounds": [
             [
               -1.0,
@@ -16148,12 +16196,12 @@
               ]
             }
           },
-          "bytes": 268916,
+          "bytes": 360452,
           "path": "assets/network/service_station_standard.glb",
-          "sha256": "c4eb52dd5c01c57b6f4e0d3b1c19b6e1d9dd17cfc8fe6c52e915562c31ba718f"
+          "sha256": "5b652904d875ee4abaf5c6df9efd2fbe230a78c97e3c5f047a9b891a5a176d4b"
         },
         "enhanced": {
-          "triangles": 8271,
+          "triangles": 8116,
           "bounds": [
             [
               -1.0,
@@ -16208,12 +16256,12 @@
               ]
             }
           },
-          "bytes": 316644,
+          "bytes": 408180,
           "path": "assets/network/service_station_enhanced.glb",
-          "sha256": "e4e7d486341669f78ff5b24fcd250b23783a8a635feca110722178f1a0644c67"
+          "sha256": "dc185a5fb3657b2c230966182263b4877cd548c1c14d188b6bc61ba3cbc76e22"
         },
         "ultra": {
-          "triangles": 9535,
+          "triangles": 9380,
           "bounds": [
             [
               -1.0,
@@ -16268,20 +16316,21 @@
               ]
             }
           },
-          "bytes": 350252,
+          "bytes": 441788,
           "path": "assets/network/service_station_ultra.glb",
-          "sha256": "be69fa370c88fcfae46b16c8a05494760cd1265414dc47e6795e21a6418d5b26"
+          "sha256": "cc96e0113bcb6994e6d3f26f41c8aa38529dd52d318bb9067e81bfd959850272"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "ingress_station",
       "category": "network",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 6684,
+          "triangles": 6531,
           "bounds": [
             [
               -1.0,
@@ -16336,12 +16385,12 @@
               ]
             }
           },
-          "bytes": 273772,
+          "bytes": 370384,
           "path": "assets/network/ingress_station_standard.glb",
-          "sha256": "59e8682150450e719d8bc73620203ab40c5a37ff1e5813ac6aa96e5d24c77fb1"
+          "sha256": "21f982eae79cac0aceba3176d38b2cb581ba5be87d32399dfdf5cf9a967d911e"
         },
         "enhanced": {
-          "triangles": 8316,
+          "triangles": 8163,
           "bounds": [
             [
               -1.0,
@@ -16396,12 +16445,12 @@
               ]
             }
           },
-          "bytes": 321496,
+          "bytes": 418108,
           "path": "assets/network/ingress_station_enhanced.glb",
-          "sha256": "725c913df554666d4401229d43579747c86c59cc81b49d29e258f5e8a36f3f2b"
+          "sha256": "74533f40b783001b887312390c8f33d4feb315aa50b04ef01c2c18a97f0eb236"
         },
         "ultra": {
-          "triangles": 9580,
+          "triangles": 9427,
           "bounds": [
             [
               -1.0,
@@ -16456,20 +16505,21 @@
               ]
             }
           },
-          "bytes": 355108,
+          "bytes": 451720,
           "path": "assets/network/ingress_station_ultra.glb",
-          "sha256": "badfaa0d90dd9424edf022a2c1c85c83443925c28929f6fba8e304d0294f2589"
+          "sha256": "f1c766171b10cffda61899eb188914573daae3c700b078f7a101243d56ccd837"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "volume_silo",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7150,
+          "triangles": 6995,
           "bounds": [
             [
               -0.7999999999999999,
@@ -16554,12 +16604,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 294612,
+          "bytes": 383016,
           "path": "assets/storage/volume_silo_standard.glb",
-          "sha256": "ca11bc38ab32f4474abc8f001202e9d5a43bbeb463b26565709dba77da97f7db"
+          "sha256": "41bce4b9f790552fdf41d0ec9c25d90409302a25a2fbc66b949988bfb789f4a4"
         },
         "enhanced": {
-          "triangles": 8990,
+          "triangles": 8835,
           "bounds": [
             [
               -0.7999999999999999,
@@ -16644,12 +16694,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 343168,
+          "bytes": 431572,
           "path": "assets/storage/volume_silo_enhanced.glb",
-          "sha256": "b7bf8aba5fbd5d1f63557f67586bbbd30b88c97d16b1953abe4b9721b956d166"
+          "sha256": "6e9237fd2604d8428692f310bb8ed92ffd73833b73ce5241e327c018e1d28743"
         },
         "ultra": {
-          "triangles": 10446,
+          "triangles": 10291,
           "bounds": [
             [
               -0.7999999999999999,
@@ -16734,20 +16784,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 380108,
+          "bytes": 468516,
           "path": "assets/storage/volume_silo_ultra.glb",
-          "sha256": "fe61ebfc52173bf6c613b1ea38caca0903cb38f2c8a7ec354cfb1e70887354e9"
+          "sha256": "fd6fa57a0475067ced5a1bf895d4a8ed15572bbc8928a807959064e054e7a79f"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "persistent_volume",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7201,
+          "triangles": 7048,
           "bounds": [
             [
               -0.7999999999999999,
@@ -16832,12 +16883,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 300120,
+          "bytes": 394252,
           "path": "assets/storage/persistent_volume_standard.glb",
-          "sha256": "856872ff67360f6d7af89ecde09064e35d98f909b56c8d06c87a55c1c518d820"
+          "sha256": "0fd9eb6583b0bd93d8d98c85f0559ddc33ce22ab9733fedc01db8b78b3ac47bd"
         },
         "enhanced": {
-          "triangles": 9041,
+          "triangles": 8888,
           "bounds": [
             [
               -0.7999999999999999,
@@ -16922,12 +16973,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 348676,
+          "bytes": 442808,
           "path": "assets/storage/persistent_volume_enhanced.glb",
-          "sha256": "7cc1a4103df73b088a8bd392e62f766a75ac305f86c7a8b79c459cd2bb37c970"
+          "sha256": "3a8d28b0294256074d23b90ac10e5e278ebcfe13bb741c0ff97fe8113c348f50"
         },
         "ultra": {
-          "triangles": 10497,
+          "triangles": 10344,
           "bounds": [
             [
               -0.7999999999999999,
@@ -17012,20 +17063,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 385620,
+          "bytes": 479748,
           "path": "assets/storage/persistent_volume_ultra.glb",
-          "sha256": "c0a65e63a073b39d979d31c0d12bd728e4ca31b69f3ef5a0c60ba177d0865fb9"
+          "sha256": "df83b07587604510301b487bac3e070ab9260e4850b3fb3dfc988760fe12bd59"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "water_tank",
       "category": "storage",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 1763,
+          "triangles": 1769,
           "bounds": [
             [
               -0.8899999856948853,
@@ -17064,12 +17116,12 @@
               ]
             }
           },
-          "bytes": 70444,
+          "bytes": 83116,
           "path": "assets/storage/water_tank_standard.glb",
-          "sha256": "e9eb8bf9903538c8521fe54a6dd11aee6ac495b1e08266306f7e316dbfa676bc"
+          "sha256": "994baa7b85781d807fb59250633362cf43cc175d659443480037ffbb5a7574ee"
         },
         "enhanced": {
-          "triangles": 2567,
+          "triangles": 2573,
           "bounds": [
             [
               -0.9950000262260437,
@@ -17108,12 +17160,12 @@
               ]
             }
           },
-          "bytes": 93336,
+          "bytes": 106008,
           "path": "assets/storage/water_tank_enhanced.glb",
-          "sha256": "2aa2ea0689488c6ba1e880ca26b0affe9a16639b136d603db0d2123699e58414"
+          "sha256": "d89fc459b45345a1541b90907f12dba12543bc886f7b26d7d6ab5628a7a58651"
         },
         "ultra": {
-          "triangles": 3487,
+          "triangles": 3493,
           "bounds": [
             [
               -0.9950000262260437,
@@ -17152,20 +17204,21 @@
               ]
             }
           },
-          "bytes": 117580,
+          "bytes": 130256,
           "path": "assets/storage/water_tank_ultra.glb",
-          "sha256": "f062d37654e1e49a78de1a15317a55f49bd8050571b669f12787c6cbd2c23c51"
+          "sha256": "d9e0ac89b49278b3e112f788cc4b20e07f84c6499ec1d46e97fcd833da50a7c9"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "backup_tank",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7093,
+          "triangles": 6938,
           "bounds": [
             [
               -0.7999999999999999,
@@ -17250,12 +17303,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 288204,
+          "bytes": 370452,
           "path": "assets/storage/backup_tank_standard.glb",
-          "sha256": "e5dbd71a60f61abf982ba879c9cb79baa68ee77fe2490df151e9c90125dd40d4"
+          "sha256": "d7344b77072072908fbb200afecfddb7f1b53bb4582321d60faaf763f47ef7e1"
         },
         "enhanced": {
-          "triangles": 8933,
+          "triangles": 8778,
           "bounds": [
             [
               -0.7999999999999999,
@@ -17340,12 +17393,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 336760,
+          "bytes": 419008,
           "path": "assets/storage/backup_tank_enhanced.glb",
-          "sha256": "02e39c51ce0e27f62cf3b97c7c835eee20125c0236893b33705dca8d17d9c4a0"
+          "sha256": "6d8dec98cbff9886a334c009c6477b2cdb464636ccbdda98ffafdc5f6540ab69"
         },
         "ultra": {
-          "triangles": 10389,
+          "triangles": 10234,
           "bounds": [
             [
               -0.7999999999999999,
@@ -17430,20 +17483,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 373700,
+          "bytes": 455952,
           "path": "assets/storage/backup_tank_ultra.glb",
-          "sha256": "97b0562e218721561ec05135a22376842560906381ef24e92a7378428d3e0f7c"
+          "sha256": "ae8c338950306375f80803107c7f7351dad35d33e79a608028c9231de809a495"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "snapshot_silo",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7199,
+          "triangles": 7044,
           "bounds": [
             [
               -0.7999999999999999,
@@ -17528,12 +17582,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 299644,
+          "bytes": 393348,
           "path": "assets/storage/snapshot_silo_standard.glb",
-          "sha256": "aced276447b2964355b8d5e5cac8e8ae5618a54d35787c5a7483dd2bf64c39e3"
+          "sha256": "4b7fb72141d851105315559750cb7eff8b4d787f3f24c23563ba19c48a1ac27f"
         },
         "enhanced": {
-          "triangles": 9039,
+          "triangles": 8884,
           "bounds": [
             [
               -0.7999999999999999,
@@ -17618,12 +17672,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 348200,
+          "bytes": 441904,
           "path": "assets/storage/snapshot_silo_enhanced.glb",
-          "sha256": "b95ddc582070f1ade39461bffa5cfed6050de0b3ecde8d06ffbc86b0ca02478b"
+          "sha256": "80786b2598e191119bf4f10518cc79ccd0a5908b86e598d012af3c5de70a90ed"
         },
         "ultra": {
-          "triangles": 10495,
+          "triangles": 10340,
           "bounds": [
             [
               -0.7999999999999999,
@@ -17708,17 +17762,18 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 385144,
+          "bytes": 478844,
           "path": "assets/storage/snapshot_silo_ultra.glb",
-          "sha256": "8ea3e027db5a6113a4ab560cadceed4cfd359c0a39f5c77c454f7ee1f2e00343"
+          "sha256": "17fb318551cddd2b95db1f9e909972689f38e25c1d7fe48bbfdae28da63e58ca"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "storage_crate",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 2916,
@@ -17782,9 +17837,9 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 114332,
+          "bytes": 145040,
           "path": "assets/storage/storage_crate_standard.glb",
-          "sha256": "7835d7ac08b5b41bc50aff264763c0b629bb2486ac64871883c991088a54eddc"
+          "sha256": "7f3eff4da48e3d98bd5ac60c343f9e5f1d00da3012b74281e49cb3953a8dbeba"
         },
         "enhanced": {
           "triangles": 3252,
@@ -17848,9 +17903,9 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 124708,
+          "bytes": 155420,
           "path": "assets/storage/storage_crate_enhanced.glb",
-          "sha256": "db6e7764e856ba8fc2421a888f56a4a8cb55b3b777783ae85c1f39fa4f83ba7c"
+          "sha256": "0016b23aba2a3088d1142ee13022c30682347b22e64668dd90408586949a0bba"
         },
         "ultra": {
           "triangles": 3444,
@@ -17914,20 +17969,21 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 130108,
+          "bytes": 160820,
           "path": "assets/storage/storage_crate_ultra.glb",
-          "sha256": "3ddad1fc6a45a3eaf2e6caa2cc22ae327cf98bbca0c817bac031e80035b148e3"
+          "sha256": "a84d7b18b1a2d89b0a6ac0be5f622f7cf89ce73d2f220d9ca34643bcc8433758"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "image_crate",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 2804,
+          "triangles": 2806,
           "bounds": [
             [
               -0.5385,
@@ -17988,12 +18044,12 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 102212,
+          "bytes": 121040,
           "path": "assets/storage/image_crate_standard.glb",
-          "sha256": "a9669d98ee475ba477de416fc67839f87b69b6895fb01ab23548c1b7486cebfa"
+          "sha256": "169da0f9e16412c131fdf59bd7431259a6e368945d49596a97853b1c84e1495c"
         },
         "enhanced": {
-          "triangles": 3140,
+          "triangles": 3142,
           "bounds": [
             [
               -0.5385,
@@ -18054,12 +18110,12 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 112584,
+          "bytes": 131416,
           "path": "assets/storage/image_crate_enhanced.glb",
-          "sha256": "8301be2aac480a3be04511128052b2f06b5090eee249c8a35b4dfc52c52ef788"
+          "sha256": "dce3be988707630309ab62bb0a2e1ef4030d624db9116e24aa3c312d7e64c170"
         },
         "ultra": {
-          "triangles": 3332,
+          "triangles": 3334,
           "bounds": [
             [
               -0.5385,
@@ -18120,17 +18176,18 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 117968,
+          "bytes": 136800,
           "path": "assets/storage/image_crate_ultra.glb",
-          "sha256": "a474ae828d8187ed0118a4a0b287b84758843a0768b1a6ff4fed05eab5b24b86"
+          "sha256": "56c097e60503bcc0bac94cdd6f63e1a6a2dd482289a524c312fd3b4f96bc08a8"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "archive_crate",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 2841,
@@ -18194,9 +18251,9 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 106216,
+          "bytes": 128828,
           "path": "assets/storage/archive_crate_standard.glb",
-          "sha256": "b45630d0621885516b9e81b6882c2f09918712932dbd8d27b17129057b869cc9"
+          "sha256": "836ed27b84dd34aa55460a395cbd1ffdb029afc72b3b7f5c43441cb2da184b5e"
         },
         "enhanced": {
           "triangles": 3177,
@@ -18260,9 +18317,9 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 116592,
+          "bytes": 139204,
           "path": "assets/storage/archive_crate_enhanced.glb",
-          "sha256": "0a054fa77dd964d45326ebda0bf229e1d7ea4dddfd2609589f4bb2f8f86133e0"
+          "sha256": "8a547d951d9b5ebc5435a63f416f472f04a7d53f6c1a000931262c90a3761777"
         },
         "ultra": {
           "triangles": 3369,
@@ -18326,20 +18383,21 @@
               "z_max": 0.47950000000000004
             }
           },
-          "bytes": 121972,
+          "bytes": 144584,
           "path": "assets/storage/archive_crate_ultra.glb",
-          "sha256": "5a891da94d379ad9b195a17caa080a428186239403046791aff3536794494d13"
+          "sha256": "6d39679c2fb30919ae0a3a7ad5cc90e205ed557365676e6f2c5f4885b6be65c1"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "shipping_container",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 3332,
+          "triangles": 3338,
           "bounds": [
             [
               -1.2735,
@@ -18400,12 +18458,12 @@
               "z_max": 0.6395
             }
           },
-          "bytes": 128588,
+          "bytes": 162108,
           "path": "assets/storage/shipping_container_standard.glb",
-          "sha256": "85542d904e66cf26719a1bce3d0ea75c5d8504da3f6888770cf28cd2256d5ff0"
+          "sha256": "8c00ba3792b9ef4579b595ebccbcae1eaac218f146fee6378d700023ace9110c"
         },
         "enhanced": {
-          "triangles": 3668,
+          "triangles": 3674,
           "bounds": [
             [
               -1.2735,
@@ -18466,12 +18524,12 @@
               "z_max": 0.6395
             }
           },
-          "bytes": 138968,
+          "bytes": 172488,
           "path": "assets/storage/shipping_container_enhanced.glb",
-          "sha256": "848ac1b1c4ef2e44c5e30fd2af9a1a2b054202ac25fe75d9871328f8891a0410"
+          "sha256": "1e467c44ca82503c231b2223f67a60ffe80156ef018e3598ad4cdf83f2247dd1"
         },
         "ultra": {
-          "triangles": 3860,
+          "triangles": 3866,
           "bounds": [
             [
               -1.2735,
@@ -18532,11 +18590,12 @@
               "z_max": 0.6395
             }
           },
-          "bytes": 144348,
+          "bytes": 177868,
           "path": "assets/storage/shipping_container_ultra.glb",
-          "sha256": "e7715a991642416dd63524ce65d29edd37f5cd4762c888156318586777886ca4"
+          "sha256": "fe57bb5e40c7237a1d87e8e0ed5e874aab1ce852ae490c79ab13569cacb0b2d4"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "pallet",
@@ -18607,10 +18666,10 @@
       "id": "backup_station",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7174,
+          "triangles": 7019,
           "bounds": [
             [
               -0.7999999999999999,
@@ -18695,12 +18754,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 296948,
+          "bytes": 387944,
           "path": "assets/storage/backup_station_standard.glb",
-          "sha256": "a9906a8fd9c2c9d5c2f911b79575ff5751c4196f3443ecb5020bc3c5093f68ab"
+          "sha256": "f4a29df7c42df5a5ae44c27b4f88a77a5b1398b434429a7ebe2b8d23d542c28d"
         },
         "enhanced": {
-          "triangles": 9014,
+          "triangles": 8859,
           "bounds": [
             [
               -0.7999999999999999,
@@ -18785,12 +18844,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 345504,
+          "bytes": 436500,
           "path": "assets/storage/backup_station_enhanced.glb",
-          "sha256": "5005ec54c8d0088241928a78eff14eae1cece7663d79f694bd7be14838cd57a2"
+          "sha256": "f476e7b1911df7eef16de0f7d8e257823bc3232990b68ae8926b3a85268e0ecf"
         },
         "ultra": {
-          "triangles": 10470,
+          "triangles": 10315,
           "bounds": [
             [
               -0.7999999999999999,
@@ -18875,20 +18934,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 382444,
+          "bytes": 473444,
           "path": "assets/storage/backup_station_ultra.glb",
-          "sha256": "6a80f8683291d97690e9e5afbb825c9e4e7cbc91ef77fabbe244939b782b0207"
+          "sha256": "6487386e470af851dcfe36ad8329b6ed31b02817ff4b6cd90e90209f020616b4"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "storage_rack",
       "category": "storage",
       "asset_generation": "V5",
-      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending",
+      "release_quality_status": "sealed enclosure or wheel rebuild; manual review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 7189,
+          "triangles": 7032,
           "bounds": [
             [
               -0.7999999999999999,
@@ -18973,12 +19033,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 298428,
+          "bytes": 390828,
           "path": "assets/storage/storage_rack_standard.glb",
-          "sha256": "789564eb739d8042f9bfce670570d39b009f77ea628277873efd20f9325ad60b"
+          "sha256": "849275be6f1bdd75e6d31f71237e92c73b5d0835413f74ea1081fe047721f1ab"
         },
         "enhanced": {
-          "triangles": 9029,
+          "triangles": 8872,
           "bounds": [
             [
               -0.7999999999999999,
@@ -19063,12 +19123,12 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 346984,
+          "bytes": 439384,
           "path": "assets/storage/storage_rack_enhanced.glb",
-          "sha256": "146d44f8ff09df3697eb28006e810d8d2eec8361e0c2c832852ec8ed14f082cb"
+          "sha256": "07823bd32c8965b8d86246577dcb39bebdb8884fe025ea4a84cffc27480a7a64"
         },
         "ultra": {
-          "triangles": 10485,
+          "triangles": 10328,
           "bounds": [
             [
               -0.7999999999999999,
@@ -19153,20 +19213,21 @@
               "z_max": 0.5894999999999999
             }
           },
-          "bytes": 383928,
+          "bytes": 476324,
           "path": "assets/storage/storage_rack_ultra.glb",
-          "sha256": "95c8e56abd9c4353a14c97fc034e97bb9f31264bd058027333bd7a504d3267b1"
+          "sha256": "80fcae3137f910649abe071992649b5293c223d6d75ae4eb0724d66816144e17"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "dashboard_wall",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 740,
+          "triangles": 744,
           "bounds": [
             [
               -1.365,
@@ -19197,12 +19258,12 @@
               ]
             }
           },
-          "bytes": 50352,
+          "bytes": 81924,
           "path": "assets/displays/dashboard_wall_standard.glb",
-          "sha256": "c4c7d54a7555637d5eaad8cfee4fe80ddd3f0b40acb5bbf8e40392473a9df9a3"
+          "sha256": "83d6af2c32eaaa79f9a18f3814ac289adfe876c307046dbb14faaefc4f2d25ee"
         },
         "enhanced": {
-          "triangles": 1140,
+          "triangles": 1144,
           "bounds": [
             [
               -1.365,
@@ -19233,12 +19294,12 @@
               ]
             }
           },
-          "bytes": 62504,
+          "bytes": 94076,
           "path": "assets/displays/dashboard_wall_enhanced.glb",
-          "sha256": "7cbdb13ecd46854990237500e813122af6caa229c55e1b98fb6874dd3f599caf"
+          "sha256": "247cc0b0b51f41f6a7732f682469e57437e93b59eecf9567d9135ce009968119"
         },
         "ultra": {
-          "triangles": 1332,
+          "triangles": 1336,
           "bounds": [
             [
               -1.365,
@@ -19269,20 +19330,21 @@
               ]
             }
           },
-          "bytes": 67884,
+          "bytes": 99456,
           "path": "assets/displays/dashboard_wall_ultra.glb",
-          "sha256": "110278296831d43e0b4c4e7048e097dce51a8077eb789b19b73b2eac4ba5bbd1"
+          "sha256": "4a65d135f5ec89eb9b85fb70cc48318e72fd02aec197d330bfe167734095eb89"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "monitoring_wall",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 654,
+          "triangles": 664,
           "bounds": [
             [
               -1.365,
@@ -19313,12 +19375,12 @@
               ]
             }
           },
-          "bytes": 41060,
+          "bytes": 63992,
           "path": "assets/displays/monitoring_wall_standard.glb",
-          "sha256": "1a6c28e63e0b490483a8be0b958bdfb229f5efccb2bfa213ea51ef09b56137c7"
+          "sha256": "52a58d47a62cee3b7cfe91e2e706c85ee67f3b184f0f01445c16e611e42e9247"
         },
         "enhanced": {
-          "triangles": 1054,
+          "triangles": 1064,
           "bounds": [
             [
               -1.365,
@@ -19349,12 +19411,12 @@
               ]
             }
           },
-          "bytes": 53212,
+          "bytes": 76144,
           "path": "assets/displays/monitoring_wall_enhanced.glb",
-          "sha256": "ee2bd6b5457524e2fa4096d2c70194c9993d7c08165ecf8858bd9c1203149066"
+          "sha256": "32529b16db01fc581b2aac1eca2f17481eab0eec73756f63f1d196690f0a581d"
         },
         "ultra": {
-          "triangles": 1246,
+          "triangles": 1256,
           "bounds": [
             [
               -1.365,
@@ -19385,20 +19447,21 @@
               ]
             }
           },
-          "bytes": 58592,
+          "bytes": 81524,
           "path": "assets/displays/monitoring_wall_ultra.glb",
-          "sha256": "f8354fcf971a12c50afd940671f64470df2e0530d33b1871d83534cd93bc8d17"
+          "sha256": "32698ec42aaab94926b61302b891b7105e9bdf37a6d7947b1505d171c4226125"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "control_board",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 760,
+          "triangles": 762,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19429,12 +19492,12 @@
               ]
             }
           },
-          "bytes": 52512,
+          "bytes": 86028,
           "path": "assets/displays/control_board_standard.glb",
-          "sha256": "29cb1a7326349343536f19cd4648e17c92d7a58ea4e568cdfbd099d695b41203"
+          "sha256": "f24d432aa6dbac982a6de54c9b104ae03edf792d17b15e1167baf6260b21f184"
         },
         "enhanced": {
-          "triangles": 1160,
+          "triangles": 1162,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19465,12 +19528,12 @@
               ]
             }
           },
-          "bytes": 64664,
+          "bytes": 98184,
           "path": "assets/displays/control_board_enhanced.glb",
-          "sha256": "163681617be7f8c55e83db494c61dc6dc11f21121ecbec1af67f75d20037f602"
+          "sha256": "3f4a830440aa158feaf1466179754797f512c6bf675a62bafc551989a6f6758a"
         },
         "ultra": {
-          "triangles": 1352,
+          "triangles": 1354,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19501,20 +19564,21 @@
               ]
             }
           },
-          "bytes": 70044,
+          "bytes": 103560,
           "path": "assets/displays/control_board_ultra.glb",
-          "sha256": "8dc55ec6e2bdcd6072ce6077e60dbb6ba7577050eb14220fb0316977b1650e44"
+          "sha256": "0c49fe9ebc53a8d044b765fd94f20d8c4727d20ca66284768dfbe76662d62d3b"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "wide_display",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 507,
+          "triangles": 511,
           "bounds": [
             [
               -1.365,
@@ -19545,12 +19609,12 @@
               ]
             }
           },
-          "bytes": 34460,
+          "bytes": 55124,
           "path": "assets/displays/wide_display_standard.glb",
-          "sha256": "078c4ca977584297eb336cb0f11bffec84fd1ec43251b9a73a9a28221c5e31dd"
+          "sha256": "8cd93e7de1919572bc8b8f5338f53410f99d34692c3bca03bd46f191b09301fe"
         },
         "enhanced": {
-          "triangles": 715,
+          "triangles": 719,
           "bounds": [
             [
               -1.365,
@@ -19581,12 +19645,12 @@
               ]
             }
           },
-          "bytes": 41860,
+          "bytes": 62520,
           "path": "assets/displays/wide_display_enhanced.glb",
-          "sha256": "46c72347ed6559c5a14bc6dfa7dd2f625065a8ff0bed6ce336e909c85e4da878"
+          "sha256": "98037f1e33bf8b7fcf13a3270e36c068808f50f8ca1b68bc60082c71565f9f0f"
         },
         "ultra": {
-          "triangles": 907,
+          "triangles": 911,
           "bounds": [
             [
               -1.365,
@@ -19617,20 +19681,21 @@
               ]
             }
           },
-          "bytes": 47236,
+          "bytes": 67900,
           "path": "assets/displays/wide_display_ultra.glb",
-          "sha256": "0dbed6ae8e3c159c68872d19504ff99c3f757ae3c0fe4568a35a87c10c2e704b"
+          "sha256": "007ef9c9c0b71f91afb4ce2c9ad33c68da726d8d5f76405a2603ad02b2911ed8"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "portable_terminal",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 710,
+          "triangles": 714,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19661,12 +19726,12 @@
               ]
             }
           },
-          "bytes": 47108,
+          "bytes": 75440,
           "path": "assets/displays/portable_terminal_standard.glb",
-          "sha256": "a2cbc233bd24a36a2673563d3f47298b0414cc8eb9c6b447d1ad0c17d977e5cd"
+          "sha256": "663aa94fc4ca528c5dc7962de32e57cbe6079f3006292bce6af936266358b4ce"
         },
         "enhanced": {
-          "triangles": 1110,
+          "triangles": 1114,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19697,12 +19762,12 @@
               ]
             }
           },
-          "bytes": 59264,
+          "bytes": 87592,
           "path": "assets/displays/portable_terminal_enhanced.glb",
-          "sha256": "e0db3e7abada3cad858086628e63bcbcdc1e432da6804aad3c5752fa663831fa"
+          "sha256": "ecf8d50e7e00a09516d1f6f4afc61a57aaaf195e83699fc4dbfe92f2bf50822d"
         },
         "ultra": {
-          "triangles": 1302,
+          "triangles": 1306,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19733,20 +19798,21 @@
               ]
             }
           },
-          "bytes": 64640,
+          "bytes": 92972,
           "path": "assets/displays/portable_terminal_ultra.glb",
-          "sha256": "d7eabaffe177a7dedfe45579c22dacc9245c3390d67b8517de8a8d158b30e801"
+          "sha256": "a7f0455ba14041cb684f0b605cef0f07cb9943e4a181fec78210c62bacb32064"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "machine_screen",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 553,
+          "triangles": 559,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19777,12 +19843,12 @@
               ]
             }
           },
-          "bytes": 39432,
+          "bytes": 65280,
           "path": "assets/displays/machine_screen_standard.glb",
-          "sha256": "4f1ba749f885cf836aece319d4b2bedead1354d03da96a82d649d3bbfa4a362f"
+          "sha256": "6d921106cd9489334bd18c0060e8e46492d05269fc8ed7ae07672217096cb96c"
         },
         "enhanced": {
-          "triangles": 761,
+          "triangles": 767,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19813,12 +19879,12 @@
               ]
             }
           },
-          "bytes": 46828,
+          "bytes": 72680,
           "path": "assets/displays/machine_screen_enhanced.glb",
-          "sha256": "b7323822d937b584619e6e502bfd16831b7b1e8b20150e27562f1e69c49fae0b"
+          "sha256": "492e88cfc492f8292b1ba8e832ba589702c678d88832822b23bcd08eeace286b"
         },
         "ultra": {
-          "triangles": 953,
+          "triangles": 959,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19849,20 +19915,21 @@
               ]
             }
           },
-          "bytes": 52208,
+          "bytes": 78060,
           "path": "assets/displays/machine_screen_ultra.glb",
-          "sha256": "bd89ab4d2d859b66295ede8c9694ea9edfd0c609564493365c2dd08022845dae"
+          "sha256": "cd75f9564886cd76c4d745d3dcddac2412560727dc65f50caf22d6cb95abe611"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "status_panel",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 528,
+          "triangles": 530,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19893,12 +19960,12 @@
               ]
             }
           },
-          "bytes": 36732,
+          "bytes": 59448,
           "path": "assets/displays/status_panel_standard.glb",
-          "sha256": "b6d427a8e65c1da2fd9e402ccea6edfcde9943f0a877a6541c57a0fbfd3fdef7"
+          "sha256": "0d864a9a832329e0181f682d97d270b9d51e291bb89a12213201e7949ddeebf1"
         },
         "enhanced": {
-          "triangles": 736,
+          "triangles": 738,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19929,12 +19996,12 @@
               ]
             }
           },
-          "bytes": 44128,
+          "bytes": 66844,
           "path": "assets/displays/status_panel_enhanced.glb",
-          "sha256": "bdc0d966b3a89d7a927bd2bf156e1a2ab50c6c38acab94601e524f0a3b9239a3"
+          "sha256": "416a5061459da3421895d113229d596bb044728d6ee98b4eb73c7986e164e259"
         },
         "ultra": {
-          "triangles": 928,
+          "triangles": 930,
           "bounds": [
             [
               -0.5900000000000001,
@@ -19965,17 +20032,18 @@
               ]
             }
           },
-          "bytes": 49508,
+          "bytes": 72224,
           "path": "assets/displays/status_panel_ultra.glb",
-          "sha256": "ecfc05c0c2136a19ef108bacdba8fe1787eaffe1b3d77ded0cce9eddbef7db6e"
+          "sha256": "cbac85451f06d6a627ac17b55f4797665c0533c3d6b566e5bc227f0f0ae4a707"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "kiosk",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 564,
@@ -20009,9 +20077,9 @@
               ]
             }
           },
-          "bytes": 31344,
+          "bytes": 43476,
           "path": "assets/displays/kiosk_standard.glb",
-          "sha256": "32ffd6e7ed4e299a484802583ac37227c0e78f2906f3a224e17f8e440ef62285"
+          "sha256": "095b325ae20fe076f3f59a1a111d7da4a6ff366f7ab494c3befe8261c7bd5fe4"
         },
         "enhanced": {
           "triangles": 964,
@@ -20045,9 +20113,9 @@
               ]
             }
           },
-          "bytes": 43496,
+          "bytes": 55632,
           "path": "assets/displays/kiosk_enhanced.glb",
-          "sha256": "ffe943a8fa5f573f3fd678e75c32ebb1790a08023507623937d30fef3df39e00"
+          "sha256": "f0a0a2b9c0b08c405d4ba8b030275404ae6db86449979338345cb1f1dfebe5ca"
         },
         "ultra": {
           "triangles": 1156,
@@ -20081,20 +20149,21 @@
               ]
             }
           },
-          "bytes": 48876,
+          "bytes": 61008,
           "path": "assets/displays/kiosk_ultra.glb",
-          "sha256": "55d0f3d0f94bbc15138c6e14452ca6f1d935129a8ada03145d963b31fcbf311f"
+          "sha256": "a38c02bc734744e276573b46ad86e3802ab764de174e2d58d9186d605e727d93"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "operator_console",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 857,
+          "triangles": 859,
           "bounds": [
             [
               -0.815,
@@ -20125,12 +20194,12 @@
               ]
             }
           },
-          "bytes": 59180,
+          "bytes": 98424,
           "path": "assets/displays/operator_console_standard.glb",
-          "sha256": "4253fb307bf9693d6c14413ba2431861a6a7143cffc83dd01de84e26cb6b4f8f"
+          "sha256": "8caa80131876070ce5025694cec24146c7deda5986c4cd49ccdeaafd1f36dfe0"
         },
         "enhanced": {
-          "triangles": 1321,
+          "triangles": 1323,
           "bounds": [
             [
               -0.815,
@@ -20161,12 +20230,12 @@
               ]
             }
           },
-          "bytes": 73152,
+          "bytes": 112400,
           "path": "assets/displays/operator_console_enhanced.glb",
-          "sha256": "49a340fba7d66d8bf54250177bbc86054407492a9ca337ece834a4fd2cbcdf0c"
+          "sha256": "d338e3ab7c990059c165ec1aa224d1f5e6f1e62797342ede32244d1ca9528caa"
         },
         "ultra": {
-          "triangles": 1513,
+          "triangles": 1515,
           "bounds": [
             [
               -0.815,
@@ -20197,20 +20266,21 @@
               ]
             }
           },
-          "bytes": 78532,
+          "bytes": 117780,
           "path": "assets/displays/operator_console_ultra.glb",
-          "sha256": "a82c16ca20344eabd031d76e4dafe624577b1f3f81be1a57e02d36f69494e1c7"
+          "sha256": "8efc6e96b97a104b5d40c6f65c1e41cf752f89fbf9ecc9a229ff82910d4b725d"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "freestanding_terminal",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 755,
+          "triangles": 763,
           "bounds": [
             [
               -0.5900000000000001,
@@ -20241,12 +20311,12 @@
               ]
             }
           },
-          "bytes": 51972,
+          "bytes": 85600,
           "path": "assets/displays/freestanding_terminal_standard.glb",
-          "sha256": "309a638617f50004cf8bf5293bce59dda2df02e2c6a17e3515703169ad257060"
+          "sha256": "fbc22daa3024722cb651f4e03f6bbe67b911f034e2c5a61b891b437fba5628eb"
         },
         "enhanced": {
-          "triangles": 1155,
+          "triangles": 1163,
           "bounds": [
             [
               -0.5900000000000001,
@@ -20277,12 +20347,12 @@
               ]
             }
           },
-          "bytes": 64128,
+          "bytes": 97752,
           "path": "assets/displays/freestanding_terminal_enhanced.glb",
-          "sha256": "37f1adc2d949f5e824113d790582a9178f487e446d2682d43aa75d3ee4f246d5"
+          "sha256": "34a8470956f38ca747f0f1e09b8e20e7a7612423a6b5fb53c72b1efe12dd70bb"
         },
         "ultra": {
-          "triangles": 1347,
+          "triangles": 1355,
           "bounds": [
             [
               -0.5900000000000001,
@@ -20313,20 +20383,21 @@
               ]
             }
           },
-          "bytes": 69504,
+          "bytes": 103132,
           "path": "assets/displays/freestanding_terminal_ultra.glb",
-          "sha256": "1884a8b02d8689cf4d49bac9c10f8df63b745d46622515c342df153ffd40478e"
+          "sha256": "af8262b400f3ad28b5b63ac36bb5bddb8d3059b4c2f6b35d2304430d20d15aee"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "control_desk",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 752,
+          "triangles": 754,
           "bounds": [
             [
               -0.815,
@@ -20357,12 +20428,12 @@
               ]
             }
           },
-          "bytes": 47828,
+          "bytes": 75732,
           "path": "assets/displays/control_desk_standard.glb",
-          "sha256": "2fd9876d64a8625ba6dff64ade4556814cdc853f55d3758cf09e7103ecb5bff9"
+          "sha256": "442b3a57bd5ca5affdf50f59e65ecbef66fefdb274eb8877550fa2abdd51d0f1"
         },
         "enhanced": {
-          "triangles": 1216,
+          "triangles": 1218,
           "bounds": [
             [
               -0.815,
@@ -20393,12 +20464,12 @@
               ]
             }
           },
-          "bytes": 61804,
+          "bytes": 89704,
           "path": "assets/displays/control_desk_enhanced.glb",
-          "sha256": "3dea176f32942c5b7cb777eb20670b1f28b9184f5d972371225b3b4d5515d437"
+          "sha256": "a6b4b0af06963683a66739ee8144c9f52c32cdc6f5183d9d2498950a57634227"
         },
         "ultra": {
-          "triangles": 1408,
+          "triangles": 1410,
           "bounds": [
             [
               -0.815,
@@ -20429,20 +20500,21 @@
               ]
             }
           },
-          "bytes": 67180,
+          "bytes": 95084,
           "path": "assets/displays/control_desk_ultra.glb",
-          "sha256": "e705d24fdbdf3b97d3dcc0389ba2f36afeecca3b07b2a5e9062f4d1085bd2408"
+          "sha256": "b2b92133a7edc90906511525ec0349824b02c4980da9b942ae8f6e471b440d2d"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "wall_screen",
       "category": "displays",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 499,
+          "triangles": 505,
           "bounds": [
             [
               -1.365,
@@ -20473,12 +20545,12 @@
               ]
             }
           },
-          "bytes": 33592,
+          "bytes": 53612,
           "path": "assets/displays/wall_screen_standard.glb",
-          "sha256": "6cb3c7a06f2172a601c97a0a2594492eb6dec530c125897c8b0a1605c18745b7"
+          "sha256": "17704d42b2fd6d5342533410630be905f7c9a9ef2b71a56545d43b64a8fbf0c4"
         },
         "enhanced": {
-          "triangles": 707,
+          "triangles": 713,
           "bounds": [
             [
               -1.365,
@@ -20509,12 +20581,12 @@
               ]
             }
           },
-          "bytes": 40992,
+          "bytes": 61008,
           "path": "assets/displays/wall_screen_enhanced.glb",
-          "sha256": "eb3459f8283f67b3003681fcab38b4a05dc8c9f8f551bb338ddff7c516b6e357"
+          "sha256": "f9f4e7aad4e93952e37e8094f2c0fdf67e1408ede1e6a819164739f6dfb65857"
         },
         "ultra": {
-          "triangles": 899,
+          "triangles": 905,
           "bounds": [
             [
               -1.365,
@@ -20545,11 +20617,12 @@
               ]
             }
           },
-          "bytes": 46372,
+          "bytes": 66388,
           "path": "assets/displays/wall_screen_ultra.glb",
-          "sha256": "078440c8f5a71e7ea021af0967257b404df35104303ce6a73acb81b280ec17c4"
+          "sha256": "00879aa3e62185daa573063842f4d0d7d1ce41754340f5688207971b3a77f0aa"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "warning_beacon",
@@ -21530,7 +21603,7 @@
       "id": "battery_pack",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 2428,
@@ -21572,9 +21645,9 @@
               ]
             }
           },
-          "bytes": 103180,
+          "bytes": 125248,
           "path": "assets/props/battery_pack_standard.glb",
-          "sha256": "5414331ee800f9d9ea3ec06cf57076035b05acef93e1f6a108a00a8d755f70be"
+          "sha256": "a1bdf4443a60380afeb953865012bbd10692afcf348db2441a9adf8d9a80dec2"
         },
         "enhanced": {
           "triangles": 3068,
@@ -21616,9 +21689,9 @@
               ]
             }
           },
-          "bytes": 122528,
+          "bytes": 144596,
           "path": "assets/props/battery_pack_enhanced.glb",
-          "sha256": "1937401a2e58043ba25d69184fcb29a4afe55b26132043c7bdb5c59245d5cb87"
+          "sha256": "837672fa5ca3157e94572ff5337e418660b3a7951ff2a8dfcc8e0f7dbcce319f"
         },
         "ultra": {
           "triangles": 3492,
@@ -21660,20 +21733,21 @@
               ]
             }
           },
-          "bytes": 134260,
+          "bytes": 156328,
           "path": "assets/props/battery_pack_ultra.glb",
-          "sha256": "7a5b1e18986189f3c15b68387b3c4f1fdc184cd64d0d7e6dd0ac88ea00f24b0b"
+          "sha256": "ba30dcf856adda9080937ef7ada56ef614fc86e9451a05064395cc4b262b3698"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "generator",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 2415,
+          "triangles": 2417,
           "bounds": [
             [
               -0.7127500176429749,
@@ -21712,12 +21786,12 @@
               ]
             }
           },
-          "bytes": 101788,
+          "bytes": 122672,
           "path": "assets/props/generator_standard.glb",
-          "sha256": "3fe186a1e5cadac5b7b9a14d8a94904758d2ce51fab5ef68251335a0361c915d"
+          "sha256": "8832fc32aa338d0e4cd599412fe2f9d9d738302ecd2167224b836e2c38b4c488"
         },
         "enhanced": {
-          "triangles": 3055,
+          "triangles": 3057,
           "bounds": [
             [
               -0.7127500176429749,
@@ -21756,12 +21830,12 @@
               ]
             }
           },
-          "bytes": 121136,
+          "bytes": 142020,
           "path": "assets/props/generator_enhanced.glb",
-          "sha256": "a55949c94b5c6d5d99ffa6b23dfe5554e1264563d50af1e499699eb92abd60a5"
+          "sha256": "f42e9b23f75e04130150cba66af1e4780f3c660761be585156d43e01c33a3918"
         },
         "ultra": {
-          "triangles": 3479,
+          "triangles": 3481,
           "bounds": [
             [
               -0.7127500176429749,
@@ -21800,20 +21874,21 @@
               ]
             }
           },
-          "bytes": 132868,
+          "bytes": 153752,
           "path": "assets/props/generator_ultra.glb",
-          "sha256": "17ce6b3ef41ada15daa5b76d7638113ce9b38cbce1b6a947b2ec14d9468839ed"
+          "sha256": "916825f9b5602d70ab32fb27d8fca101abc44e6a42402478bfbe25b81bb2fbcc"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "transformer",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 2471,
+          "triangles": 2475,
           "bounds": [
             [
               -0.7127500176429749,
@@ -21852,12 +21927,12 @@
               ]
             }
           },
-          "bytes": 107648,
+          "bytes": 134792,
           "path": "assets/props/transformer_standard.glb",
-          "sha256": "b2f406972c046c165324ddc5f5952293045f7c55b62058c4983241fdccd02c6e"
+          "sha256": "1979d5f1ae8ee6be5a3ec4042e5332a6394ef43802859717d7a5d0badfcd3f55"
         },
         "enhanced": {
-          "triangles": 3111,
+          "triangles": 3115,
           "bounds": [
             [
               -0.7127500176429749,
@@ -21896,12 +21971,12 @@
               ]
             }
           },
-          "bytes": 126992,
+          "bytes": 154140,
           "path": "assets/props/transformer_enhanced.glb",
-          "sha256": "eb34620646fcc9ae9a69c4e8e3b42ce7a80e183b5105bf67090e22b9cdb3a3f7"
+          "sha256": "7db06042e9c806d28800f7bea61e7155cd41d3aa1edde2a9532d9657451f749e"
         },
         "ultra": {
-          "triangles": 3535,
+          "triangles": 3539,
           "bounds": [
             [
               -0.7127500176429749,
@@ -21940,20 +22015,21 @@
               ]
             }
           },
-          "bytes": 138724,
+          "bytes": 165872,
           "path": "assets/props/transformer_ultra.glb",
-          "sha256": "9a6158dd28e7f1cef70121c3db2200d7bed5111a03d9f90d71d4b038fd57f71b"
+          "sha256": "2879341c15577a57a8681ed7ac3e6b98c2db7dcbacbf85df271794f574c15b71"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "air_compressor",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 2891,
+          "triangles": 2893,
           "bounds": [
             [
               -0.7127500176429749,
@@ -21992,12 +22068,12 @@
               ]
             }
           },
-          "bytes": 122092,
+          "bytes": 161992,
           "path": "assets/props/air_compressor_standard.glb",
-          "sha256": "991a7758c37d06b28eec3b5c654f90823797ad953f53dd3a7b1ced82e200c113"
+          "sha256": "9eae6bb36ac2fccaa354c8ab021b1aa2fff0e2d3afe753f5420f3b345b573aa9"
         },
         "enhanced": {
-          "triangles": 3763,
+          "triangles": 3765,
           "bounds": [
             [
               -0.7127500176429749,
@@ -22036,12 +22112,12 @@
               ]
             }
           },
-          "bytes": 141592,
+          "bytes": 181492,
           "path": "assets/props/air_compressor_enhanced.glb",
-          "sha256": "b850376e26d00ef9c1d3a4fa44d26bd867f87078d37bd97660fc52b4fae2f0bd"
+          "sha256": "6ba59ffcd719b2fc0270ded18b7fce49cce5db7a7a1f1ab17ea206ba23eb700f"
         },
         "ultra": {
-          "triangles": 4443,
+          "triangles": 4445,
           "bounds": [
             [
               -0.7127500176429749,
@@ -22080,20 +22156,21 @@
               ]
             }
           },
-          "bytes": 156396,
+          "bytes": 196296,
           "path": "assets/props/air_compressor_ultra.glb",
-          "sha256": "05fbdb6356f94ac84eb537566db046b88fa3d53fee49df9eb611bf8c3be66b21"
+          "sha256": "ac7f439d3ca45fafaab3afa7548ea0c2ea6ef1ea5541b48d01e0b4ebed25979a"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "pump",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 2611,
+          "triangles": 2613,
           "bounds": [
             [
               -0.7127500176429749,
@@ -22132,12 +22209,12 @@
               ]
             }
           },
-          "bytes": 91848,
+          "bytes": 101492,
           "path": "assets/props/pump_standard.glb",
-          "sha256": "c199945bd5c98787bf0501fb6f42652fd952d729da9d3b891460bda4dd982198"
+          "sha256": "de3302b9686aa1b02e2673d982de1a51195b2432ada3d565a47b06d231e561c2"
         },
         "enhanced": {
-          "triangles": 3483,
+          "triangles": 3485,
           "bounds": [
             [
               -0.7127500176429749,
@@ -22176,12 +22253,12 @@
               ]
             }
           },
-          "bytes": 111344,
+          "bytes": 120992,
           "path": "assets/props/pump_enhanced.glb",
-          "sha256": "ef24ee0be177e109f5bcb3f031a77b44c8571ad438f71037be3f81182fa9acb0"
+          "sha256": "30d510ac8a6b95c59f0ed2853344a07cf1b21aa0b1b1b36258156cfadd2260b6"
         },
         "ultra": {
-          "triangles": 4163,
+          "triangles": 4165,
           "bounds": [
             [
               -0.7127500176429749,
@@ -22220,17 +22297,18 @@
               ]
             }
           },
-          "bytes": 126148,
+          "bytes": 135796,
           "path": "assets/props/pump_ultra.glb",
-          "sha256": "6bd3327d95be4521667e6d1a51a3055c3ac9246fe85ef05c00272428a885bb22"
+          "sha256": "fad855e96a34c5422cf18b9a250303e4e8c7ec3ef579a48ea546514243f9bb3b"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "hvac",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 2592,
@@ -22272,9 +22350,9 @@
               ]
             }
           },
-          "bytes": 89620,
+          "bytes": 97000,
           "path": "assets/props/hvac_standard.glb",
-          "sha256": "117fe0d9fa06210276634a576f5c0108c0e9326c2b4bae77ba13ff69f71f22be"
+          "sha256": "15e6dca45b62bf09b398220776f3649d058d264e6f752837e65b8e6af79fcab5"
         },
         "enhanced": {
           "triangles": 3464,
@@ -22316,9 +22394,9 @@
               ]
             }
           },
-          "bytes": 109120,
+          "bytes": 116496,
           "path": "assets/props/hvac_enhanced.glb",
-          "sha256": "81120a804e08fad4983e2188f6b34b50cbeba39dacbe141d7a6d375841f35ef0"
+          "sha256": "1880d26449789c5542cb65d65fbbb995f1d8460f834166aca0077cb33973deba"
         },
         "ultra": {
           "triangles": 4144,
@@ -22360,17 +22438,18 @@
               ]
             }
           },
-          "bytes": 123920,
+          "bytes": 131300,
           "path": "assets/props/hvac_ultra.glb",
-          "sha256": "db332514285ee919ca2626b5672287cb86765d786e24979784fe128fc257673b"
+          "sha256": "933c34d0e669839272a61d0caf8ee4f0b619ea6bd2b97a1cadafdeb9f426a3ed"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "electrical_box",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
           "triangles": 2465,
@@ -22412,9 +22491,9 @@
               ]
             }
           },
-          "bytes": 107000,
+          "bytes": 133064,
           "path": "assets/props/electrical_box_standard.glb",
-          "sha256": "8a76fae7083d329045b3d2aa26300b9c50316c0710a3db84560fe92ad70f1659"
+          "sha256": "be1351c01d405736648f7d30fdefd217b05d100dc51406568a3ad5bb0664a36d"
         },
         "enhanced": {
           "triangles": 3105,
@@ -22456,9 +22535,9 @@
               ]
             }
           },
-          "bytes": 126348,
+          "bytes": 152416,
           "path": "assets/props/electrical_box_enhanced.glb",
-          "sha256": "3844b2f59738e71f6497ab14d08385aa265d1f67cea23cdd3cefa13dfc88bb20"
+          "sha256": "d65a679faa2115a7c236b541ee3fb9c2e353f1eebc96836289c2cebfea12c333"
         },
         "ultra": {
           "triangles": 3529,
@@ -22500,20 +22579,21 @@
               ]
             }
           },
-          "bytes": 138080,
+          "bytes": 164144,
           "path": "assets/props/electrical_box_ultra.glb",
-          "sha256": "dba0684c5d0b5a7b97c093978fb4816b021b23c5f67c0034bea44929059a0fec"
+          "sha256": "4dab415d928a580be3a373256328f6c6a5d902dd5015305c393c34e5c1412066"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "tool_cabinet",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 2418,
+          "triangles": 2420,
           "bounds": [
             [
               -0.7127500176429749,
@@ -22552,12 +22632,12 @@
               ]
             }
           },
-          "bytes": 102112,
+          "bytes": 123320,
           "path": "assets/props/tool_cabinet_standard.glb",
-          "sha256": "a1af7ab16cac659b0f00256413c947ad86a018cb60135f303757419a5c144803"
+          "sha256": "65b7fbcf722089b0fa5e055939e6b487d58345218ef124be575b1687998ab434"
         },
         "enhanced": {
-          "triangles": 3058,
+          "triangles": 3060,
           "bounds": [
             [
               -0.7127500176429749,
@@ -22596,12 +22676,12 @@
               ]
             }
           },
-          "bytes": 121460,
+          "bytes": 142668,
           "path": "assets/props/tool_cabinet_enhanced.glb",
-          "sha256": "d145ac277b5c554c6e13e136aa57e3f1c60c57c5c52ddccaed475f1a74d729a7"
+          "sha256": "792d337d54bcfba4759ee66aa104957eaa4abb1fd9226f1d310837a102003b46"
         },
         "ultra": {
-          "triangles": 3482,
+          "triangles": 3484,
           "bounds": [
             [
               -0.7127500176429749,
@@ -22640,11 +22720,12 @@
               ]
             }
           },
-          "bytes": 133192,
+          "bytes": 154400,
           "path": "assets/props/tool_cabinet_ultra.glb",
-          "sha256": "99b64776beae39afeec63940e35e45f6875e44ec6a0c8aa8ea5918203ab326c4"
+          "sha256": "718ed69a9bdc8c621672d81babd6743a892334b370cd112984c66f3ceb98a440"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "workbench",
@@ -23235,10 +23316,10 @@
       "id": "direction_sign",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 473,
+          "triangles": 477,
           "bounds": [
             [
               -0.4099999964237213,
@@ -23261,12 +23342,12 @@
               ]
             }
           },
-          "bytes": 38904,
+          "bytes": 67152,
           "path": "assets/props/direction_sign_standard.glb",
-          "sha256": "d2c8b38ea56cfe966658ee90bd9fa8e53393e79f684fb9a956548323cbaa37de"
+          "sha256": "3132c602c9e6e8b94f650e42e443b5dbcd7a3f82a4c506cc5c7dc09962b18577"
         },
         "enhanced": {
-          "triangles": 561,
+          "triangles": 565,
           "bounds": [
             [
               -0.4099999964237213,
@@ -23289,12 +23370,12 @@
               ]
             }
           },
-          "bytes": 42940,
+          "bytes": 71188,
           "path": "assets/props/direction_sign_enhanced.glb",
-          "sha256": "54221eb4040bc71cb5bccb3876519acecb599735936d83159a321f1ad3678bd4"
+          "sha256": "217ce4eca73c4c284b479b62d7fdc1aee440fde6b4f2693e6d572ef87d4f7eb9"
         },
         "ultra": {
-          "triangles": 585,
+          "triangles": 589,
           "bounds": [
             [
               -0.4099999964237213,
@@ -23317,20 +23398,21 @@
               ]
             }
           },
-          "bytes": 43616,
+          "bytes": 71864,
           "path": "assets/props/direction_sign_ultra.glb",
-          "sha256": "f76e2fe7874f5c7e62cd7f9a569dd21ac3ffe99296233ba73532c43b114a9d76"
+          "sha256": "cadae16fe261f6339b1dfdbba6cd28d728ede9f58635e589f12947ad7b749c9d"
         }
-      }
+      },
+      "demo_patch": "V7"
     },
     {
       "id": "safety_sign",
       "category": "props",
       "asset_generation": "V4",
-      "release_quality_status": "geometry revised; runtime / full clipping review pending",
+      "release_quality_status": "geometry revised; runtime / full clipping review pending; V7 readability update, in-game review pending",
       "variants": {
         "standard": {
-          "triangles": 412,
+          "triangles": 414,
           "bounds": [
             [
               -0.4099999964237213,
@@ -23353,12 +23435,12 @@
               ]
             }
           },
-          "bytes": 32324,
+          "bytes": 53768,
           "path": "assets/props/safety_sign_standard.glb",
-          "sha256": "7f09b8fc012b3b6080fdab1d34ea75c505f785dc00b3aeb1941a4651db0ba9d6"
+          "sha256": "86c482b6e83bbe6d750581d253ea2f193399e475329866f7230cc1256c79ef1b"
         },
         "enhanced": {
-          "triangles": 500,
+          "triangles": 502,
           "bounds": [
             [
               -0.4099999964237213,
@@ -23381,12 +23463,12 @@
               ]
             }
           },
-          "bytes": 36360,
+          "bytes": 57804,
           "path": "assets/props/safety_sign_enhanced.glb",
-          "sha256": "895abf2876e5ec0aa34808e22b75920d0971135911f65b8b27bc3edc26c41630"
+          "sha256": "2f1523f7840fb55d72042d4c7dbbb089c83cd2d7a5cc8736be625bc10553019f"
         },
         "ultra": {
-          "triangles": 524,
+          "triangles": 526,
           "bounds": [
             [
               -0.4099999964237213,
@@ -23409,11 +23491,12 @@
               ]
             }
           },
-          "bytes": 37036,
+          "bytes": 58480,
           "path": "assets/props/safety_sign_ultra.glb",
-          "sha256": "cfb7a98f7366b59d2fbb624e2a704e7b2d98682d3be7c45504ec7019c73ac85f"
+          "sha256": "eee3efea9eac6a2500e9133b35b40b17d7870950400740776fa6fade31e9ff1f"
         }
-      }
+      },
+      "demo_patch": "V7"
     }
   ]
 }

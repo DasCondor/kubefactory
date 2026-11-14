@@ -10,7 +10,7 @@ against live infrastructure.
   reads your kubeconfig and talks to the cluster directly. `kubectl` is no
   longer needed. A connection wizard lists kubeconfig files and contexts,
   takes a dropped file or pasted text, and explains failures in plain words.
-- **Model library (V6).** 25 machine models, Porter and Bob from the supplied
+- **Model library (V8).** 25 machine models, Porter and Bob from the supplied
   library, at Standard, Enhanced and Ultra detail. Machines show their type on
   a plate, the real pod name and container list on their own displays, and
   have sealed housings with a hinged storage door.
@@ -29,6 +29,11 @@ against live infrastructure.
 - `docs/ARCHITECTURE.md`, `FEATURE_PARITY.md`, `KNOWN_LIMITATIONS.md`.
 
 ### Changed
+- A machine's model is chosen truthfully: pods are PODs, containers are
+  CONTAINERs, and a role model is used only when the image is that software
+  (a CoreDNS pod pulled from registry.k8s.io is no longer a "registry").
+- Machine screens are neutral with a small status line; health colours the
+  beacon only. The selection highlight is thin corner brackets.
 - Kubernetes uses the companion by default; `--kubectl-cli` keeps the old path.
 - The StatefulSet and database-server display fault of the first library is
   gone in V6; the load-time correction for it was removed.
