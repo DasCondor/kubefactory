@@ -199,6 +199,9 @@ func _ready() -> void:
 		elif a.begins_with("--storageshots="):
 			shots = "-"
 			_run_storageshots(a.trim_prefix("--storageshots="))
+		elif a.begins_with("--krewshots="):
+			shots = "-"
+			_run_krewshots(a.trim_prefix("--krewshots="))
 		elif a.begins_with("--connectshots="):
 			shots = "-"
 			_run_connectshots(a.trim_prefix("--connectshots="))
@@ -796,6 +799,21 @@ func _run_liveshots(dir: String, url: String) -> void:
 
 # Storage doors: open one front-door machine and one rear-panel machine, browse
 # into a folder, preview a text file and a binary one, then try to leave the mount.
+# Porter and Bob, close up and in their surroundings.
+func _run_krewshots(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	await get_tree().create_timer(5.0).timeout
+	for v in [["porter_close", world._npc.position + Vector3(0.6, 0.1, 4.2), world._npc.position + Vector3(0, 1.5, 0)],
+			["porter_dock", world._npc.position + Vector3(-2, 0.4, 9), world._npc.position + Vector3(2, 2.0, 0)],
+			["bob_close", world._bob.position + Vector3(0.6, 0.1, 4.2), world._bob.position + Vector3(0, 1.3, 0)],
+			["bob_stand", world._bob.position + Vector3(1, 0.4, 8), world._bob.position + Vector3(-2.2, 2.0, -0.5)]]:
+		player.teleport(v[1], v[2])
+		await _shot(dir, v[0])
+	get_tree().quit()
+
 func _run_storageshots(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	_shots_running = true
