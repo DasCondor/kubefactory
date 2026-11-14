@@ -1071,8 +1071,253 @@ func on_data(key: String, r: Dictionary) -> void:
 			_store["error"] = err
 	_fill_storage()
 
-func _on_live_data(_key: String, _r: Dictionary) -> void:
-	pass
+# ----- LiveView: real applications on screens (scripts/liveview.gd)
+
+var live: Node = null          # the LiveView manager, set by main
+var _lv = {}                   # the session shown in the viewer
+var _lv_pending = {}           # an endpoint waiting for its port-forward
+var _lv_rect: TextureRect = null
+var _lv_move_t = 0
+
+func open_liveview() -> void:
+	var body = _open_modal("livelist", null, "LIVEVIEW", Vector2(1000, 640))
+	var intro = _lbl("Open a running application's own web page on a screen. It is the real page, drawn by this computer's browser engine in a private, throw-away profile, and it takes your mouse and keyboard.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 950
+	body.add_child(intro)
+	if live == null or not live.available():
+		var l = _lbl("LiveView is not available here. " + Agent.why_unavailable(), 15, K.health_color("warn"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 950
+		body.add_child(l)
+		return
+	var src = cluster.backend.label if cluster.backend != null else ""
+	var mr = _row(8)
+	mr.add_child(_lbl("ADDRESS", 12, DIM))
+	var url = LineEdit.new()
+	url.placeholder_text = "http://127.0.0.1:3000/"
+	url.custom_minimum_size.x = 520
+	mr.add_child(url)
+	var go = func():
+		var u = url.text.strip_edges()
+		if not (u.begins_with("http://") or u.begins_with("https://")):
+			u = "http://" + u
+		open_live(live.open(u, u.get_slice("//", 1).get_slice("/", 0)))
+	url.text_submitted.connect(func(_t): go.call())
+	mr.add_child(_btn("Open", go, "primary"))
+	body.add_child(mr)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(4)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	if not live.sessions.is_empty():
+		list.add_child(_lbl("LIVE NOW  (%d of %d)" % [live.sessions.size(), live.MAX_SESSIONS], 13, ORANGE))
+		for s in live.sessions.values():
+			var r = _row(10)
+			r.add_child(_fixed(_lbl(str(s["title"]), 14), 300))
+			var ul = _lbl(str(s["url"]), 12, DIM)
+			ul.clip_text = true
+			ul.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			r.add_child(ul)
+			r.add_child(_btn("View", func(): open_live(s), "primary"))
+			r.add_child(_btn("Close", func():
+				live.close(s)
+				open_liveview()))
+			list.add_child(r)
+	list.add_child(_lbl("DISCOVERED ENDPOINTS", 13, ORANGE))
+	if src == "simulation":
+		var l = _lbl("This is a simulated cluster. Its services have no real application behind them, so there is nothing to show: LiveView never draws a stand-in. Connect Docker or a Kubernetes cluster, or type an address above.", 14, K.health_color("warn"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 930
+		list.add_child(l)
+		return
+	var eps = live.endpoints(cluster.state, src)
+	if eps.is_empty():
+		list.add_child(_lbl("Nothing that looks like a web endpoint was found (Docker published ports, Kubernetes Services).", 14, DIM))
+	if src == "kubernetes" and not cluster.backend.get("native"):
+		list.add_child(_lbl("Kubernetes Services need a port-forward, which the kubectl mode does not do here. Use the native connection (Esc > Clusters).", 13, K.health_color("warn")))
+	for e in eps:
+		var r = _row(10)
+		r.add_child(_fixed(_lbl(str(e["title"]), 14), 420))
+		r.add_child(_lbl("published port" if e["kind"] == "url" else "Service, opened through a loopback port-forward", 12, DIM))
+		r.add_child(_spacer())
+		r.add_child(_btn("Open", func(): _live_open_endpoint(e), "primary", e["kind"] == "url" or bool(cluster.backend.get("native"))))
+		list.add_child(r)
+
+func _live_open_endpoint(e: Dictionary) -> void:
+	if e["kind"] == "url":
+		var s = live.open(str(e["url"]), str(e["title"]))
+		s["target"] = e
+		open_live(s)
+		return
+	_lv_pending = e
+	var body = _open_modal("liveforward", null, "LIVEVIEW", Vector2(640, 200))
+	body.add_child(_lbl(str(e["title"]), 16))
+	body.add_child(_lbl("Opening a port-forward on this computer only (127.0.0.1)...", 13, DIM))
+	cluster.act({"op": "forward", "ns": e["ns"], "service": e["service"], "port": int(e["port"]), "key": "live:forward"})
+
+func _on_live_data(_key: String, r: Dictionary) -> void:
+	if _modal_kind != "liveforward" or _lv_pending.is_empty():
+		return
+	var e = _lv_pending
+	_lv_pending = {}
+	if not r.get("ok", false):
+		var s = {"key": "", "sid": "", "url": "", "title": str(e["title"]), "state": "failed", "kind": str(r.get("kind", "other")), "msg": str(r.get("msg", "failed")),
+			"tex": null, "w": 1280, "h": 720, "status": 0, "mounted": "", "blocked": ""}
+		open_live(s)
+		return
+	var s = live.open("%s://%s/" % [e.get("scheme", "http"), r["address"]], str(e["title"]))
+	s["target"] = e
+	open_live(s)
+
+# The viewer: one display, full size, taking your input.
+func open_live(s: Dictionary) -> void:
+	_lv = s
+	var body = _open_modal("liveview", null, "LIVEVIEW  //  " + str(s["title"]), Vector2(1500, 850))
+	_dyn = _col(6)
+	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(_dyn)
+	_fill_live()
+
+func on_live_changed(s: Dictionary) -> void:
+	if _modal_kind == "liveview" and s == _lv:
+		if s["state"] == "live" and _lv_rect != null and is_instance_valid(_lv_rect) and s["tex"] != null and _lv_rect.texture == s["tex"]:
+			return     # only the picture changed, and the texture updates itself
+		_fill_live()
+	elif _modal_kind == "livelist":
+		open_liveview()
+
+func _fill_live() -> void:
+	_clear(_dyn)
+	_lv_rect = null
+	var s = _lv
+	var bar = _row(8)
+	_dyn.add_child(bar)
+	if s["state"] == "live":
+		bar.add_child(_btn("  <  ", func(): live.navigate(s, "back")))
+		bar.add_child(_btn("Reload", func(): live.navigate(s, "reload")))
+	var ul = _lbl(str(s["url"]), 13, DIM)
+	ul.clip_text = true
+	ul.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(ul)
+	if int(s.get("status", 0)) in [401, 403]:
+		bar.add_child(_lbl("the application asks you to sign in (%d)" % s["status"], 13, K.health_color("warn")))
+	if str(s.get("blocked", "")) != "":
+		bar.add_child(_lbl("blocked a jump to %s" % s["blocked"], 13, K.health_color("warn")))
+	# mount it on the machine this endpoint belongs to, where there is one
+	var t = s.get("target", {})
+	var uid = ""
+	if not t.is_empty():
+		for p in cluster.state["pods"]:
+			if p["ns"] == t["ns"] and (p["name"] == t["service"] or p["wname"] == t["service"]):
+				uid = p["uid"]
+				break
+	if s["state"] == "live" and uid != "":
+		if str(s["mounted"]) == uid:
+			bar.add_child(_btn("Take it off the machine", func():
+				s["mounted"] = ""
+				live.changed.emit(s)
+				_fill_live()))
+		else:
+			bar.add_child(_btn("Show it on the machine's screen", func():
+				s["mounted"] = uid
+				live.changed.emit(s)
+				_fill_live(), "primary"))
+	if str(s["url"]) != "":
+		bar.add_child(_btn("Open in your browser", func(): OS.shell_open(str(s["url"]))))
+	if s["state"] in ["live", "opening"]:
+		bar.add_child(_btn("Close display", func():
+			live.close(s)
+			close_modal(), "danger"))
+	match s["state"]:
+		"opening":
+			_dyn.add_child(_lbl("Opening the page...", 16, DIM))
+		"failed", "closed":
+			var what = {"unreachable": "NOTHING ANSWERED", "tls": "CERTIFICATE NOT ACCEPTED", "timeout": "NO ANSWER IN TIME", "unsupported": "UNAVAILABLE",
+				"rbac": "NOT ALLOWED", "invalid": "NOT A WEB ADDRESS"}.get(str(s["kind"]), "COULD NOT OPEN") if s["state"] == "failed" else "DISPLAY CLOSED"
+			_dyn.add_child(_lbl(what, 20, RED))
+			var l = _lbl(str(s["msg"]), 15)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 1400
+			_dyn.add_child(l)
+			_dyn.add_child(_lbl("Nothing is shown in its place: a LiveView screen only ever shows the real application.", 13, DIM))
+		"live":
+			if cluster.read_only:
+				_dyn.add_child(_lbl("Read-only mode is on: you can watch this page, but your clicks and keys are not sent to it.", 13, K.health_color("warn")))
+			var tr = TextureRect.new()
+			tr.texture = s["tex"]
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tr.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			tr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			tr.focus_mode = Control.FOCUS_ALL
+			tr.mouse_filter = Control.MOUSE_FILTER_STOP
+			tr.gui_input.connect(_live_input)
+			_dyn.add_child(tr)
+			_lv_rect = tr
+			tr.grab_focus.call_deferred()
+			if s["tex"] == null:
+				_dyn.add_child(_lbl("Waiting for the first frame...", 13, DIM))
+
+# Where a point on the viewer lands on the page, in page pixels (or null if outside it).
+func _live_page_pos(local: Vector2) -> Variant:
+	var s = _lv
+	var box = _lv_rect.size
+	var scale = minf(box.x / float(s["w"]), box.y / float(s["h"]))
+	var shown = Vector2(s["w"], s["h"]) * scale
+	var p = (local - (box - shown) / 2.0) / scale
+	if p.x < 0 or p.y < 0 or p.x > s["w"] or p.y > s["h"]:
+		return null
+	return p
+
+const LIVE_KEYS = {KEY_ENTER: ["Enter", "Enter", 13], KEY_KP_ENTER: ["Enter", "NumpadEnter", 13], KEY_BACKSPACE: ["Backspace", "Backspace", 8], KEY_TAB: ["Tab", "Tab", 9],
+	KEY_DELETE: ["Delete", "Delete", 46], KEY_LEFT: ["ArrowLeft", "ArrowLeft", 37], KEY_UP: ["ArrowUp", "ArrowUp", 38], KEY_RIGHT: ["ArrowRight", "ArrowRight", 39],
+	KEY_DOWN: ["ArrowDown", "ArrowDown", 40], KEY_HOME: ["Home", "Home", 36], KEY_END: ["End", "End", 35], KEY_PAGEUP: ["PageUp", "PageUp", 33], KEY_PAGEDOWN: ["PageDown", "PageDown", 34]}
+
+func _live_input(ev: InputEvent) -> void:
+	if _lv.get("state") != "live" or _lv_rect == null or cluster.read_only:
+		return
+	if ev is InputEventMouseMotion:
+		var now = Time.get_ticks_msec()
+		if now - _lv_move_t < 33:
+			return
+		_lv_move_t = now
+		var p = _live_page_pos(ev.position)
+		if p != null:
+			live.input(_lv, "move", {"x": p.x, "y": p.y})
+	elif ev is InputEventMouseButton:
+		var p = _live_page_pos(ev.position)
+		if p == null:
+			return
+		_lv_rect.grab_focus()
+		match ev.button_index:
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
+				if ev.pressed:
+					live.input(_lv, "wheel", {"x": p.x, "y": p.y, "dy": -100.0 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 100.0})
+			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE:
+				var b = {MOUSE_BUTTON_LEFT: "left", MOUSE_BUTTON_RIGHT: "right", MOUSE_BUTTON_MIDDLE: "middle"}[ev.button_index]
+				live.input(_lv, "down" if ev.pressed else "up", {"x": p.x, "y": p.y, "button": b})
+		_lv_rect.accept_event()
+	elif ev is InputEventKey:
+		if ev.keycode == KEY_ESCAPE:
+			return     # Esc always belongs to the game: it closes the viewer
+		var mods = {"shift": ev.shift_pressed, "ctrl": ev.ctrl_pressed, "alt": ev.alt_pressed}
+		if LIVE_KEYS.has(ev.keycode):
+			var k = LIVE_KEYS[ev.keycode]
+			var a = {"key": k[0], "code": k[1], "vk": k[2], "down": ev.pressed}
+			a.merge(mods)
+			live.input(_lv, "key", a)
+		elif ev.pressed and ev.unicode >= 32 and not ev.ctrl_pressed:
+			live.input(_lv, "text", {"text": char(ev.unicode)})
+		elif ev.ctrl_pressed and ev.keycode >= KEY_A and ev.keycode <= KEY_Z:
+			var ch = char(ev.keycode).to_lower()
+			var a = {"key": ch, "code": "Key" + ch.to_upper(), "vk": ev.keycode, "down": ev.pressed}
+			a.merge(mods)
+			live.input(_lv, "key", a)
+		_lv_rect.accept_event()
 
 static func _hexdump(bytes: PackedByteArray, base: int) -> String:
 	var lines = PackedStringArray()
@@ -2526,6 +2771,7 @@ func open_pause() -> void:
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
 	body.add_child(_btn("Logging station  (L)", func(): open_logs()))
+	body.add_child(_btn("LiveView: applications on screens  (V)", open_liveview))
 	body.add_child(_btn("Read-only mode:  %s" % ("ON" if cluster.read_only else "OFF"), func():
 		cluster.read_only = not cluster.read_only
 		on_state(cluster.state)

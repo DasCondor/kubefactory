@@ -262,12 +262,12 @@ func _app_action(a: Dictionary) -> Dictionary:
 func forward(ns: String, service: String, port: int) -> Dictionary:
 	var key = "%s/%s:%d" % [ns, service, port]
 	if _forwards.has(key):
-		return {"ok": true, "msg": "", "address": _forwards[key]["address"], "forward": _forwards[key]["forward"]}
+		return {"ok": true, "msg": "", "kind": "", "data": {}, "address": _forwards[key]["address"], "forward": _forwards[key]["forward"]}
 	var r = _call("kube.forward", {"namespace": ns, "service": service, "port": port}, 30.0)
 	if not r["ok"]:
-		return {"ok": false, "msg": "%s: %s" % [Agent.kind_title(r["kind"]), r["msg"]], "kind": r["kind"]}
+		return {"ok": false, "msg": r["msg"], "kind": r["kind"], "data": {}}
 	_forwards[key] = {"forward": str(r["data"]["forward"]), "address": str(r["data"]["address"])}
-	return {"ok": true, "msg": "", "address": _forwards[key]["address"], "forward": _forwards[key]["forward"]}
+	return {"ok": true, "msg": "", "kind": "", "data": {}, "address": _forwards[key]["address"], "forward": _forwards[key]["forward"]}
 
 func forward_closed(id: String) -> void:
 	for key in _forwards.keys():
