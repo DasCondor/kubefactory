@@ -62,6 +62,7 @@ var world_sun: DirectionalLight3D
 var _env: Environment
 var _gfx_base = {}
 var _shots_running = false
+var _storage_uid = ""        # the machine whose service door is open
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
 
 func _ready() -> void:
@@ -123,6 +124,12 @@ func _ready() -> void:
 		_set_mode(2))
 	hud.target_requested.connect(_connect_target)
 	hud.graphics_requested.connect(set_graphics)
+	hud.storage_requested.connect(_storage)
+	hud.storage_modules.connect(func(uid, mounts):
+		var m = world.machines.get(uid)
+		if m != null:
+			m.set_modules(mounts))
+	cluster.data_ready.connect(hud.on_data)
 	# connection wizard: how an attempt ended, and kubeconfig files dropped on the window
 	cluster.source_changed.connect(func(_label, _note): hud.on_connect_result(cluster.last_connect_error))
 	get_window().files_dropped.connect(func(files):
@@ -175,6 +182,9 @@ func _ready() -> void:
 		elif a.begins_with("--bench="):
 			shots = "-"
 			Bench.run(self, a.trim_prefix("--bench="), Gfx.id_of(Gfx.level))
+		elif a.begins_with("--storageshots="):
+			shots = "-"
+			_run_storageshots(a.trim_prefix("--storageshots="))
 		elif a.begins_with("--connectshots="):
 			shots = "-"
 			_run_connectshots(a.trim_prefix("--connectshots="))
@@ -267,6 +277,7 @@ func _setup_input() -> void:
 	_key("belts", [KEY_B])
 	_key("next_problem", [KEY_G])
 	_key("logs", [KEY_L])
+	_key("storage", [KEY_F])
 	_key("mute", [KEY_M])
 	_key("fullscreen", [KEY_F11])
 	for pair in [["fire", MOUSE_BUTTON_LEFT], ["sample", MOUSE_BUTTON_MIDDLE]]:
@@ -411,7 +422,27 @@ func _hold_action(type: String, meta: Dictionary) -> Dictionary:
 					return {"label": "DRAIN NODE - evict every pod", "time": 2.4, "act": {"op": "drain", "node": n["name"]}}
 	return {}
 
+# Open a machine's service door and look at what is mounted behind it. The door
+# swings out as far as its stop (or as far as you, if you are standing in its
+# path) and shuts again when the storage panel closes.
+func _storage(uid: String) -> void:
+	var m = world.machines.get(uid)
+	_storage_uid = uid
+	if m != null and m.has_door():
+		var view = m.door_view()
+		if not view.is_empty():
+			player.teleport(view[0], view[1])
+		m.set_door(true, player.global_position)
+		sfx.play("build", -14.0, 0.7)
+	hud.open_storage(uid)
+
 func _process(delta: float) -> void:
+	if _storage_uid != "" and hud._modal_kind != "storage":
+		var sm = world.machines.get(_storage_uid)
+		if sm != null and sm.has_door():
+			sm.set_door(false)
+			sfx.play("click", -14.0, 0.6)
+		_storage_uid = ""
 	if hud.modal_open():
 		world.hide_hologram()
 		world.select(null)
@@ -538,6 +569,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 		_next_problem()
 	elif ev.is_action_pressed("interact"):
 		_interact()
+	elif ev.is_action_pressed("storage"):
+		var smeta = player.hit.get("meta", {})
+		if smeta.get("type", "") == "pod":
+			_storage(smeta["uid"])
 	elif ev.is_action_pressed("sample"):
 		_sample()
 	elif ev.is_action_pressed("fire"):
@@ -641,6 +676,66 @@ func _shot(dir: String, name_: String) -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(dir.path_join(name_ + ".png"))
 	print("shot ", name_)
+
+# Storage doors: open one front-door machine and one rear-panel machine, browse
+# into a folder, preview a text file and a binary one, then try to leave the mount.
+func _run_storageshots(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	await get_tree().create_timer(7.0).timeout
+	var picks = {}
+	for m in world.machines.values():
+		if m.has_door() and not picks.has(m.model_id) and m.pod["health"] == "ok":
+			picks[m.model_id] = m
+	print("storage: door-capable models in this world: ", picks.keys())
+	var n = 0
+	for id in ["database_server", "deployment_line", "monitoring_server"]:
+		if not picks.has(id):
+			continue
+		var m = picks[id]
+		var view = m.door_view()
+		player.teleport(view[0], view[1])
+		await _shot(dir, "%d_%s_closed" % [n, id])
+		_storage(m.uid)
+		await get_tree().create_timer(1.6).timeout
+		await _shot(dir, "%d_%s_open" % [n, id])
+		print("storage: ", id, " door angle ", snappedf(rad_to_deg(m._door.rotation.y), 0.1), " side ", m._tpl["door"]["side"], " mounts ", hud._store["mounts"].size() if hud._store["mounts"] != null else -1)
+		if n == 0 and hud._store["mounts"] != null and not hud._store["mounts"].is_empty():
+			hud._store_dir(hud._store["mounts"][0], "base")
+			await get_tree().create_timer(0.8).timeout
+			await _shot(dir, "%d_%s_folder" % [n, id])
+			hud._store_file("postgresql.conf", 0)
+			await get_tree().create_timer(0.8).timeout
+			await _shot(dir, "%d_%s_text" % [n, id])
+			hud._store_file("base/1/1259", 0)
+			await get_tree().create_timer(0.8).timeout
+			await _shot(dir, "%d_%s_hex" % [n, id])
+			hud._store_dir(hud._store["mounts"][0], "../../etc")
+			await get_tree().create_timer(0.8).timeout
+			print("storage: leaving the mount -> ", hud._store["error"])
+			hud._store_dir(hud._store["mounts"][2], "")
+			await get_tree().create_timer(0.6).timeout
+			hud._store_file("token", 0)
+			await get_tree().create_timer(0.8).timeout
+			print("storage: reading a token volume -> ", hud._store["error"])
+			await _shot(dir, "%d_%s_secret" % [n, id])
+		hud.close_modal()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		await get_tree().create_timer(0.9).timeout
+		print("storage: ", id, " door angle after closing ", snappedf(rad_to_deg(m._door.rotation.y), 0.1))
+		n += 1
+	# a door opened with someone standing in its path stops short of them
+	if not picks.is_empty():
+		var m = picks.values()[0]
+		var d = m._tpl["door"]
+		var g = m._body.global_transform
+		var in_path = g * (d["hinge"] + (d["along"] * 0.6 + d["out"] * 0.6) * float(d["width"]))
+		var ang = m.set_door(true, in_path)
+		print("storage: blocked sweep stops at ", snappedf(rad_to_deg(ang), 0.1), " of ", snappedf(rad_to_deg(m.DOOR_OPEN), 0.1), " degrees")
+	get_tree().quit()
 
 # The connection wizard: the kubeconfig list, then an attempt on each context
 # of the first kubeconfig so every kind of result is on screen once.

@@ -230,6 +230,13 @@ static func status_glow(h: String) -> StandardMaterial3D:
 		_cache["g_" + h] = glow(K.health_color(h).darkened(0.15), 1.25)
 	return _cache["g_" + h]
 
+# Painted armour for library models, in a workload's colour.
+static func accent(color: Color) -> StandardMaterial3D:
+	var key = "a_" + color.to_html()
+	if not _cache.has(key):
+		_cache[key] = mat(color, 0.42, 0.35)
+	return _cache[key]
+
 static func body(color: Color) -> StandardMaterial3D:
 	var key = "b_" + color.to_html()
 	if not _cache.has(key):
