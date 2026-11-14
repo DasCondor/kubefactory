@@ -2,14 +2,19 @@
 #
 #   powershell -ExecutionPolicy Bypass -File uninstall.ps1             remove the program and shortcuts
 #   powershell -ExecutionPolicy Bypass -File uninstall.ps1 -Purge      also remove your settings, audit logs and saved logs
-param([switch]$Purge, [string]$Target = (Join-Path $env:LOCALAPPDATA "Programs\KubeFactory"))
+param([switch]$Purge, [string]$Target = "")
+
+# The Docker and Demo editions carry an EDITION file and install side by side with the full game.
+$edition = (Get-Content (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "EDITION") -ErrorAction SilentlyContinue | Select-Object -First 1)
+$app = if ($edition) { "KubeFactory $edition" } else { "KubeFactory" }
+if (-not $Target) { $Target = Join-Path $env:LOCALAPPDATA "Programs\$app" }
 
 if (Get-Process -Name "KubeFactory" -ErrorAction SilentlyContinue) {
     Write-Host "KubeFactory is running. Close it first." -ForegroundColor Red
     exit 1
 }
-$startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\KubeFactory"
-$desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "KubeFactory.lnk"
+$startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$app"
+$desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "$app.lnk"
 foreach ($p in @($startMenu, $desktop)) {
     if (Test-Path $p) { Remove-Item -Recurse -Force $p }
 }

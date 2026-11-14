@@ -24,6 +24,7 @@ const APP_OPS = ["apply_app", "remove_app", "portainer_install", "portainer_open
 var backend = null
 var state = {"source": "", "context": "", "provider": "", "error": "", "nodes": [], "pods": [], "workloads": [], "services": []}
 var read_only = false
+var edition = ""        # "" full game, "docker" local engine only, "demo" simulations only
 var detecting = false
 # Every cluster we know how to reach: [{source, context, provider}]
 var targets = []
@@ -168,16 +169,23 @@ func _detect(mode: String, ctx: String, gen: int) -> void:
 	var b = null
 	var note = ""
 	var list = []
-	var web = OS.has_feature("web")   # no kubectl or docker in a browser
-	for c in ([] if web else Kube.list_contexts()):
+	# the browser build and the demo edition run the simulations only; the docker
+	# edition offers the local engine (and the simulations, to have somewhere to
+	# go when the engine is off) but never runs kubectl
+	var sim_only = OS.has_feature("web") or edition == "demo"
+	var use_kube = not sim_only and edition != "docker"
+	for c in (Kube.list_contexts() if use_kube else []):
 		list.append({"source": "kubernetes", "context": c["context"], "provider": c["provider"]})
 	var d = Docker.new()
-	var dr = {"ok": false, "msg": "not available in the browser"} if web else d.probe()
+	var dr = {"ok": false, "msg": "not available in this edition"} if sim_only else d.probe()
 	if dr.ok:
 		list.append({"source": "docker", "context": d.context, "provider": "Docker Engine"})
 	for f in Demo.FLAVORS:
 		list.append({"source": "simulation", "context": f, "provider": Demo.FLAVORS[f]["provider"]})
-	if mode == "kubernetes" or mode == "auto":
+	if sim_only and mode != "simulation":
+		mode = "simulation"
+		ctx = ""
+	if use_kube and (mode == "kubernetes" or mode == "auto"):
 		var k = Kube.new()
 		k.ctx = ctx
 		k.log_cfg = log_cfg

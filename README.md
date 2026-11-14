@@ -64,11 +64,27 @@ The files next to the exe are yours to edit: `policy.json`, `catalogs.json`,
 Per-user settings, audit logs and saved logs live in
 `%APPDATA%\Godotpp_userdata\KubeFactory`.
 
+## Editions
+
+The same game also comes in two narrower builds. They install side by side with
+the full game (`KubeFactory Docker`, `KubeFactory Demo`).
+
+| Edition | Opens on | Never touches |
+| --- | --- | --- |
+| **KubeFactory Docker** | your local Docker engine: every container is a machine, Compose projects are namespaces | kubectl / any Kubernetes cluster |
+| **KubeFactory Demo** | the built-in simulated clusters, with every tool unlocked | kubectl and Docker: it connects to nothing |
+
+The Docker edition falls back to the simulation while the Docker engine is not
+running. Build them with `package.ps1 -Edition docker` / `-Edition demo`, or
+run them from source with `play-docker.bat` / `play-demo.bat`.
+
 ## Run from source
 
     setup.ps1          checks / installs the software below (including the engine)
     play.bat           same options as above, without the leading --
+    play-docker.bat    the Docker edition      play-demo.bat    the Demo edition
     package.ps1        runs the tests and builds the release zip + checksum in dist
+                       (-Edition docker | demo builds that edition instead)
     dev-cluster.ps1            3-node Kubernetes cluster in Docker containers (kind),
                                with sample workloads, two of them broken on purpose
     dev-cluster.ps1 -Delete    remove it
