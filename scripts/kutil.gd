@@ -336,6 +336,13 @@ static func data_dir() -> String:
 static func data_path(rel: String) -> String:
 	return data_dir().path_join(rel)
 
+# The editable config files (policy, app lists, log providers, Portainer link, Bob's
+# settings). Installed build: beside KubeFactory.exe. From source: the config folder.
+static func config_path(file_name: String) -> String:
+	if OS.has_feature("template"):
+		return data_path(file_name)
+	return data_path("config/" + file_name)
+
 static func read_json(path: String) -> Variant:
 	if not FileAccess.file_exists(path):
 		return null

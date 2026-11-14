@@ -2,11 +2,14 @@
 
 # 🏭 KubeFactory
 
-### Your cluster is the factory. Go fix it.
+### Your cluster is the factory. Go run it.
 
-A first-person factory game where the factory **is** your container cluster.
-Walk your Kubernetes clusters or your local Docker engine, spot what is broken
-from across the yard, and put it right with a belt of six tools.
+**Not just a game: a real way to manage your containers, Kubernetes clusters and
+stacks.** It looks like a first-person factory game, but the factory **is** your
+own setup. Walk your Kubernetes clusters or your local Docker engine, spot what
+is broken from across the yard, read the logs, restart, scale, deploy whole
+stacks and tear them down, all with a belt of six tools. Built for personal and
+homelab use.
 
 [![Play in your browser](https://img.shields.io/badge/▶_Play_in_your_browser-f99549?style=for-the-badge)](https://dascondor.github.io/kubefactory/)
 [![Download for Windows](https://img.shields.io/badge/⬇_Download_for_Windows-2b2f36?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases/latest)
@@ -30,14 +33,17 @@ from across the yard, and put it right with a belt of six tools.
 
 </div>
 
-## ✨ Why play it
+## ✨ Why use it
 
+- 🛠️ **It manages the real thing.** Every action runs your own `kubectl` or `docker`, as you: logs, events, rolling restarts, scaling, cordon and drain, deleting pods and workloads, deploying and removing complete stacks. Nothing sits in between and no credentials are stored.
+- 🏠 **Made for your own gear.** Point it at a homelab cluster, a cloud cluster or just Docker on your PC. Compose projects show up as namespaces, and Porter deploys ready-made stacks: a media server, a monitoring dashboard, WordPress, databases.
 - 🗺️ **See the whole cluster at a glance.** Nodes are platforms, pods are machines, services are conveyor belts. A failing pod throws a red light column you can see from anywhere.
 - 🔧 **Six tools, five tiers.** From a harmless scanner to the Mk.5 Demolisher. Stronger actions take a longer hold, and the worst ones make you type the target's name.
 - 👴 **Bob, the pod fixer.** An old hand with a repair stand, a live fix list, a diagnosis for every failure, and a zinger for every operator.
 - 🤖 **Porter, the dock worker.** Asks what you want built and cranes a complete app setup onto the cluster.
-- 👥 **Play it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows.
-- 🧪 **Nothing to break.** The built-in simulated clusters let you try every tool without touching anything real.
+- 🧯 **Guard rails on the dangerous parts.** Read-only mode, tool tiers, hold-to-confirm, typed confirmation for the worst actions, and an audit log of everything you do.
+- 👥 **Use it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows.
+- 🧪 **Try it safely first.** Four simulated demo worlds let you use every tool without touching anything real.
 - 🎨 **No art assets.** Every model, texture and sound is generated in code. Built with Godot 4.3.
 
 ## 📸 Screenshots
@@ -115,7 +121,8 @@ for troubleshooting. `check-requirements.ps1` checks for kubectl and the
 optional cloud CLIs.
 
 The files next to the exe are yours to edit: `policy.json`, `catalogs.json`,
-`log-providers.json`, `portainer.json` and the app setups in `apps\`.
+`log-providers.json`, `portainer.json`, `bob.json` and the app setups in `apps\`.
+(Running from source, the same files are in `config\`.)
 Per-user settings, audit logs and saved logs live in
 `%APPDATA%\Godot\app_userdata\KubeFactory`.
 
@@ -130,26 +137,26 @@ the full game (`KubeFactory Docker`, `KubeFactory Demo`).
 | **KubeFactory Demo** | the built-in simulated clusters, with every tool unlocked | kubectl and Docker: it connects to nothing |
 
 The Docker edition falls back to the simulation while the Docker engine is not
-running. Build them with `package.ps1 -Edition docker` / `-Edition demo`, or
-run them from source with `play-docker.bat` / `play-demo.bat`.
+running. Build them with `tools\package.ps1 -Edition docker` / `-Edition demo`, or
+run them from source with `play.bat --edition=docker` / `--edition=demo`.
 
 ## 💻 Run from source
 
-    setup.ps1          checks / installs the software below (including the engine)
+    tools\setup.ps1    checks / installs the software below (including the engine)
     play.bat           same options as above, without the leading --
-    play-docker.bat    the Docker edition      play-demo.bat    the Demo edition
-    package.ps1        runs the tests and builds the release zip + checksum in dist
+    play.bat --edition=docker | demo    the Docker or Demo edition
+    tools\package.ps1  runs the tests and builds the release zip + checksum in dist
                        (-Edition docker | demo builds that edition instead)
-    dev-cluster.ps1            3-node Kubernetes cluster in Docker containers (kind),
+    tools\dev-cluster.ps1            3-node Kubernetes cluster in Docker containers (kind),
                                with sample workloads, two of them broken on purpose
-    dev-cluster.ps1 -Delete    remove it
-    dev-users.ps1              multi-user setup + two test logins on that cluster
+    tools\dev-cluster.ps1 -Delete    remove it
+    tools\dev-users.ps1              multi-user setup + two test logins on that cluster
 
 ## 🧰 Software
 
 | Software | Needed for | Install |
 |---|---|---|
-| Godot 4.3 (portable, in `engine\`) | running the game | `setup.ps1` downloads it |
+| Godot 4.3 (portable, in `engine\`) | running the game | `tools\setup.ps1` downloads it |
 | kubectl | any real Kubernetes cluster | `winget install Kubernetes.kubectl` |
 | Docker Desktop | local containers, dev cluster | `winget install Docker.DockerDesktop` |
 | kind | dev cluster in Docker | `winget install Kubernetes.kind` |
@@ -159,7 +166,7 @@ run them from source with `play-docker.bat` / `play-demo.bat`.
 | curl (ships with Windows) | Grafana Loki logs | - |
 
 Rancher needs nothing extra: download the cluster's kubeconfig from the Rancher UI.
-`setup.ps1 -Cloud` installs the three cloud CLIs.
+`tools\setup.ps1 -Cloud` installs the three cloud CLIs.
 
 ## 👀 What you see
 
@@ -204,9 +211,9 @@ Several people can work on the same cluster at once, each with their own login.
 They see each other as avatars, share an action feed, and are held to a tool-tier
 policy the cluster admin sets. Limited accounts work: a namespace-only user sees
 that namespace, and tools they have no permission for are locked. Mk.5 actions
-require typing the target's name. See **ADMIN.md** for setup; `dev-users.ps1`
+require typing the target's name. See **[ADMIN.md](docs/ADMIN.md)** for setup; `tools\dev-users.ps1`
 creates two test logins on the dev cluster so you can try it in three windows.
-`package.ps1` builds a zip to hand out.
+`tools\package.ps1` builds a zip to hand out.
 
 ## 🤖 Porter, the Portainer dock worker
 
@@ -284,7 +291,7 @@ settings, Secrets and tables, out of memory, full disks, wrong architecture or
 start command, unpullable images, failed mounts and scheduling, probe failures,
 stack traces, and what exit codes 1, 2, 126, 127, 137, 139 and 143 mean.
 
-**Optional settings** live in `bob.json` next to the game. Every key is
+**Optional settings** live in `bob.json` next to the game (`config\bob.json` from source). Every key is
 optional and the file can be deleted:
 
 | Key | Default | Does |
@@ -336,6 +343,12 @@ them in `log-providers.json`:
 
 ## 📁 Layout
 
+    play.bat                    start the game from source
+    config/                     the editable settings files (beside the exe once installed)
+    apps/                       Porter's bundled app setups
+    deploy/                     the optional multi-user manifest for a cluster
+    docs/                       admin guide, security notes, licences, screenshots
+    tools/                      setup, packaging, installer, dev cluster, video helpers
     scripts/main.gd             game loop, tools, input
     scripts/world.gd            cluster state -> 3D world
     scripts/platform.gd         node platform        scripts/machine.gd   pod machine
@@ -368,12 +381,12 @@ convert it with Windows' own encoder:
 KubeFactory has no server and stores no credentials: it runs your own `kubectl`
 and `docker`, as you. Your cluster permissions are the security boundary; the
 in-game tiers and confirmations are guard rails. App lists are treated as
-untrusted input. See [SECURITY.md](SECURITY.md) for the details and for how to
+untrusted input. See [SECURITY.md](docs/SECURITY.md) for the details and for how to
 report a problem.
 
 ## 📄 License
 
 MIT, see [LICENSE](LICENSE). KubeFactory is built with the Godot Engine (MIT);
 notices for it and for the third-party names used are in
-[THIRDPARTY.md](THIRDPARTY.md). KubeFactory is an independent project and is
+[THIRDPARTY.md](docs/THIRDPARTY.md). KubeFactory is an independent project and is
 not affiliated with Kubernetes, Portainer, Docker or any cloud provider.

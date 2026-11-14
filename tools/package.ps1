@@ -3,13 +3,16 @@
 #   dist\KubeFactory-<version>-win64.zip          what you hand out / publish
 #   dist\KubeFactory-<version>-win64.zip.sha256   its checksum
 #
+# The zip is flat: the docs, config files and helper scripts that live in docs\, config\ and
+# tools\ here all sit beside KubeFactory.exe in it.
+#
 # The zip holds a standalone KubeFactory.exe (no engine or source needed), the
 # editable config files, the bundled app setups, the cluster setup manifest, an
 # installer and an uninstaller.
 #
-#   powershell -ExecutionPolicy Bypass -File package.ps1                    the full game
-#   powershell -ExecutionPolicy Bypass -File package.ps1 -Edition docker    KubeFactory Docker: opens on the local Docker engine, no kubectl
-#   powershell -ExecutionPolicy Bypass -File package.ps1 -Edition demo      KubeFactory Demo: the full game on the simulated clusters only
+#   powershell -ExecutionPolicy Bypass -File tools\package.ps1                    the full game
+#   powershell -ExecutionPolicy Bypass -File tools\package.ps1 -Edition docker    KubeFactory Docker: opens on the local Docker engine, no kubectl
+#   powershell -ExecutionPolicy Bypass -File tools\package.ps1 -Edition demo      KubeFactory Demo: the full game on the simulated clusters only
 #
 # An edition builds dist\KubeFactory-<Edition>-<version>-win64.zip from its own
 # export preset and installs side by side with the full game.
@@ -18,7 +21,9 @@
 # (%APPDATA%\Godot\export_templates\4.3.stable).
 param([ValidateSet("", "docker", "demo")][string]$Edition = "")
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+# In the source tree this script lives in tools\; in a release zip it sits beside KubeFactory.exe.
+$root = if (Test-Path (Join-Path $here "..\project.godot")) { (Resolve-Path (Join-Path $here "..")).Path } else { $here }
 $godot = Join-Path $root "engine\Godot_v4.3-stable_win64_console.exe"
 $version = (Select-String -Path (Join-Path $root "scripts\main.gd") -Pattern 'const VERSION = "(.+)"').Matches[0].Groups[1].Value
 $label = if ($Edition) { $Edition.Substring(0, 1).ToUpper() + $Edition.Substring(1) } else { "" }
@@ -49,18 +54,19 @@ Write-Host "Exporting KubeFactory.exe..."
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path (Join-Path $stage "KubeFactory.exe"))) { Write-Host "Export failed." -ForegroundColor Red; exit 1 }
 
-foreach ($f in @("README.md", "ADMIN.md", "LICENSE", "THIRDPARTY.md", "SECURITY.md", "catalogs.json", "portainer.json", "log-providers.json", "policy.json", "bob.json")) {
+foreach ($f in @("README.md", "LICENSE", "docs\ADMIN.md", "docs\THIRDPARTY.md", "docs\SECURITY.md", "config\catalogs.json", "config\portainer.json", "config\log-providers.json", "config\policy.json", "config\bob.json")) {
     Copy-Item (Join-Path $root $f) $stage
 }
-foreach ($d in @("apps", "deploy", "dev")) {
+Copy-Item -Recurse (Join-Path $root "tools\dev") (Join-Path $stage "dev")
+foreach ($d in @("apps", "deploy")) {
     Copy-Item -Recurse (Join-Path $root $d) (Join-Path $stage $d)
 }
 Get-ChildItem $stage -Recurse -Force -Filter ".gdignore" | Remove-Item -Force
-Copy-Item (Join-Path $root "release\install.ps1") $stage
-Copy-Item (Join-Path $root "release\uninstall.ps1") $stage
-Copy-Item (Join-Path $root "setup.ps1") (Join-Path $stage "check-requirements.ps1")
-Copy-Item (Join-Path $root "dev-cluster.ps1") $stage
-Copy-Item (Join-Path $root "dev-users.ps1") $stage
+Copy-Item (Join-Path $root "tools\release\install.ps1") $stage
+Copy-Item (Join-Path $root "tools\release\uninstall.ps1") $stage
+Copy-Item (Join-Path $root "tools\setup.ps1") (Join-Path $stage "check-requirements.ps1")
+Copy-Item (Join-Path $root "tools\dev-cluster.ps1") $stage
+Copy-Item (Join-Path $root "tools\dev-users.ps1") $stage
 Set-Content -Path (Join-Path $stage "VERSION") -Value $version -Encoding ascii
 if ($Edition) { Set-Content -Path (Join-Path $stage "EDITION") -Value $label -Encoding ascii }
 
