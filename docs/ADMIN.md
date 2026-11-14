@@ -93,6 +93,19 @@ you hand out (`tools\package.ps1` builds it; in the source tree the files are in
   retried if the count changed underneath.
 - Read-only mode (`play.bat --read-only`, or the Esc menu) blocks every change
   regardless of policy.
+- From 2.0 players do not need `kubectl`: the game's companion uses their
+  kubeconfig directly. The commands in this guide are for you, the admin.
+- **Storage inspection and LiveView need permissions the bundled roles do not
+  grant.** Opening a machine to browse its volumes uses `pods/exec`; LiveView
+  on a cluster Service uses `pods/portforward`. Both are powerful: `pods/exec`
+  lets a person run anything in a container. `deploy/kubefactory.yaml` leaves
+  them out on purpose. Grant them only where you would grant `kubectl exec`
+  and `kubectl port-forward`, for example:
+
+      kubectl create role kf-inspect -n shop --verb=create --resource=pods/exec,pods/portforward
+      kubectl create rolebinding alice-inspect -n shop --role=kf-inspect --user=alice
+
+  Without them those two features answer "not permitted"; everything else works.
 
 ## Try it on one machine
 

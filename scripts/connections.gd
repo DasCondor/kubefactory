@@ -46,13 +46,21 @@ static func profiles() -> Array:
 	if Agent.available():
 		var r = Agent.request("kubeconfig.discover", {}, 10.0)
 		if r["ok"]:
+			# As kubectl does: the files KUBECONFIG names come first when it is set,
+			# then the default location. Neither is copied or saved.
+			var found = []
+			var env_n = 0
 			for f in r["data"].get("files", []):
-				# KUBECONFIG is only used when the player adds it; the default location is offered as is
-				if str(f.get("why", "")) != "default location":
-					continue
 				var p = str(f["path"])
-				if not known.has(p.to_lower().replace("\\", "/")):
-					res.push_front({"id": "default", "name": "Default kubeconfig", "path": p, "base_dir": "", "pasted": false, "implicit": true})
+				if known.has(p.to_lower().replace("\\", "/")):
+					continue
+				known[p.to_lower().replace("\\", "/")] = true
+				if str(f.get("why", "")) == "default location":
+					found.append({"id": "default", "name": "Default kubeconfig", "path": p, "base_dir": "", "pasted": false, "implicit": true})
+				else:
+					found.insert(env_n, {"id": "env%d" % env_n, "name": "KUBECONFIG: " + p.get_file(), "path": p, "base_dir": "", "pasted": false, "implicit": true})
+					env_n += 1
+			res = found + res
 	return res
 
 static func find(id: String) -> Dictionary:

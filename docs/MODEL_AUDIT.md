@@ -17,7 +17,7 @@ Written by `tools/model_audit.gd`. Do not edit by hand: run the tool again.
 | Display clear | 35 rays out of each LiveView glass, 45 cm, against every other part's triangles | verified |
 | Same parts at every tier | part names compared with the standard tier | verified |
 | Solid parts pushed into each other | **not checked**: needs a look at each model | not tested |
-| Art standard (Porter V3) | krew and machines are V3; the other categories are V2 and used only as set dressing | by category, not measured |
+| Art standard (Porter V3) | krew and machines are V3; the other categories are V2 and are not placed in the world | by category, not measured |
 
 ## Findings
 
@@ -68,6 +68,8 @@ Written by `tools/model_audit.gd`. Do not edit by hand: run the tool again.
 | `toolbox` | standard | props | defect | reaches 0.015 m below the ground |
 | `toolbox` | enhanced | props | defect | reaches 0.015 m below the ground |
 | `toolbox` | ultra | props | defect | reaches 0.015 m below the ground |
+
+Models that reach below the ground are V2 models or Krew members the game does not place. Porter and Bob are stood on their lowest point, so the game is not affected; the files should still be corrected at the source.
 
 ## Corrections applied at load
 
