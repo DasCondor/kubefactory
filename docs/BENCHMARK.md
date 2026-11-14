@@ -1,7 +1,7 @@
 ﻿# Graphics benchmark
 
 Baseline: release `de600e8`. 1920x1080, vsync off, the `kubernetes` demo world (23 machines), a fixed 18-second camera route.
-GPU: NVIDIA GeForce RTX 5070 Ti Laptop GPU. Median of 3 runs each. Reproduce with `tools\bench.ps1`.
+GPU: a current mid-range laptop GPU (the model is left out on purpose; `tools\bench.ps1 -ShowGpu` names it). Median of 3 runs each. Reproduce with `tools\bench.ps1`.
 
 | Build | Avg fps | vs release | Frame ms | 1% low fps | Draw calls | Objects | Primitives | Video mem MB |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|

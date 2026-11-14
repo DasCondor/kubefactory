@@ -45,6 +45,22 @@ more.
 - **The browser demo connects to nothing.** It only runs the built-in
   simulation.
 
+## What appears on screen
+
+KubeFactory is often shown to other people (screenshots, streams, a shared
+screen), so it keeps details of your computer off the screen:
+
+- Any path under your own user folder is shown as `~` (for example
+  `~/.kube/config`), in panels, notes and error messages alike.
+- On a cluster you are shown by the name the cluster gives you, which everyone
+  on that cluster can already see. On the local Docker engine, where there is
+  no such identity, you are shown as *local user* rather than by your Windows
+  account name. In the simulated worlds you are *DasCondor*.
+- Your account name is still written to the audit log on this computer, and
+  sent to an audit webhook only if you configure one: that is what they are for.
+- `tools\bench.ps1` leaves the graphics card model out of the published
+  benchmark table unless you pass `-ShowGpu`.
+
 ## Grafana and Tautulli tokens
 
 - A token is typed once, handed to the companion, and sealed with the Windows
