@@ -1059,8 +1059,12 @@ func _choose(bp: Dictionary) -> void:
 func open_clusters() -> void:
 	var body = _open_modal("clusters", null, "CLUSTERS", Vector2(980, 600))
 	var top = _row(10)
-	top.add_child(_lbl("Every context of the kubeconfigs you have added, the local Docker engine, and the built-in simulations.", 13, DIM))
+	top.add_child(_lbl("Built-in simulations and discovered local connections.", 13, DIM))
 	top.add_child(_spacer())
+	if not OS.has_feature("web") and cluster.edition != "demo":
+		top.add_child(_btn("Searching..." if cluster.finding_targets else "Discover local connections", func():
+			cluster.discover_targets()
+			open_clusters(), "", not cluster.finding_targets and not cluster.detecting and cluster.backend != null))
 	top.add_child(_btn("Add or manage kubeconfigs...", func(): open_connect(), "primary"))
 	body.add_child(top)
 	var sc = ScrollContainer.new()

@@ -87,8 +87,13 @@ Dependencies are client-go (the Kubernetes project's own client) and chromedp
    profile that is deleted on close. Requests to any host other than the one
    you opened are refused. The page is pixels in the game: it cannot reach the
    game, your files or your kubeconfig.
-5. **The browser demo** contains only `backend_demo.gd`. It has no companion,
-   no network code and no credentials.
+5. **The browser demo** uses only the simulation backend. Desktop adapter
+   scripts may be included in the export, but the browser build has no
+   companion or local infrastructure access.
+   An explicitly selected desktop simulation also skips kubeconfig discovery,
+   Docker probing and restoration of real provider screens. The cluster
+   switcher's discovery button initiates local discovery when requested.
+   Simulated actions do not send audit webhooks or fetch online app lists.
 
 ## Models
 

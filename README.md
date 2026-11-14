@@ -95,8 +95,8 @@ connects to nothing. A browser cannot run `kubectl` or Docker, so managing real
 clusters needs the desktop build below. Every tool works against the simulation,
 including Porter's bundled app setups; his online app lists do not load there.
 Graphics are lighter than the desktop build (one shadow pass, fewer machine
-details). Needs a desktop browser with keyboard and mouse; click the page to
-capture the mouse. It is rebuilt and redeployed on every push to `main` by
+details). On desktop, click the page to capture the mouse; touch devices have
+on-screen controls. It is rebuilt and redeployed on every push to `main` by
 `.github/workflows/pages.yml`.
 
 ### Four demo worlds
@@ -104,6 +104,11 @@ capture the mouse. It is rebuilt and redeployed on every push to `main` by
 Start the simulation (the browser demo, the Demo edition, or `--demo`) and you
 pick a world. Switch any time from the pause menu, or name one up front with
 `--demo=<id>`. In every demo you are signed in as `DasCondor`.
+An explicitly selected desktop demo starts without inspecting kubeconfigs or
+probing Docker. To switch to local infrastructure, open **Clusters** and select
+**Discover local connections**, or add a kubeconfig in the connection wizard.
+Simulated actions do not send audit webhooks, and online app lists are disabled
+in a demo; Porter's bundled app setups remain available.
 
 | `--demo=` | World | What is running | What is broken |
 |---|---|---|---|

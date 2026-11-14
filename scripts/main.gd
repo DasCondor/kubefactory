@@ -210,7 +210,9 @@ func _ready() -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			hud.open_connect(str(p.get("id", ""))))
 	cluster.targets_changed.connect(func():
-		world.set_targets(cluster.targets, cluster.backend.label, cluster.backend.context))
+		world.set_targets(cluster.targets, cluster.backend.label, cluster.backend.context)
+		if hud._modal_kind == "clusters":
+			hud.open_clusters())
 
 	var source = "auto"
 	var ctx = ""

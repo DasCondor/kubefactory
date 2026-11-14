@@ -67,6 +67,7 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Metrics view: CPU and memory from the metrics API, all four from `docker stats`, unavailable shown as such | Docker: **verified live**. Metrics API: only its "no metrics API" answer seen live; real figures **not tested** |
 | | Sort by column and CONTAINS filter on tables (under 10,000 rows) | verified in simulation (unit tests and screenshots) |
 | | Touch controls for the browser demo (landscape and portrait) | verified in simulation with touch events at phone sizes; **not tested** on a physical iPhone or Android device |
+| | Explicit desktop simulation starts without kubeconfig or Docker discovery; simulated actions skip webhooks and online catalogs | verified with an instrumented Docker stub and the cluster switcher on both desktop renderers (`tools\test-simulation.ps1`) |
 | | Demo worlds: simulated Grafana dashboard and stream activity on machine screens, marked SIMULATED; nothing of the kind on a real cluster | verified in simulation (desktop and Compatibility renderers) |
 | | Bundled browser engine (CEF), display builder, audio | unsupported: uses installed Edge or Chrome |
 | V8 providers | Provider registry (Grafana, Tautulli), protected token storage, test connection | **verified live**: Grafana OSS 10.4.10, 11.2.0, 12.3.0, 13.0.0 (`tools\live-test.ps1 -Grafana`) and Tautulli 2.19.1 (`-Tautulli`) |
