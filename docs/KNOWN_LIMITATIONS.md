@@ -59,7 +59,7 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Model library
 
-- Only the 25 machines, Porter and Bob are placed in the world. The other 13
+- Only the 25 machines, Porter, Bob and Gauge are placed in the world. The other 12
   Krew members and the 101 V2 models (network, storage, structures, props,
   displays, tools) are shipped but not used: they are below the Porter V3
   standard or belong to features that do not exist yet.
@@ -151,6 +151,11 @@ exactly that: the code exists and has not been run against the real thing.
 - **Usage figures (Metrics view):** Kubernetes reports CPU and memory only;
   network and disk show as unavailable there. The kubectl mode has no usage
   figures.
+- **Gauge** is a read-only observer, not the full performance worker from the
+  handoff. Node request sums cover visible regular containers and may omit init
+  containers, overhead or resources outside the visible namespace. They are
+  not runtime usage or a scheduling guarantee. Gauge does not forecast, perform
+  right-sizing or make changes; actual Kubernetes metrics remain untested.
 - **Screen views:** at most 8 machines show metrics, logs or storage at once
   (the oldest goes back to its dashboard). Logs show the last 13 lines of the
   first container. Logs and storage on a machine's screen were seen working on
@@ -177,7 +182,7 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Not implemented from the 2.0 handoff
 
-See `FEATURE_PARITY.md` for the full table. In short: the Krew workforce beyond
-Porter and Bob, the AI providers and Foreman, the autonomy and policy engine,
+See `FEATURE_PARITY.md` for the full table. In short: most of the Krew workforce
+beyond Porter, Bob and the read-only Gauge desk, the AI providers and Foreman, the autonomy and policy engine,
 self-healing and scheduling, an in-game terminal, a bundled browser engine, a
 native Docker Engine client, and Linux or macOS builds.

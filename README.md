@@ -45,7 +45,7 @@ homelab use.
 - 👥 **Use it as a team.** Colleagues on the same cluster show up as avatars, each held to the tool tier the admin allows.
 - 🧪 **Try it safely first.** Four simulated demo worlds let you use every tool without touching anything real.
 - 📺 **Screens that show the real thing.** Each machine's screen steps through its application's own page, its metrics, its log and its storage. Click it to open it full size.
-- 🎨 **Built with Godot 4.3.** Desktop machines, tools, Porter and Bob come from the bundled model library; the browser build draws everything in code. Textures, icons and sounds are generated.
+- 🎨 **Built with Godot 4.3.** Desktop machines, tools, Porter, Bob and Gauge come from the bundled model library; the browser build draws everything in code. Textures, icons and sounds are generated.
 
 ## 📸 Screenshots
 
@@ -228,6 +228,20 @@ Every machine has a screen, and it can show four things:
   media server, proxy, monitoring and so on, chosen from the container image.
 - The text under the crosshair now sits below the screen you are reading, and
   floating name labels show only from across the yard.
+
+### Gauge: the resource desk
+
+Meet Gauge beside the logging station, or open **Gauge** from the pause menu.
+Gauge shows node capacity and the requests of visible regular containers, then
+reads a selected workload's CPU and memory usage on demand. Docker and the
+simulation also report cumulative network and disk totals. Missing metrics are
+shown as unavailable, and demo figures are marked **SIMULATED**. Gauge is
+read-only and makes no changes; use sustained measurements and workload context
+before adjusting resource settings. You can hide Gauge in the world from the
+pause menu.
+
+![Gauge at the resource desk](docs/gauge-station.png)
+![Gauge's read-only resource panel](docs/gauge-panel.png)
 
 ### Tables
 

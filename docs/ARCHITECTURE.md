@@ -26,12 +26,13 @@ is no server, no account and no telemetry.
 |---|---|
 | `scripts/main.gd` | game loop, input, tools, command-line switches, automated screenshot runs |
 | `scripts/cluster.gd` | owns the active backend; polls on a worker thread; runs actions; audit log; signals `data_ready`, `connect_failed`, `agent_event` |
-| `scripts/world.gd` | turns cluster state into platforms (nodes), machines (pods), belts (services), Porter, Bob |
+| `scripts/world.gd` | turns cluster state into platforms (nodes), machines (pods), belts (services), Porter, Bob and Gauge |
 | `scripts/machine.gd` | one pod: library model or code-drawn model, door, interior, screen |
 | `scripts/models.gd` | the model library: catalog, tier choice, door, display surfaces and type plate taken from the catalog's anchors |
 | `scripts/hud.gd` | HUD, connection wizard, storage browser, LiveView window, Porter and Bob |
 | `scripts/liveview.gd` | LiveView sessions: frames in, input out, frame rate by distance |
 | `scripts/machine_screens.gd` | what each machine's screen shows: dashboard, metrics (usage graphs), logs, storage |
+| `scripts/gauge.gd` | read-only resource observations and formatting; workload usage comes through the existing `pod_metrics` backend operation |
 | `scripts/demo_screens.gd` | the simulated Grafana and stream screens of the demo worlds |
 | `scripts/providers.gd` | Grafana and Tautulli providers: requests to the companion, pinned summaries |
 | `scripts/icons.gd` | application icons, drawn in code |

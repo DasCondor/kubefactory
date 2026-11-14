@@ -497,7 +497,10 @@ func _sim_metrics(a: Dictionary) -> Dictionary:
 			var t = Time.get_ticks_msec() / 1000.0
 			var seed = float(hash(p["name"]) % 1000) / 37.0
 			var busy = 0.42 + 0.22 * sin(t / 9.0 + seed) + 0.1 * sin(t / 2.3 + seed * 2.0)
-			var c = p.get("_ctr", {"rx": 0.0, "tx": 0.0, "rd": 0.0, "wr": 0.0, "t": t})
+			# a running container has totals from all of its uptime, so the counters start
+			# where a few days of steady traffic would have left them, not at zero
+			var up = 86400.0 * (1.0 + float(hash(p["name"] + "up") % 400) / 100.0)
+			var c = p.get("_ctr", {"rx": up * 90000.0, "tx": up * 35000.0, "rd": up * 6000.0, "wr": up * 15000.0, "t": t})
 			var dt = maxf(t - float(c["t"]), 0.0)
 			c["rx"] += dt * (60000.0 + 240000.0 * busy)
 			c["tx"] += dt * (25000.0 + 90000.0 * busy)
