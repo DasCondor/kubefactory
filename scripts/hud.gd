@@ -13,6 +13,7 @@ const Bob = preload("res://scripts/bob.gd")
 const Gauge = preload("res://scripts/gauge.gd")
 const DemoSim = preload("res://scripts/backend_demo.gd")
 const Gfx = preload("res://scripts/gfx.gd")
+const Controls = preload("res://scripts/controls.gd")
 const Models = preload("res://scripts/models.gd")
 const Agent = preload("res://scripts/agent.gd")
 const Native = preload("res://scripts/backend_native.gd")
@@ -113,14 +114,14 @@ func _sb(bg: Color, border: Color = Color(0, 0, 0, 0), bw: int = 0, pad: int = 1
 
 func _lbl(text: String, size: int = 15, color: Color = TXT) -> Label:
 	var l = Label.new()
-	l.text = text
+	l.text = Controls.hint(text)
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	return l
 
 func _btn(text: String, cb: Callable, kind: String = "normal", enabled: bool = true) -> Button:
 	var b = Button.new()
-	b.text = text
+	b.text = Controls.hint(text)
 	b.disabled = not enabled
 	b.focus_mode = Control.FOCUS_NONE
 	var base = BG2
@@ -195,6 +196,7 @@ func _ignore_mouse(c: Node) -> void:
 # ---------------------------------------------------------------- HUD
 
 func _ready() -> void:
+	_sev_colors()
 	_mono = SystemFont.new()
 	_mono.font_names = PackedStringArray(["Consolas", "Cascadia Mono", "Courier New", "monospace"])
 	_root = Control.new()
@@ -306,7 +308,7 @@ func _ready() -> void:
 	_bp.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_root.add_child(_bp)
 
-	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · K Krew · H Foreman · B belts · F storage · V screen · R next view · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
+	var help = _lbl(Controls.ribbon(), 12, Color(1, 1, 1, 0.7))
 	help.anchor_left = 0.0
 	help.anchor_right = 1.0
 	help.anchor_top = 1.0
@@ -454,7 +456,7 @@ func _table_rows(key: String, rows: Array, getters: Dictionary) -> Array:
 	return K.table_rows(rows, st["col"], st["desc"], st["filter"], getters)
 
 func set_target(text: String) -> void:
-	_target.text = text
+	_target.text = Controls.hint(text)
 
 func set_progress(f: float) -> void:
 	_prog_bg.visible = f > 0.0
@@ -463,7 +465,7 @@ func set_progress(f: float) -> void:
 func notify(msg: String, kind: String = "info") -> void:
 	if msg.strip_edges() == "":
 		return
-	msg = K.tidy_text(msg)       # a path in a note never shows the account's folder
+	msg = Controls.hint(K.tidy_text(msg))       # a path in a note never shows the account's folder
 	var col = {"ok": K.health_color("ok"), "warn": K.health_color("warn"), "bad": RED}.get(kind, ORANGE)
 	var pc = PanelContainer.new()
 	var s = _sb(BG, col, 0, 9)
@@ -3163,6 +3165,7 @@ func open_pause() -> void:
 	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
+	body.add_child(_btn("Settings  (controls, controller, display, accessibility)", open_settings, "primary"))
 	body.add_child(_btn("Krew operations  (K)", func(): open_krew()))
 	body.add_child(_btn("Foreman  (H)", func(): open_foreman()))
 	body.add_child(_btn("Gauge  (resource desk)", open_gauge))
@@ -3709,7 +3712,18 @@ var _krew_history = false
 var _krew_list: VBoxContainer = null
 var _krew_sig = ""
 
-const SEV_COLORS = {"high": Color(1.0, 0.36, 0.3), "medium": Color(1.0, 0.72, 0.25), "low": Color(0.55, 0.78, 1.0), "info": Color(0.62, 0.68, 0.74)}
+var SEV_COLORS = {}
+
+func _sev_colors() -> void:
+	SEV_COLORS = {"high": K.health_color("bad").lightened(0.1), "medium": K.health_color("warn"), "low": Color(0.55, 0.78, 1.0) if K.palette == "standard" else K.health_color("done"), "info": Color(0.62, 0.68, 0.74)}
+	# the tool bar's tier colours
+	for i in _slots.size():
+		var tc = K.tier_color(TOOLS[i]["mk"])
+		var v = _slots[i].get_child(0)
+		v.get_child(0).get_child(0).add_theme_color_override("font_color", tc)
+		v.get_child(1).add_theme_color_override("font_color", tc)
+	if not _slots.is_empty():
+		set_mode(_mode, _bp_cur)
 
 func open_krew(focus: String = "") -> void:
 	if krew == null:
@@ -4180,3 +4194,150 @@ func open_foreman_providers() -> void:
 	br.add_child(_spacer())
 	br.add_child(_btn("Back to Foreman", open_foreman))
 	body.add_child(br)
+
+# ----- Settings: controls, controller, display, accessibility
+#
+# Everything here is saved to settings.json as it changes; nothing needs to be
+# edited by hand. Key bindings are kept only where they differ from the
+# defaults (Controls.changed), so new default keys still reach everyone else.
+
+signal settings_changed(key)
+
+var _rebind = ""                   # the action waiting for a key, or ""
+var _settings_note = ""
+
+func open_settings() -> void:
+	var body = _open_modal("settings", null, "SETTINGS", Vector2(980, 820))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var col = _col(8)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(col)
+	body.add_child(sc)
+	var slider = func(label: String, lo: float, hi: float, step: float, value: float, fmt: String, on_change: Callable):
+		var r = _row(10)
+		r.add_child(_fixed(_lbl(label, 13, DIM), 220))
+		var sl = HSlider.new()
+		sl.min_value = lo
+		sl.max_value = hi
+		sl.step = step
+		sl.value = value
+		sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sl.focus_mode = Control.FOCUS_NONE
+		var v = _lbl(fmt % value, 13)
+		sl.value_changed.connect(func(x):
+			v.text = fmt % x
+			on_change.call(x))
+		r.add_child(sl)
+		r.add_child(_fixed(v, 70))
+		col.add_child(r)
+	# --- controls
+	col.add_child(_lbl("CONTROLS", 15, ORANGE))
+	slider.call("Mouse sensitivity", 0.3, 3.0, 0.05, player.sensitivity, "%.2f", func(x):
+		player.sensitivity = x
+		_save_setting("sensitivity", x))
+	col.add_child(_btn("Invert look up / down:  %s" % ("ON" if player.invert_y else "OFF"), func():
+		player.invert_y = not player.invert_y
+		_save_setting("invert_y", player.invert_y)
+		open_settings()))
+	if _settings_note != "":
+		col.add_child(_lbl(_settings_note, 13, K.health_color("warn")))
+	var grid = GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 4)
+	for a in Controls.ACTIONS:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(a[1], 13), 200))
+		var names = Controls.bindings(a[0]).map(func(d): return Controls.name_of(d))
+		var waiting = _rebind == a[0]
+		var act = a[0]
+		var b = _btn("press a key or button..." if waiting else (" / ".join(PackedStringArray(names)) if not names.is_empty() else "unbound"), func():
+			_rebind = act
+			_settings_note = "Press the new key or mouse button for %s. Esc cancels." % a[1]
+			open_settings(), "primary" if waiting else "normal")
+		b.custom_minimum_size.x = 200
+		r.add_child(b)
+		grid.add_child(r)
+	col.add_child(grid)
+	var kr = _row(8)
+	kr.add_child(_btn("Reset all keys to the defaults", func():
+		for a in Controls.ACTIONS:
+			Controls.set_bindings(a[0], Controls.defaults(a[0]))
+		_keys_changed()
+		open_settings()))
+	col.add_child(kr)
+	# --- controller
+	col.add_child(_lbl("CONTROLLER", 15, ORANGE))
+	col.add_child(_lbl(("Connected: " + Controls.pad_name()) if Controls.pad_connected() else "No controller connected. Plug one in at any time.", 13, K.health_color("ok") if Controls.pad_connected() else DIM))
+	slider.call("Stick look speed", 0.3, 3.0, 0.05, player.pad_look, "%.2f", func(x):
+		player.pad_look = x
+		_save_setting("pad_look", x))
+	var pl = _lbl("Left stick move · right stick look · RT use tool · LT copy machine · LB / RB change tool · A jump (twice: hoverpack) · B descend · X inspect · Y build menu · L3 sprint · R3 next screen view · D-pad: up next problem, right Krew, left Foreman, down datapad · Back codex · Start menu. In menus the left stick moves the pointer, A clicks, the right stick scrolls and B closes.", 12, DIM)
+	pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	pl.custom_minimum_size.x = 920
+	col.add_child(pl)
+	# --- display
+	col.add_child(_lbl("DISPLAY", 15, ORANGE))
+	slider.call("Field of view", 60.0, 110.0, 1.0, player.camera.fov, "%d°", func(x):
+		player.camera.fov = x
+		_save_setting("fov", x))
+	slider.call("Interface size", 0.75, 1.5, 0.05, get_tree().root.content_scale_factor, "%.2fx", func(x):
+		_save_setting("ui_scale", x))
+	col.add_child(_btn("Apply interface size", func():
+		get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
+		open_settings()))
+	# --- accessibility
+	col.add_child(_lbl("ACCESSIBILITY: STATUS COLOURS", 15, ORANGE))
+	var al = _lbl("Every status is also written out; these change the colours of lamps, beacons, findings and tool tiers.", 12, DIM)
+	al.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	al.custom_minimum_size.x = 920
+	col.add_child(al)
+	for id in K.PALETTES:
+		var pal: Dictionary = K.PALETTES[id]
+		var r = _row(10)
+		for h in ["ok", "warn", "bad", "done"]:
+			var sw = ColorRect.new()
+			sw.color = pal[h]
+			sw.custom_minimum_size = Vector2(22, 22)
+			r.add_child(sw)
+		var chosen = K.palette == id
+		r.add_child(_btn(("IN USE:  " if chosen else "") + str(pal["label"]), func():
+			K.palette = id
+			_save_setting("palette", id)
+			settings_changed.emit("palette")
+			open_settings(), "primary" if chosen else "normal"))
+		col.add_child(r)
+	var back = _row(10)
+	back.add_child(_spacer())
+	back.add_child(_btn("Back", open_pause))
+	body.add_child(back)
+
+func _keys_changed() -> void:
+	_save_setting("keys", Controls.changed())
+	if _help != null:
+		_help.text = Controls.ribbon()
+	settings_changed.emit("keys")
+
+# While Settings waits for a key: the next key or mouse button is the new binding.
+func _input(ev: InputEvent) -> void:
+	if _rebind == "" or _modal_kind != "settings":
+		return
+	if not ((ev is InputEventKey or ev is InputEventMouseButton) and ev.pressed and not ev.is_echo()):
+		return
+	if ev is InputEventMouseButton and ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		return
+	get_viewport().set_input_as_handled()
+	var act = _rebind
+	_rebind = ""
+	if ev is InputEventKey and ev.keycode == KEY_ESCAPE:
+		_settings_note = ""
+		open_settings.call_deferred()
+		return
+	var d = Controls.to_data(ev)
+	var clash = Controls.conflicts(act, d)
+	Controls.set_bindings(act, [d])
+	_keys_changed()
+	_settings_note = ("%s is also used for: %s. Both will happen." % [Controls.name_of(d), ", ".join(PackedStringArray(clash))]) if not clash.is_empty() else ""
+	open_settings.call_deferred()

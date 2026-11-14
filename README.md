@@ -454,6 +454,28 @@ L datapad, G jump to next problem, B belts, F open a machine's storage door,
 V open a machine's screen (or the LiveView list), R next view on a machine's
 screen, F11 fullscreen, Esc menu.
 
+## ⚙️ Settings (Esc → Settings)
+
+Everything is set in the game and saved as you change it; no files to edit.
+
+- **Keys:** rebind any action to a key or mouse button (not a WASD player? move
+  it all). Clashes are pointed out, and **Reset all keys** brings back the
+  defaults. Hints throughout the game ("[E] inspect") and the help line follow
+  your bindings.
+- **Controller:** plug in any controller Godot recognises. Left stick move,
+  right stick look, RT use tool, LT copy machine, LB / RB change tool, A jump
+  (twice: hoverpack), B descend, X inspect, Y build menu, L3 sprint, R3 next
+  screen view, D-pad for next problem / Krew / Foreman / datapad, Back codex,
+  Start menu. In menus the left stick moves a pointer, A clicks, the right
+  stick scrolls and B closes. Look speed has its own slider.
+- **Display:** field of view (60-110°), interface size (75-150%), mouse
+  sensitivity, inverted look.
+- **Accessibility:** status colour palettes for red-green and blue-yellow
+  colour blindness (Okabe-Ito colours) and a high-contrast one. They change
+  lamps, alarm beams, findings and tool tiers; every status is also written.
+
+![Settings: every key rebindable](docs/settings.png)
+
 ## 🎨 Graphics presets
 
 Three presets on the same world, switched live from the pause menu

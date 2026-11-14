@@ -36,6 +36,20 @@ exactly that: the code exists and has not been run against the real thing.
 - No clean-Windows-machine installation test was done. No large-cluster
   benchmark (hundreds of nodes, thousands of pods) was done.
 
+## Settings and controller
+
+- **The controller was tested with simulated controller input**, not with a
+  physical pad: the bindings, the menu pointer and the B / Start behaviour are
+  checked by `tests/live/settings_test.gd`. Stick feel (dead zone, speeds) has
+  not been tuned on real hardware, and controller buttons cannot be rebound
+  yet (keys and mouse buttons can).
+- Menus are mouse-first: with a controller you steer a pointer rather than
+  move focus between buttons. Text fields still need a keyboard.
+- Key hints are translated where they are written in the usual form ("[E]",
+  "(K)"); a hint written another way keeps the default key's name.
+- Interface size applies when you press **Apply interface size**, so the menu
+  does not jump under the pointer while dragging.
+
 ## By design, for now
 
 - **Docker still uses the `docker` command.** Only Kubernetes is native.

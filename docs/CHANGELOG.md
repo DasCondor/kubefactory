@@ -6,6 +6,11 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Settings menu** (Esc → Settings): rebind every key and mouse button,
+  controller support (move, look, tools, menus with a stick pointer), field of
+  view, interface size, inverted look, and status palettes for red-green and
+  blue-yellow colour blindness plus high contrast. Saved as you change them;
+  key hints and the help line follow your bindings.
 - **Foreman** (key `H`): correlates the Krew's findings into incidents and a
   shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
   Claude, any OpenAI-compatible endpoint) answer plain-language questions from

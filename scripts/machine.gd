@@ -621,10 +621,12 @@ func _finish_setup(p: Dictionary) -> void:
 		add_child(sp)
 
 	# Alarm: a red light column + warning sign, visible from across the factory.
-	if not _m.has("beam"):
-		var bm = Tex.ghost(Color(1.0, 0.12, 0.08, 0.22))
+	if not _m.has("beam") or _m.get("beam_palette", "") != K.palette:
+		var bad = K.health_color("bad")
+		var bm = Tex.ghost(Color(bad.r, bad.g * 0.55, bad.b * 0.45, 0.22))
 		bm.emission_enabled = true
-		bm.emission = Color(1.0, 0.1, 0.05)
+		bm.emission = Color(bad.r, bad.g * 0.45, bad.b * 0.3)
+		_m["beam_palette"] = K.palette
 		bm.emission_energy_multiplier = 2.0
 		bm.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 		_m["beam_mat"] = bm
@@ -641,7 +643,7 @@ func _finish_setup(p: Dictionary) -> void:
 	add_child(_alarm)
 	_add(_m["beam"], _m["beam_mat"], Vector3(0, 36.0, 0), _alarm).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var lamp = OmniLight3D.new()
-	lamp.light_color = Color(1.0, 0.15, 0.08)
+	lamp.light_color = K.health_color("bad")
 	lamp.light_energy = 4.0
 	lamp.omni_range = 16.0
 	lamp.position = Vector3(0, 6.0, 0)
