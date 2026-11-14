@@ -8,7 +8,7 @@ const Apps = preload("res://scripts/apps.gd")
 var label = "docker"
 var poll_interval = 2.5
 var caps = {"scale": false, "delete_pod": true, "restart": true, "delete_workload": false,
-	"create": true, "cordon": false, "drain": false, "logs": true}
+	"create": true, "cordon": false, "drain": false, "logs": true, "files": true}
 var context = ""
 var log_cfg = {}
 var providers = [{"id": "kube", "name": "Docker Engine", "ready": true, "note": "docker logs"}]
@@ -124,7 +124,120 @@ func _tail(r: Dictionary) -> String:
 	var lines = r.out.strip_edges().split("\n")
 	return lines[lines.size() - 1]
 
+# ---- read-only storage inspection (the storage doors)
+# Uses only `docker inspect` and `docker exec <container> ls / head / dd` with
+# fixed arguments: nothing is mounted, started or written, and browsing stays
+# inside one of the container's own mounts.
+
+func _mounts(container: String) -> Array:
+	var r = _run(["inspect", "--format", "{{json .Mounts}}|{{.State.Running}}", container], false)
+	if r.code != 0:
+		return []
+	var bits = r.out.strip_edges().rsplit("|", true, 1)
+	var list = JSON.parse_string(bits[0])
+	var res = []
+	if typeof(list) == TYPE_ARRAY:
+		for m in list:
+			res.append({"container": container, "path": str(m.get("Destination", "")), "read_only": not bool(m.get("RW", true)),
+				"volume": str(m.get("Name", "")), "type": str(m.get("Type", "bind")), "claim": str(m.get("Name", "")) if str(m.get("Type", "")) == "volume" else str(m.get("Source", "")),
+				"readable": true, "running": bits.size() > 1 and bits[1] == "true"})
+	return res
+
+func _file_action(a: Dictionary) -> Dictionary:
+	if a["op"] == "file_mounts":
+		return {"ok": true, "msg": "", "kind": "", "data": {"mounts": _mounts(a["name"])}}
+	var m = null
+	for x in _mounts(a["name"]):
+		if x["path"] == a["root"]:
+			m = x
+	if m == null:
+		return {"ok": false, "kind": "invalid", "msg": "%s is not a mount of this container" % a["root"], "data": {}}
+	if not m["running"]:
+		return {"ok": false, "kind": "unsupported", "msg": "The container is not running, so its files cannot be read.", "data": {}}
+	var full = K.path_inside(a["root"], str(a.get("path", "")))
+	if full == "":
+		return {"ok": false, "kind": "invalid", "msg": "That path is outside the mounted volume.", "data": {}}
+	# no directory between the mount and the target may be a link
+	var chain = []
+	var p = full.get_base_dir()
+	while p.length() > str(a["root"]).rstrip("/").length() and p != a["root"]:
+		chain.append(p)
+		p = p.get_base_dir()
+	if not chain.is_empty():
+		var c = _run(["exec", a["name"], "ls", "-ldn", "--"] + chain, false)
+		for ln in c.out.strip_edges().split("\n"):
+			if c.code != 0 or not ln.begins_with("d"):
+				return {"ok": false, "kind": "invalid", "msg": "That path goes through a link, which is not followed.", "data": {}}
+	if a["op"] == "file_list":
+		# the folder itself must be a real folder: a link here could point anywhere in the container
+		if full != str(a["root"]).rstrip("/") and full != a["root"]:
+			var self_ls = _run(["exec", a["name"], "ls", "-ldn", "--", full], false)
+			if self_ls.code != 0:
+				return {"ok": false, "kind": "notfound", "msg": "There is no such folder in this volume.", "data": {}}
+			if not self_ls.out.begins_with("d"):
+				return {"ok": false, "kind": "invalid", "msg": "That is a link, which is not followed: it may point outside the volume.", "data": {}}
+		var r = _run(["exec", a["name"], "ls", "-la", "--", full + "/."])
+		if r.code != 0:
+			var kind = "unsupported" if r.out.contains("executable file not found") else ("rbac" if r.out.contains("Permission denied") else "notfound")
+			var msg = "This container has no file tools (no `ls`), so its volumes cannot be browsed from inside it." if kind == "unsupported" else _tail(r)
+			return {"ok": false, "kind": kind, "msg": msg, "data": {}}
+		var es = K.parse_ls(r.out)
+		return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "entries": es.slice(0, 500), "truncated": es.size() > 500, "readable": true}}
+	# file_read: one 64 KiB page of a regular file
+	var page = clampi(int(a.get("page", 0)), 0, 255)
+	var st = _run(["exec", a["name"], "ls", "-ldn", "--", full], false)
+	var f = st.out.strip_edges().split(" ", false)
+	if st.code != 0 or f.size() < 5 or not st.out.begins_with("-"):
+		return {"ok": false, "kind": "invalid", "msg": "Only regular files can be previewed (links and devices are not followed).", "data": {}}
+	var size = f[4].to_int()
+	var tmp = OS.get_user_data_dir().path_join("preview-%d.bin" % OS.get_process_id())
+	# `docker cp` would follow the file out of the container; a bounded read through exec does not
+	var args = ["exec", a["name"], "head", "-c", "65536", "--", full] if page == 0 else ["exec", a["name"], "dd", "if=" + full, "bs=65536", "skip=%d" % page, "count=1"]
+	var out = []
+	var code = OS.execute("docker", PackedStringArray(args), out, false)
+	DirAccess.remove_absolute(tmp)
+	if code != 0:
+		return {"ok": false, "kind": "rbac", "msg": "The container's user may not read this file.", "data": {}}
+	var text = str(out[0]) if out.size() > 0 else ""
+	return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "size": size, "page": page, "pages": mini(int(ceil(size / 65536.0)), 256),
+		"data": Marshalls.utf8_to_base64(text), "text_only": true}}
+
+# "12.5MiB", "1.2kB", "3GB" -> bytes (docker stats mixes binary and decimal units)
+static func _size(s: String) -> float:
+	var t = s.strip_edges()
+	var units = {"kib": 1024.0, "mib": 1048576.0, "gib": 1073741824.0, "tib": 1099511627776.0, "kb": 1000.0, "mb": 1000000.0, "gb": 1000000000.0, "tb": 1000000000000.0, "b": 1.0}
+	for u in units:
+		if t.to_lower().ends_with(u):
+			return t.left(t.length() - u.length()).to_float() * units[u]
+	return t.to_float()
+
+# What a container is using right now, as the engine itself reports it.
+func _metrics(container: String) -> Dictionary:
+	var r = _run(["stats", "--no-stream", "--format", "{{json .}}", container], false)
+	var d = JSON.parse_string(r.out.strip_edges()) if r.code == 0 else null
+	if typeof(d) != TYPE_DICTIONARY:
+		return {"ok": false, "kind": "unsupported", "msg": "The engine gave no usage figures for this container (is it running?).", "data": {}}
+	# a container that is not running is reported by the engine as all zeros: that is not a measurement
+	if str(d.get("PIDs", "")) == "0" or str(d.get("MemUsage", "")).replace(" ", "").begins_with("0B/0B"):
+		return {"ok": false, "kind": "unsupported", "msg": "This container is not running, so it is using nothing.", "data": {}}
+	var net = str(d.get("NetIO", "")).split("/")
+	var blk = str(d.get("BlockIO", "")).split("/")
+	var data = {"cpu_cores": str(d.get("CPUPerc", "0")).trim_suffix("%").to_float() / 100.0,
+		"mem_bytes": _size(str(d.get("MemUsage", "0")).get_slice("/", 0)),
+		"at": Time.get_datetime_string_from_system(true) + "Z", "source": "docker stats"}
+	if net.size() == 2:
+		data["net_rx_bytes"] = _size(net[0])
+		data["net_tx_bytes"] = _size(net[1])
+	if blk.size() == 2:
+		data["disk_read_bytes"] = _size(blk[0])
+		data["disk_write_bytes"] = _size(blk[1])
+	return {"ok": true, "msg": "", "kind": "", "data": data}
+
 func _app_action(a: Dictionary) -> Dictionary:
+	if a["op"] == "pod_metrics":
+		return _metrics(a["name"])
+	if a["op"] in ["file_mounts", "file_list", "file_read"]:
+		return _file_action(a)
 	match a["op"]:
 		"apply_app":
 			var app = Apps.find(a["id"])

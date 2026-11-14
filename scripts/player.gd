@@ -54,6 +54,10 @@ func tool_kick(strength: float = 1.0) -> void:
 func tool_charge(f: float) -> void:
 	view.charge = f
 
+# Text for the display on the tool in hand.
+func tool_readout(text: String) -> void:
+	view.set_readout(text)
+
 func teleport(pos: Vector3, look_at_point = null) -> void:
 	global_position = pos
 	velocity = Vector3.ZERO
@@ -62,6 +66,20 @@ func teleport(pos: Vector3, look_at_point = null) -> void:
 		rotation.y = atan2(-d.x, -d.z)
 		_pitch = clampf(atan2(d.y, Vector2(d.x, d.z).length()), -1.5, 1.5)
 		camera.rotation.x = _pitch
+
+# Turn the view by an angle (touch controls: there is no captured mouse to read).
+func look_by(angle: Vector2) -> void:
+	rotation.y -= angle.x
+	_pitch = clampf(_pitch - angle.y, -1.5, 1.5)
+	camera.rotation.x = _pitch
+
+# A tap on the touch jump button: two close together toggle the hoverpack, as on the keyboard.
+func jump_tap() -> void:
+	var now = Time.get_ticks_msec() / 1000.0
+	if now - _last_space < 0.3:
+		flying = not flying
+		velocity.y = 0.0
+	_last_space = now
 
 func _unhandled_input(ev: InputEvent) -> void:
 	if not enabled or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:

@@ -4,11 +4,18 @@ extends CanvasLayer
 
 signal blueprint_chosen(bp)
 signal target_requested(target)
+signal graphics_requested(id)
+signal storage_requested(uid)        # open this machine's service door and its storage panel
 
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
 const Bob = preload("res://scripts/bob.gd")
 const DemoSim = preload("res://scripts/backend_demo.gd")
+const Gfx = preload("res://scripts/gfx.gd")
+const Models = preload("res://scripts/models.gd")
+const Agent = preload("res://scripts/agent.gd")
+const Native = preload("res://scripts/backend_native.gd")
+const Connections = preload("res://scripts/connections.gd")
 const ORANGE = Color(0.98, 0.584, 0.286)
 const BG = Color(0.075, 0.085, 0.095, 0.95)
 const BG2 = Color(0.15, 0.16, 0.18, 1.0)
@@ -45,6 +52,10 @@ var _bp: Label
 var _prog: ColorRect
 var _prog_bg: ColorRect
 var _slots = []
+var _help: Label = null
+var touch: CanvasLayer = null     # the touch controls, when the browser demo is on a touch screen
+var touch_u = 0.0                 # their unit size while they are on; 0 = desktop
+
 var _notes: VBoxContainer
 var _mono: SystemFont
 var _who: Label
@@ -225,8 +236,8 @@ func _ready() -> void:
 	_target.anchor_right = 1.0
 	_target.anchor_top = 0.5
 	_target.anchor_bottom = 0.5
-	_target.offset_top = 40
-	_target.offset_bottom = 150
+	_target.offset_top = 200
+	_target.offset_bottom = 330
 	_target.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_target.add_theme_constant_override("outline_size", 6)
 	_target.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
@@ -286,7 +297,7 @@ func _ready() -> void:
 	_bp.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_root.add_child(_bp)
 
-	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · B belts · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
+	var help = _lbl("WASD move · Shift sprint · Space jump (double-tap: hoverpack, Ctrl descend) · 1-6 / wheel tools · E inspect · Q build menu · MMB copy machine · Tab codex · L datapad · G next problem · B belts · F storage · V screen · R next view · M sound · Esc menu", 12, Color(1, 1, 1, 0.7))
 	help.anchor_left = 0.0
 	help.anchor_right = 1.0
 	help.anchor_top = 1.0
@@ -294,6 +305,7 @@ func _ready() -> void:
 	help.offset_top = -26
 	help.offset_bottom = -6
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_help = help
 	help.add_theme_constant_override("outline_size", 4)
 	help.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	_root.add_child(help)
@@ -350,6 +362,85 @@ func refresh_who() -> void:
 				names.append("%s (%s)" % [p["user"], TOOLS[clampi(p["tool"], 0, TOOLS.size() - 1)]["name"].capitalize()])
 			txt += "\nONLINE  %d other%s:  %s" % [names.size(), "" if names.size() == 1 else "s", ",  ".join(PackedStringArray(names))]
 	_who.text = txt
+
+# Touch controls on or off: the keyboard ribbon and the key-number hotbar make way.
+func set_touch(on: bool, unit: float) -> void:
+	touch_u = unit if on else 0.0
+	if _help != null:
+		_help.visible = not on
+	for s in _slots:
+		s.get_parent().visible = not on
+	if _target != null:
+		_target.add_theme_font_size_override("font_size", int(clampf(unit * 0.26, 17, 60)) if on else 17)
+		_target.offset_top = unit * 0.6 if on else 200
+		_target.offset_bottom = unit * 1.9 if on else 330
+
+# ----- tables: click a column to sort by it, type to keep the rows that contain something
+#
+# One strip above a table: a CONTAINS box and the column headings as buttons.
+# First click sorts A-Z (or low to high), second click reverses, third goes
+# back to the order the rows came in. What you choose is remembered per table.
+
+var _tables = {}     # table key -> {col, desc, filter}
+
+func _table_state(key: String) -> Dictionary:
+	if not _tables.has(key):
+		_tables[key] = {"col": "", "desc": false, "filter": ""}
+	return _tables[key]
+
+# cols: [[id, title, width]]   refill: called when the sort or the filter changes
+func _table_head(key: String, cols: Array, refill: Callable, count: int = 0) -> Control:
+	var st = _table_state(key)
+	var v = _col(4)
+	var fr = _row(8)
+	fr.add_child(_lbl("CONTAINS", 12, DIM))
+	var e = LineEdit.new()
+	e.text = st["filter"]
+	e.placeholder_text = "show only rows containing..."
+	e.custom_minimum_size.x = 300
+	e.clear_button_enabled = true
+	fr.add_child(e)
+	if count >= K.TABLE_LIMIT:
+		e.editable = false
+		fr.add_child(_lbl("%d rows: too many to sort or filter here" % count, 12, K.health_color("warn")))
+	v.add_child(fr)
+	var hd = _row(10)
+	var buttons = []
+	var relabel = func():
+		for i in cols.size():
+			buttons[i].text = str(cols[i][1]) + (("  ▼" if st["desc"] else "  ▲") if st["col"] == cols[i][0] else "")
+			buttons[i].add_theme_color_override("font_color", ORANGE if st["col"] == cols[i][0] else DIM)
+	for c in cols:
+		var b = Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_font_size_override("font_size", 12)
+		b.tooltip_text = "Sort by this column"
+		b.disabled = count >= K.TABLE_LIMIT
+		b.pressed.connect(func():
+			if st["col"] != c[0]:
+				st["col"] = c[0]
+				st["desc"] = false
+			elif not st["desc"]:
+				st["desc"] = true
+			else:
+				st["col"] = ""
+				st["desc"] = false
+			relabel.call()
+			refill.call())
+		buttons.append(b)
+		hd.add_child(_fixed(b, c[2]))
+	relabel.call()
+	e.text_changed.connect(func(t):
+		st["filter"] = t
+		refill.call())
+	v.add_child(hd)
+	return v
+
+func _table_rows(key: String, rows: Array, getters: Dictionary) -> Array:
+	var st = _table_state(key)
+	return K.table_rows(rows, st["col"], st["desc"], st["filter"], getters)
 
 func set_target(text: String) -> void:
 	_target.text = text
@@ -434,6 +525,15 @@ func on_state(st: Dictionary) -> void:
 func modal_open() -> bool:
 	return _modal != null
 
+# On a touch screen a dialog is scaled to use the screen it has, so its buttons are as large as they can be.
+func _fit_modal(center: Control, panel: Control) -> void:
+	if not is_instance_valid(panel) or not is_instance_valid(center):
+		return
+	var vp = get_viewport().get_visible_rect().size
+	var s = minf(vp.x * 0.98 / maxf(panel.size.x, 1.0), vp.y * 0.97 / maxf(panel.size.y, 1.0))
+	center.pivot_offset = center.size * 0.5
+	center.scale = Vector2(s, s)
+
 func close_modal(recapture: bool = true) -> void:
 	if _modal != null:
 		_modal.queue_free()
@@ -445,7 +545,8 @@ func close_modal(recapture: bool = true) -> void:
 	_log_pick = null
 	if recapture:
 		player.enabled = true
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if not (touch != null and touch.active):       # touch never locks the pointer
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = false) -> VBoxContainer:
 	var was_pad = _modal_kind == "logs"
@@ -486,12 +587,18 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	var head = _row()
 	head.add_child(_lbl(title, 22, ORANGE))
 	head.add_child(_spacer())
-	head.add_child(_btn("  X  ", close_modal))
+	var xb = _btn("  X  ", close_modal)
+	if touch_u > 0.0:
+		xb.custom_minimum_size = Vector2(touch_u * 1.1, touch_u * 0.9)
+		xb.add_theme_font_size_override("font_size", int(touch_u * 0.3))
+	head.add_child(xb)
 	vb.add_child(head)
 	var body = _col(10)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(body)
 	add_child(_modal)
+	if touch_u > 0.0 and kind != "screen":
+		_fit_modal.call_deferred(center, panel)
 	if sfx != null and not (pad and was_pad):
 		sfx.play("pad" if pad else "click", -12.0)
 	player.enabled = false
@@ -568,6 +675,7 @@ func open_pod(uid: String) -> void:
 	lh.add_child(_log_pick)
 	lh.add_child(_btn("Refresh", _request_logs))
 	lh.add_child(_spacer())
+	lh.add_child(_btn("Storage", func(): storage_requested.emit(uid)))
 	lh.add_child(_btn("Open in logging station", func(): open_logs(uid)))
 	body.add_child(lh)
 	_logs = TextEdit.new()
@@ -799,10 +907,8 @@ func open_codex() -> void:
 	top.add_child(_spacer())
 	top.add_child(_lbl("The namespace filter also hides other namespaces' machines in the world.", 13, DIM))
 	body.add_child(top)
-	var hd = _row(10)
-	for c in [["KIND", 100], ["NAMESPACE", 130], ["WORKLOAD", 210], ["READY", 70], ["IMAGE", 270]]:
-		hd.add_child(_fixed(_lbl(c[0], 12, DIM), c[1]))
-	body.add_child(hd)
+	body.add_child(_table_head("codex", [["kind", "KIND", 100], ["ns", "NAMESPACE", 130], ["name", "WORKLOAD", 210], ["ready", "READY", 70], ["image", "IMAGE", 270]],
+		func(): _fill_codex(), cluster.state["workloads"].size()))
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sc.custom_minimum_size.y = 520
@@ -829,13 +935,16 @@ func _fill_codex() -> void:
 		if world.ns_filter == "" or w["ns"] == world.ns_filter:
 			rows.append(w)
 	rows.sort_custom(func(a, b): return a["ns"] + "/" + a["name"] < b["ns"] + "/" + b["name"])
+	var total = rows.size()
+	rows = _table_rows("codex", rows, {"kind": func(w): return w["kind"], "ns": func(w): return w["ns"], "name": func(w): return w["name"],
+		"ready": func(w): return float(w["ready"]) / maxf(float(w["replicas"]), 1.0), "image": func(w): return w["image"]})
 	var sig = JSON.stringify(rows) + str(cluster.read_only)
 	if sig == _dyn_sig:
 		return
 	_dyn_sig = sig
 	_clear(_dyn)
 	if rows.is_empty():
-		_dyn.add_child(_lbl("No workloads here yet. Press Q in the world to build one.", 15, DIM))
+		_dyn.add_child(_lbl("No workloads here yet. Press Q in the world to build one." if total == 0 else "No workload contains that.", 15, DIM))
 	for w in rows:
 		var pc = PanelContainer.new()
 		pc.add_theme_stylebox_override("panel", _sb(BG2, Color(0, 0, 0, 0), 0, 6))
@@ -949,7 +1058,11 @@ func _choose(bp: Dictionary) -> void:
 
 func open_clusters() -> void:
 	var body = _open_modal("clusters", null, "CLUSTERS", Vector2(980, 600))
-	body.add_child(_lbl("Every context in your kubeconfig (EKS, AKS, GKE, Rancher, on-prem ...), the local Docker engine, and the built-in simulations.", 13, DIM))
+	var top = _row(10)
+	top.add_child(_lbl("Every context of the kubeconfigs you have added, the local Docker engine, and the built-in simulations.", 13, DIM))
+	top.add_child(_spacer())
+	top.add_child(_btn("Add or manage kubeconfigs...", func(): open_connect(), "primary"))
+	body.add_child(top)
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sc.custom_minimum_size.y = 460
@@ -958,16 +1071,27 @@ func open_clusters() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.add_child(list)
 	body.add_child(sc)
-	if cluster.targets.is_empty():
-		list.add_child(_lbl("Still looking for clusters...", 15, DIM))
-	for t in cluster.targets:
+	var cl_get = {"provider": func(t): return t["provider"], "source": func(t): return t["source"], "context": func(t): return t["context"], "profile": func(t): return str(t.get("profile_name", ""))}
+	var cl_fill = func():
+		_clear(list)
+		if cluster.targets.is_empty():
+			list.add_child(_lbl("Still looking for clusters...", 15, DIM))
+		for t in _table_rows("clusters", cluster.targets, cl_get):
+			list.add_child(_cluster_row(t))
+	body.add_child(_table_head("clusters", [["provider", "PROVIDER", 220], ["source", "SOURCE", 100], ["context", "CONTEXT", 300], ["profile", "KUBECONFIG", 140]], cl_fill, cluster.targets.size()))
+	body.move_child(body.get_child(body.get_child_count() - 1), sc.get_index())
+	cl_fill.call()
+
+func _cluster_row(t: Dictionary) -> Control:
+	if true:
 		var active = cluster.backend != null and t["source"] == cluster.backend.label and t["context"] == cluster.backend.context
 		var pc = PanelContainer.new()
 		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if active else Color(0, 0, 0, 0), 1 if active else 0, 6))
 		var r = _row(10)
 		r.add_child(_fixed(_lbl("■ " + t["provider"], 15, K.provider_color(t["provider"]).lightened(0.3)), 220))
 		r.add_child(_fixed(_lbl(t["source"], 13, DIM), 100))
-		r.add_child(_fixed(_lbl(t["context"], 15), 440))
+		r.add_child(_fixed(_lbl(t["context"], 15), 300))
+		r.add_child(_fixed(_lbl(str(t.get("profile_name", "")), 12, DIM), 140))
 		r.add_child(_spacer())
 		if active:
 			r.add_child(_lbl("ACTIVE   ", 14, K.health_color("ok")))
@@ -976,7 +1100,694 @@ func open_clusters() -> void:
 				close_modal()
 				target_requested.emit(t), "primary"))
 		pc.add_child(r)
+		return pc
+	return null
+
+# ----- storage: what is behind a machine's service door.
+# A read-only look at the pod's (or container's) mounted volumes: what is mounted
+# where, directory listings, and bounded previews. Nothing is ever written, no
+# file is opened until it is picked, and secret volumes are listed but not read.
+
+signal storage_modules(uid, mounts)
+
+var _store = {}
+
+func open_storage(uid: String) -> void:
+	var p = K.find_pod(cluster.state, uid)
+	if p == null:
+		notify("That machine is gone already", "warn")
+		return
+	var body = _open_modal("storage", uid, "STORAGE  //  " + str(p["name"]), Vector2(1000, 700))
+	# dock the panel to the right so the open door and its bays stay in view
+	_modal.get_child(0).color.a = 0.12
+	_modal.get_child(1).anchor_left = 0.36
+	var sim = cluster.backend != null and cluster.backend.label == "simulation"
+	var note = _lbl("Read-only. Files are listed and previewed in pages of 64 KiB; nothing is copied, changed or sent anywhere." +
+		("   SIMULATED: this listing is invented by the demo." if sim else ""), 12, K.health_color("warn") if sim else DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 950
+	body.add_child(note)
+	_dyn = _col(8)
+	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(_dyn)
+	_store = {"uid": uid, "ns": p["ns"], "pod": p["name"], "mounts": null, "mount": {}, "path": "", "list": null, "file": null, "error": "", "busy": true}
+	cluster.act({"op": "file_mounts", "ns": p["ns"], "name": p["name"], "key": "store:%s:mounts" % uid})
+	_fill_storage()
+
+func _store_req(op: String, extra: Dictionary, tag: String) -> void:
+	var a = {"op": op, "ns": _store["ns"], "name": _store["pod"], "container": str(_store["mount"].get("container", "")),
+		"root": str(_store["mount"].get("path", "")), "key": "store:%s:%s" % [_store["uid"], tag]}
+	a.merge(extra)
+	_store["busy"] = true
+	_store["error"] = ""
+	cluster.act(a)
+	_fill_storage()
+
+func _store_dir(mount: Dictionary, path: String) -> void:
+	_store["mount"] = mount
+	_store["path"] = path
+	_store["file"] = null
+	_store["list"] = null
+	_store_req("file_list", {"path": path}, "list")
+
+func _store_file(path: String, page: int) -> void:
+	_store["file"] = {"path": path, "page": page, "data": null}
+	_store_req("file_read", {"path": path, "page": page}, "read")
+
+# Answers to the storage requests (and, further down, LiveView's).
+func on_data(key: String, r: Dictionary) -> void:
+	if key.begins_with("live:"):
+		_on_live_data(key, r)
+		return
+	if not key.begins_with("store:") or _modal_kind != "storage" or key.get_slice(":", 1) != str(_store.get("uid", "")):
+		return
+	_store["busy"] = false
+	var d = r.get("data", {})
+	var err = "" if r.get("ok", false) else "%s: %s" % [Agent.kind_title(str(r.get("kind", "other"))), str(r.get("msg", "failed"))]
+	match key.get_slice(":", 2):
+		"mounts":
+			_store["mounts"] = d.get("mounts", []) if r.get("ok", false) else []
+			_store["error"] = err
+			storage_modules.emit(_store["uid"], _store["mounts"])
+			for m in _store["mounts"]:
+				if m.get("running", true):
+					_store_dir(m, "")
+					return
+		"list":
+			_store["list"] = d if r.get("ok", false) else null
+			_store["error"] = err
+		"read":
+			if r.get("ok", false) and _store["file"] != null:
+				_store["file"]["data"] = d
+			else:
+				_store["file"] = null
+			_store["error"] = err
+	_fill_storage()
+
+# ----- LiveView: real applications on screens (scripts/liveview.gd)
+
+var live: Node = null          # the LiveView manager, set by main
+var _lv = {}                   # the session shown in the viewer
+var _lv_pending = {}           # an endpoint waiting for its port-forward
+var _lv_rect: TextureRect = null
+var _lv_move_t = 0
+
+func open_liveview() -> void:
+	var body = _open_modal("livelist", null, "LIVEVIEW", Vector2(1000, 640))
+	var intro = _lbl("Open a running application's own web page on a screen. It is the real page, drawn by this computer's browser engine in a private, throw-away profile, and it takes your mouse and keyboard.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 950
+	body.add_child(intro)
+	if live == null or not live.available():
+		var l = _lbl("LiveView is not available here. " + Agent.why_unavailable(), 15, K.health_color("warn"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 950
+		body.add_child(l)
+		return
+	var src = cluster.backend.label if cluster.backend != null else ""
+	var mr = _row(8)
+	mr.add_child(_lbl("ADDRESS", 12, DIM))
+	var url = LineEdit.new()
+	url.placeholder_text = "http://127.0.0.1:3000/"
+	url.custom_minimum_size.x = 520
+	mr.add_child(url)
+	var go = func():
+		var u = url.text.strip_edges()
+		if not (u.begins_with("http://") or u.begins_with("https://")):
+			u = "http://" + u
+		open_live(live.open(u, u.get_slice("//", 1).get_slice("/", 0)))
+	url.text_submitted.connect(func(_t): go.call())
+	mr.add_child(_btn("Open", go, "primary"))
+	mr.add_child(_spacer())
+	mr.add_child(_btn("Grafana and Tautulli...", func(): open_providers()))
+	body.add_child(mr)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(4)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	if not live.sessions.is_empty():
+		list.add_child(_lbl("LIVE NOW  (%d of %d)" % [live.sessions.size(), live.MAX_SESSIONS], 13, ORANGE))
+		for s in live.sessions.values():
+			var r = _row(10)
+			r.add_child(_fixed(_lbl(str(s["title"]), 14), 300))
+			var ul = _lbl(str(s["url"]), 12, DIM)
+			ul.clip_text = true
+			ul.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			r.add_child(ul)
+			r.add_child(_btn("View", func(): open_live(s), "primary"))
+			r.add_child(_btn("Close", func():
+				live.close(s)
+				open_liveview()))
+			list.add_child(r)
+	list.add_child(_lbl("DISCOVERED ENDPOINTS", 13, ORANGE))
+	if src == "simulation":
+		var l = _lbl("This is a simulated cluster. Its services have no real application behind them, so LiveView has no page to open here. The Grafana and media machines in this world show demo content on their screens instead, each marked SIMULATED. Connect Docker or a Kubernetes cluster, or type an address above, for the real thing.", 14, K.health_color("warn"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 930
+		list.add_child(l)
+		if demo_screens != null:
+			list.add_child(_lbl("DEMO SCREENS IN THIS WORLD", 13, ORANGE))
+			for ds in demo_screens.screens():
+				var r = _row(10)
+				r.add_child(_fixed(_lbl(str(ds["name"]), 14), 420))
+				r.add_child(_lbl("simulated dashboard" if ds["kind"] == "grafana" else "simulated stream activity", 12, DIM))
+				r.add_child(_spacer())
+				r.add_child(_btn("View", func(): open_screen(str(ds["uid"])), "primary"))
+				list.add_child(r)
+		return
+	var eps = live.endpoints(cluster.state, src)
+	if eps.is_empty():
+		list.add_child(_lbl("Nothing that looks like a web endpoint was found (Docker published ports, Kubernetes Services).", 14, DIM))
+	if src == "kubernetes" and not cluster.backend.get("native"):
+		list.add_child(_lbl("Kubernetes Services need a port-forward, which the kubectl mode does not do here. Use the native connection (Esc > Clusters).", 13, K.health_color("warn")))
+	for e in eps:
+		var r = _row(10)
+		r.add_child(_fixed(_lbl(str(e["title"]), 14), 420))
+		r.add_child(_lbl("published port" if e["kind"] == "url" else "Service, opened through a loopback port-forward", 12, DIM))
+		r.add_child(_spacer())
+		r.add_child(_btn("Open", func(): _live_open_endpoint(e), "primary", e["kind"] == "url" or bool(cluster.backend.get("native"))))
+		list.add_child(r)
+
+func _live_open_endpoint(e: Dictionary) -> void:
+	if e["kind"] == "url":
+		var s = live.open(str(e["url"]), str(e["title"]))
+		s["target"] = e
+		open_live(s)
+		return
+	_lv_pending = e
+	var body = _open_modal("liveforward", null, "LIVEVIEW", Vector2(640, 200))
+	body.add_child(_lbl(str(e["title"]), 16))
+	body.add_child(_lbl("Opening a port-forward on this computer only (127.0.0.1)...", 13, DIM))
+	cluster.act({"op": "forward", "ns": e["ns"], "service": e["service"], "port": int(e["port"]), "key": "live:forward"})
+
+func _on_live_data(_key: String, r: Dictionary) -> void:
+	if _modal_kind != "liveforward" or _lv_pending.is_empty():
+		return
+	var e = _lv_pending
+	_lv_pending = {}
+	if not r.get("ok", false):
+		var s = {"key": "", "sid": "", "url": "", "title": str(e["title"]), "state": "failed", "kind": str(r.get("kind", "other")), "msg": str(r.get("msg", "failed")),
+			"tex": null, "w": 1280, "h": 720, "status": 0, "mounted": "", "blocked": ""}
+		open_live(s)
+		return
+	var s = live.open("%s://%s/" % [e.get("scheme", "http"), r["address"]], str(e["title"]))
+	s["target"] = e
+	open_live(s)
+
+# The viewer: one display, full size, taking your input.
+func open_live(s: Dictionary) -> void:
+	_lv = s
+	var body = _open_modal("liveview", null, "LIVEVIEW  //  " + str(s["title"]), Vector2(1500, 850))
+	_dyn = _col(6)
+	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(_dyn)
+	_fill_live()
+
+func on_live_changed(s: Dictionary) -> void:
+	if _modal_kind == "liveview" and s == _lv:
+		if s["state"] == "live" and _lv_rect != null and is_instance_valid(_lv_rect) and s["tex"] != null and _lv_rect.texture == s["tex"]:
+			return     # only the picture changed, and the texture updates itself
+		_fill_live()
+	elif _modal_kind == "livelist":
+		open_liveview()
+
+func _fill_live() -> void:
+	_clear(_dyn)
+	_lv_rect = null
+	var s = _lv
+	var bar = _row(8)
+	_dyn.add_child(bar)
+	if s["state"] == "live":
+		bar.add_child(_btn("  <  ", func(): live.navigate(s, "back")))
+		bar.add_child(_btn("Reload", func(): live.navigate(s, "reload")))
+	var ul = _lbl(str(s["url"]), 13, DIM)
+	ul.clip_text = true
+	ul.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(ul)
+	if int(s.get("status", 0)) in [401, 403]:
+		bar.add_child(_lbl("the application asks you to sign in (%d)" % s["status"], 13, K.health_color("warn")))
+	if str(s.get("blocked", "")) != "":
+		bar.add_child(_lbl("blocked a jump to %s" % s["blocked"], 13, K.health_color("warn")))
+	# mount it on the machine this endpoint belongs to, where there is one
+	var t = s.get("target", {})
+	var uid = ""
+	if not t.is_empty():
+		for p in cluster.state["pods"]:
+			if p["ns"] == t["ns"] and (p["name"] == t["service"] or p["wname"] == t["service"]):
+				uid = p["uid"]
+				break
+	if s["state"] == "live" and uid != "":
+		if str(s["mounted"]) == uid:
+			bar.add_child(_btn("Take it off the machine", func():
+				s["mounted"] = ""
+				live.changed.emit(s)
+				_fill_live()))
+		else:
+			bar.add_child(_btn("Show it on the machine's screen", func():
+				s["mounted"] = uid
+				live.changed.emit(s)
+				_fill_live(), "primary"))
+	if str(s["url"]) != "":
+		bar.add_child(_btn("Open in your browser", func(): OS.shell_open(str(s["url"]))))
+	if s["state"] in ["live", "opening"]:
+		bar.add_child(_btn("Close display", func():
+			live.close(s)
+			close_modal(), "danger"))
+	match s["state"]:
+		"opening":
+			_dyn.add_child(_lbl("Opening the page...", 16, DIM))
+		"failed", "closed":
+			var what = {"unreachable": "NOTHING ANSWERED", "tls": "CERTIFICATE NOT ACCEPTED", "timeout": "NO ANSWER IN TIME", "unsupported": "UNAVAILABLE",
+				"rbac": "NOT ALLOWED", "invalid": "NOT A WEB ADDRESS"}.get(str(s["kind"]), "COULD NOT OPEN") if s["state"] == "failed" else "DISPLAY CLOSED"
+			_dyn.add_child(_lbl(what, 20, RED))
+			var l = _lbl(str(s["msg"]), 15)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 1400
+			_dyn.add_child(l)
+			_dyn.add_child(_lbl("Nothing is shown in its place: a LiveView screen only ever shows the real application.", 13, DIM))
+		"live":
+			if cluster.read_only:
+				_dyn.add_child(_lbl("Read-only mode is on: you can watch this page, but your clicks and keys are not sent to it.", 13, K.health_color("warn")))
+			var tr = TextureRect.new()
+			tr.texture = s["tex"]
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tr.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			tr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			tr.focus_mode = Control.FOCUS_ALL
+			tr.mouse_filter = Control.MOUSE_FILTER_STOP
+			tr.gui_input.connect(_live_input)
+			_dyn.add_child(tr)
+			_lv_rect = tr
+			tr.grab_focus.call_deferred()
+			if s["tex"] == null:
+				_dyn.add_child(_lbl("Waiting for the first frame...", 13, DIM))
+
+# Where a point on the viewer lands on the page, in page pixels (or null if outside it).
+func _live_page_pos(local: Vector2) -> Variant:
+	var s = _lv
+	var box = _lv_rect.size
+	var scale = minf(box.x / float(s["w"]), box.y / float(s["h"]))
+	var shown = Vector2(s["w"], s["h"]) * scale
+	var p = (local - (box - shown) / 2.0) / scale
+	if p.x < 0 or p.y < 0 or p.x > s["w"] or p.y > s["h"]:
+		return null
+	return p
+
+const LIVE_KEYS = {KEY_ENTER: ["Enter", "Enter", 13], KEY_KP_ENTER: ["Enter", "NumpadEnter", 13], KEY_BACKSPACE: ["Backspace", "Backspace", 8], KEY_TAB: ["Tab", "Tab", 9],
+	KEY_DELETE: ["Delete", "Delete", 46], KEY_LEFT: ["ArrowLeft", "ArrowLeft", 37], KEY_UP: ["ArrowUp", "ArrowUp", 38], KEY_RIGHT: ["ArrowRight", "ArrowRight", 39],
+	KEY_DOWN: ["ArrowDown", "ArrowDown", 40], KEY_HOME: ["Home", "Home", 36], KEY_END: ["End", "End", 35], KEY_PAGEUP: ["PageUp", "PageUp", 33], KEY_PAGEDOWN: ["PageDown", "PageDown", 34]}
+
+func _live_input(ev: InputEvent) -> void:
+	if _lv.get("state") != "live" or _lv_rect == null or cluster.read_only:
+		return
+	if ev is InputEventMouseMotion:
+		var now = Time.get_ticks_msec()
+		if now - _lv_move_t < 33:
+			return
+		_lv_move_t = now
+		var p = _live_page_pos(ev.position)
+		if p != null:
+			live.input(_lv, "move", {"x": p.x, "y": p.y})
+	elif ev is InputEventMouseButton:
+		var p = _live_page_pos(ev.position)
+		if p == null:
+			return
+		_lv_rect.grab_focus()
+		match ev.button_index:
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
+				if ev.pressed:
+					live.input(_lv, "wheel", {"x": p.x, "y": p.y, "dy": -100.0 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 100.0})
+			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE:
+				var b = {MOUSE_BUTTON_LEFT: "left", MOUSE_BUTTON_RIGHT: "right", MOUSE_BUTTON_MIDDLE: "middle"}[ev.button_index]
+				live.input(_lv, "down" if ev.pressed else "up", {"x": p.x, "y": p.y, "button": b})
+		_lv_rect.accept_event()
+	elif ev is InputEventKey:
+		if ev.keycode == KEY_ESCAPE:
+			return     # Esc always belongs to the game: it closes the viewer
+		var mods = {"shift": ev.shift_pressed, "ctrl": ev.ctrl_pressed, "alt": ev.alt_pressed}
+		if LIVE_KEYS.has(ev.keycode):
+			var k = LIVE_KEYS[ev.keycode]
+			var a = {"key": k[0], "code": k[1], "vk": k[2], "down": ev.pressed}
+			a.merge(mods)
+			live.input(_lv, "key", a)
+		elif ev.pressed and ev.unicode >= 32 and not ev.ctrl_pressed:
+			live.input(_lv, "text", {"text": char(ev.unicode)})
+		elif ev.ctrl_pressed and ev.keycode >= KEY_A and ev.keycode <= KEY_Z:
+			var ch = char(ev.keycode).to_lower()
+			var a = {"key": ch, "code": "Key" + ch.to_upper(), "vk": ev.keycode, "down": ev.pressed}
+			a.merge(mods)
+			live.input(_lv, "key", a)
+		_lv_rect.accept_event()
+
+static func _hexdump(bytes: PackedByteArray, base: int) -> String:
+	var lines = PackedStringArray()
+	for off in range(0, mini(bytes.size(), 4096), 16):
+		var hx = ""
+		var asc = ""
+		for i in 16:
+			if off + i < bytes.size():
+				var b = bytes[off + i]
+				hx += "%02x " % b
+				asc += char(b) if b >= 32 and b < 127 else "."
+			else:
+				hx += "   "
+		lines.append("%08x  %s %s" % [base + off, hx, asc])
+	if bytes.size() > 4096:
+		lines.append("... (%d more bytes on this page not shown as hex)" % (bytes.size() - 4096))
+	return "\n".join(lines)
+
+func _fill_storage() -> void:
+	if _dyn == null or _modal_kind != "storage":
+		return
+	_clear(_dyn)
+	var h = _row(14)
+	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_dyn.add_child(h)
+	# left: the mounts, with the PV / PVC behind each
+	var left = _col(6)
+	left.custom_minimum_size.x = 330
+	h.add_child(left)
+	left.add_child(_lbl("MOUNTED VOLUMES", 13, ORANGE))
+	if _store["mounts"] == null:
+		left.add_child(_lbl("Reading the pod's volumes...", 13, DIM))
+	elif _store["mounts"].is_empty():
+		left.add_child(_lbl("Nothing is mounted into this workload." if _store["error"] == "" else _store["error"], 13, DIM if _store["error"] == "" else RED))
+	else:
+		for m in _store["mounts"]:
+			var sel = m.get("path") == _store["mount"].get("path") and m.get("container") == _store["mount"].get("container")
+			var pc = PanelContainer.new()
+			pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if sel else Color(0, 0, 0, 0), 1 if sel else 0, 8))
+			var v = _col(2)
+			pc.add_child(v)
+			var pl = _lbl(str(m["path"]), 14)
+			pl.clip_text = true
+			pl.custom_minimum_size.x = 300
+			v.add_child(pl)
+			var kind = {"pvc": "PersistentVolumeClaim", "configmap": "ConfigMap", "secret": "Secret", "projected": "service-account token", "emptydir": "emptyDir (scratch)",
+				"hostpath": "host path", "bind": "bind mount", "volume": "Docker volume", "csi": "CSI volume", "nfs": "NFS"}.get(str(m.get("type", "")), str(m.get("type", "")))
+			var line = kind + ("  ·  read-only" if m.get("read_only", false) else "")
+			v.add_child(_lbl(line, 12, DIM))
+			if str(m.get("claim", "")) != "":
+				var cl = _lbl("%s%s" % [m["claim"], ("  ->  PV " + str(m["pv"])) if str(m.get("pv", "")) != "" else ""], 12, K.tier_color(1))
+				cl.clip_text = true
+				cl.custom_minimum_size.x = 300
+				v.add_child(cl)
+			if str(m.get("capacity", "")) != "":
+				v.add_child(_lbl("%s  ·  %s  ·  %s" % [m["capacity"], m.get("storage_class", ""), m.get("phase", "")], 12, DIM))
+			if not m.get("readable", true):
+				v.add_child(_lbl("contents are never shown", 12, RED))
+			if not m.get("running", true):
+				v.add_child(_lbl("container not running", 12, K.health_color("warn")))
+			elif not sel:
+				v.add_child(_btn("Browse", func(): _store_dir(m, "")))
+			left.add_child(pc)
+	# right: the directory, or the file being previewed
+	var right = _col(6)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(right)
+	if _store["mount"].is_empty():
+		right.add_child(_lbl("Pick a volume to look inside." if _store["mounts"] != null else "", 14, DIM))
+		return
+	var crumbs = _row(4)
+	var root = str(_store["mount"]["path"])
+	crumbs.add_child(_btn(root, func(): _store_dir(_store["mount"], "")))
+	var acc = ""
+	for seg in str(_store["path"]).split("/", false):
+		acc = (acc + "/" + seg).trim_prefix("/")
+		var here = acc
+		crumbs.add_child(_lbl("/", 14, DIM))
+		crumbs.add_child(_btn(seg, func(): _store_dir(_store["mount"], here)))
+	right.add_child(crumbs)
+	if _store["error"] != "":
+		var el = _lbl(_store["error"], 14, RED)
+		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		el.custom_minimum_size.x = 580
+		right.add_child(el)
+	if _store["busy"]:
+		right.add_child(_lbl("Reading...", 13, DIM))
+	var f = _store["file"]
+	if f != null and f.get("data") != null:
+		var d = f["data"]
+		var bytes = Marshalls.base64_to_raw(str(d.get("data", "")))
+		var binary = false
+		var odd = 0
+		for i in mini(bytes.size(), 2048):
+			var b = bytes[i]
+			if b == 0:
+				binary = true
+			if b < 9 or (b > 13 and b < 32):
+				odd += 1
+		binary = binary or odd > 40
+		var head = _row(10)
+		head.add_child(_lbl(str(f["path"]).get_file(), 15))
+		head.add_child(_lbl("%s  ·  page %d of %d  ·  %s" % [K.fmt_bytes(float(d.get("size", 0))), int(d.get("page", 0)) + 1, maxi(int(d.get("pages", 1)), 1), "binary, shown as hex" if binary else "text"], 12, DIM))
+		head.add_child(_spacer())
+		head.add_child(_btn("  <  ", func(): _store_file(f["path"], int(d["page"]) - 1), "normal", int(d.get("page", 0)) > 0))
+		head.add_child(_btn("  >  ", func(): _store_file(f["path"], int(d["page"]) + 1), "normal", int(d.get("page", 0)) + 1 < int(d.get("pages", 1))))
+		head.add_child(_btn("Back to the folder", func(): _store_dir(_store["mount"], _store["path"])))
+		right.add_child(head)
+		var te = TextEdit.new()      # plain text only: nothing in a file is ever rendered or run
+		te.editable = false
+		te.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		te.add_theme_font_override("font", _mono)
+		te.add_theme_font_size_override("font_size", 12)
+		te.add_theme_stylebox_override("read_only", _sb(Color(0.03, 0.035, 0.04), Color(0.25, 0.26, 0.28), 1, 8))
+		te.add_theme_color_override("font_readonly_color", Color(0.78, 0.86, 0.8))
+		te.text = _hexdump(bytes, int(d.get("page", 0)) * 65536) if binary else bytes.get_string_from_utf8()
+		if bytes.is_empty():
+			te.text = "(this page is empty)"
+		right.add_child(te)
+		return
+	var li = _store["list"]
+	if li == null:
+		return
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var rows = _col(2)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(rows)
+	right.add_child(sc)
+	var es = li.get("entries", [])
+	var st_get = {"name": func(e): return e["name"], "size": func(e): return float(e["size"]) if e["type"] == "file" else -1.0, "mode": func(e): return str(e.get("mode", "")), "mtime": func(e): return str(e.get("mtime", ""))}
+	var st_fill = func():
+		_clear(rows)
+		var shown = _table_rows("storage", es, st_get)
+		if es.is_empty():
+			rows.add_child(_lbl("This folder is empty.", 13, DIM))
+		elif shown.is_empty():
+			rows.add_child(_lbl("Nothing in this folder contains that.", 13, DIM))
+		for e in shown:
+			rows.add_child(_storage_row(e, li))
+		if li.get("truncated", false):
+			rows.add_child(_lbl("Only the first 500 entries are listed.", 12, K.health_color("warn")))
+		if not li.get("readable", true):
+			rows.add_child(_lbl("Names only: the contents of this kind of volume are never shown.", 12, RED))
+	right.add_child(_table_head("storage", [["name", "NAME", 300], ["size", "SIZE", 110], ["mode", "MODE", 96], ["mtime", "CHANGED", 160]], st_fill, es.size()))
+	right.move_child(right.get_child(right.get_child_count() - 1), sc.get_index())
+	st_fill.call()
+
+func _storage_row(e: Dictionary, li: Dictionary) -> Control:
+	if true:
+		var r = _row(8)
+		var sub = (str(_store["path"]) + "/" + str(e["name"])).trim_prefix("/")
+		match str(e["type"]):
+			"dir":
+				r.add_child(_fixed(_btn(str(e["name"]) + "/", func(): _store_dir(_store["mount"], sub)), 300))
+			"file":
+				r.add_child(_fixed(_btn(str(e["name"]), func(): _store_file(sub, 0), "normal", li.get("readable", true)), 300))
+			"link":
+				var ll = _lbl("%s  ->  %s" % [e["name"], e.get("link", "")], 13, K.health_color("warn"))
+				ll.clip_text = true
+				r.add_child(_fixed(ll, 300))
+			_:
+				r.add_child(_fixed(_lbl(str(e["name"]), 13, DIM), 300))
+		r.add_child(_fixed(_lbl(K.fmt_bytes(float(e["size"])) if e["type"] == "file" else ("link, not followed" if e["type"] == "link" else ""), 12, DIM), 110))
+		r.add_child(_fixed(_lbl(str(e.get("mode", "")), 12, DIM), 96))
+		r.add_child(_lbl(str(e.get("mtime", "")), 12, DIM))
+		return r
+	return null
+
+# ----- connecting a cluster from a kubeconfig, without kubectl (native companion)
+
+const AUTH_WORDS = {"token": "bearer token", "client-cert": "client certificate", "exec": "credential helper",
+	"auth-provider": "auth provider plugin", "basic": "username and password", "none": "no credentials"}
+
+func open_connect(focus_profile: String = "", failure: Dictionary = {}) -> void:
+	var body = _open_modal("connect", focus_profile, "CONNECT A CLUSTER", Vector2(1040, 660))
+	if not Agent.available():
+		var l = _lbl(Agent.why_unavailable() + "\n\nWithout it, Kubernetes is reached the old way: through a kubectl on PATH and whatever kubeconfig kubectl is set up with (start with --kubectl-cli).", 15, K.health_color("warn"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 980
+		body.add_child(l)
+		return
+	var intro = _lbl("Add a kubeconfig and pick a context. No kubectl, WSL or Docker is needed: the game talks to the cluster's API itself. The file is only read to connect; its contents are never logged or copied anywhere.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 990
+	body.add_child(intro)
+	var add = _row(10)
+	add.add_child(_btn("Choose a kubeconfig file...", func():
+		DisplayServer.file_dialog_show("Choose a kubeconfig", OS.get_environment("USERPROFILE").path_join(".kube"), "", true,
+			DisplayServer.FILE_DIALOG_MODE_OPEN_FILE, PackedStringArray(["*.yaml,*.yml,*.conf,*.config;Kubeconfig", "*;All files"]),
+			func(ok, paths, _i):
+				if ok and paths.size() > 0:
+					var p = Connections.add_file(str(paths[0]))
+					open_connect.call_deferred(str(p.get("id", "")))), "primary"))
+	add.add_child(_btn("Paste a kubeconfig...", _open_connect_paste))
+	add.add_child(_lbl("or drop a kubeconfig file onto this window", 13, DIM))
+	body.add_child(add)
+	if not failure.is_empty():
+		body.add_child(_connect_failure(failure))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(8)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	var profs = Connections.profiles()
+	if profs.is_empty():
+		list.add_child(_lbl("No kubeconfig yet. Nothing was found in the default place (%s)." % OS.get_environment("USERPROFILE").path_join(".kube\\config"), 15, DIM))
+	for pr in profs:
+		var pc = PanelContainer.new()
+		var focus = str(pr["id"]) == focus_profile
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if focus else Color(0, 0, 0, 0), 1 if focus else 0, 10))
+		var v = _col(6)
+		pc.add_child(v)
+		var head = _row(10)
+		head.add_child(_lbl(str(pr["name"]), 17, ORANGE))
+		head.add_child(_lbl("pasted, kept in the game's user folder" if pr.get("pasted", false) else str(pr["path"]), 12, DIM))
+		head.add_child(_spacer())
+		if not pr.get("implicit", false):
+			head.add_child(_btn("Forget", func():
+				Connections.remove(str(pr["id"]))
+				open_connect()))
+		v.add_child(head)
+		var ctxs = Native.contexts_of(Connections.source_of(pr))
+		if ctxs.is_empty():
+			v.add_child(_lbl("This file could not be read as a kubeconfig.", 14, RED))
+		for c in ctxs:
+			var r = _row(10)
+			var active = cluster.backend != null and cluster.backend.label == "kubernetes" and cluster.backend.context == c["context"]
+			r.add_child(_fixed(_lbl(("● " if active else "") + str(c["context"]), 15, K.health_color("ok") if active else TXT), 250))
+			r.add_child(_fixed(_lbl(str(c["provider"]), 13, K.provider_color(c["provider"]).lightened(0.3)), 120))
+			var detail = "%s  ·  %s" % [str(c["server"]).trim_prefix("https://"), AUTH_WORDS.get(c["auth"], c["auth"])]
+			if c["auth"] in ["exec", "auth-provider"]:
+				detail += ": " + str(c["exec"])
+			if c["insecure"]:
+				detail += "  ·  TLS verification is switched off in this file"
+			var dl = _lbl(detail if c["problem"] == "" else c["problem"], 12, DIM if c["problem"] == "" else K.health_color("warn"))
+			dl.clip_text = true
+			dl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			r.add_child(dl)
+			if active:
+				r.add_child(_lbl("CONNECTED  ", 13, K.health_color("ok")))
+			else:
+				r.add_child(_btn("Connect", func():
+					_connect_wait(pr, c), "primary"))
+			v.add_child(r)
 		list.add_child(pc)
+
+func _connect_wait(pr: Dictionary, c: Dictionary) -> void:
+	var t = c.duplicate()
+	t["source"] = "kubernetes"
+	t["profile"] = str(pr["id"])
+	var body = _open_modal("connecting", t, "CONNECTING", Vector2(640, 200))
+	body.add_child(_lbl("%s\n%s" % [c["context"], str(c["server"])], 16))
+	body.add_child(_lbl("Checking the certificate, signing in, reading what this account may do...", 13, DIM))
+	target_requested.emit(t)
+
+# The cluster manager reports how a connection attempt ended.
+func on_connect_result(failure: Dictionary) -> void:
+	if _modal_kind != "connecting":
+		return
+	if failure.is_empty():
+		close_modal()
+	else:
+		open_connect(str(failure.get("profile", "")), failure)
+
+# Each kind of failure is shown as what it is, with the one thing that fixes it.
+func _connect_failure(f: Dictionary) -> Control:
+	var kind = str(f.get("kind", "other"))
+	var pc = PanelContainer.new()
+	var sb = _sb(Color(0.2, 0.07, 0.06), RED, 0, 12)
+	sb.border_width_left = 4
+	pc.add_theme_stylebox_override("panel", sb)
+	var v = _col(6)
+	pc.add_child(v)
+	v.add_child(_lbl("%s  -  could not connect to %s" % [Agent.kind_title(kind), f.get("context", "")], 15, RED))
+	var why = {"auth": "The cluster did not accept these credentials. They may have expired: get a fresh kubeconfig or token.",
+		"tls": "The cluster's certificate does not match the authority in this kubeconfig, so the connection was refused. Nothing was sent.",
+		"rbac": "You are signed in, but this account is not allowed to do that.",
+		"timeout": "The cluster did not answer in time. Check the network or VPN.",
+		"unreachable": "Nothing answered at the cluster's address. Check the network, VPN, or whether the cluster is running.",
+		"needs_base_dir": "The pasted kubeconfig points at certificate or token files by relative path. Choose the folder they are in.",
+		"exec_untrusted": "This context gets its credentials by running a program on this computer. A kubeconfig can name any program, so it is not run until you approve it."}.get(kind, "")
+	for line in [why, str(f.get("msg", ""))]:
+		if line == "":
+			continue
+		var l = _lbl(line, 13, TXT if line == why else DIM)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 960
+		v.add_child(l)
+	var prof = Connections.find(str(f.get("profile", "")))
+	var retry = func():
+		for c in Native.contexts_of(Connections.source_of(prof)):
+			if c["context"] == f.get("context", ""):
+				_connect_wait(prof, c)
+	if kind == "exec_untrusted" and not prof.is_empty():
+		var cmd = str(f.get("extra", {}).get("command", ""))
+		v.add_child(_lbl("Program:  " + cmd, 15, K.health_color("warn")))
+		v.add_child(_btn("I trust this kubeconfig: allow \"%s\" for this context and connect" % cmd, func():
+			Connections.trust_exec(prof, str(f.get("context", "")), cmd)
+			retry.call(), "mk3"))
+	elif kind == "needs_base_dir" and not prof.is_empty():
+		v.add_child(_btn("Choose the folder...", func():
+			DisplayServer.file_dialog_show("Folder holding the certificate files", "", "", true, DisplayServer.FILE_DIALOG_MODE_OPEN_DIR, PackedStringArray(),
+				func(ok, paths, _i):
+					if ok and paths.size() > 0:
+						Connections.set_base_dir(str(prof["id"]), str(paths[0]))
+						open_connect.call_deferred(str(prof["id"]))), "primary"))
+	elif not prof.is_empty():
+		v.add_child(_btn("Try again", retry))
+	return pc
+
+func _open_connect_paste() -> void:
+	var body = _open_modal("connect_paste", null, "PASTE A KUBECONFIG", Vector2(900, 620))
+	body.add_child(_lbl("Paste the whole file. It is saved in the game's own user folder so the connection can be reused, and nowhere else.", 13, DIM))
+	var nr = _row(10)
+	nr.add_child(_lbl("NAME", 12, DIM))
+	var name_edit = LineEdit.new()
+	name_edit.placeholder_text = "e.g. homelab"
+	name_edit.custom_minimum_size.x = 300
+	nr.add_child(name_edit)
+	body.add_child(nr)
+	var te = TextEdit.new()
+	te.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	te.custom_minimum_size.y = 380
+	te.add_theme_font_override("font", _mono)
+	te.add_theme_font_size_override("font_size", 12)
+	te.placeholder_text = "apiVersion: v1\nkind: Config\n..."
+	body.add_child(te)
+	var warn = _lbl("", 13, RED)
+	body.add_child(warn)
+	var r = _row()
+	r.add_child(_btn("Paste from clipboard", func(): te.text = DisplayServer.clipboard_get()))
+	r.add_child(_spacer())
+	r.add_child(_btn("Back", func(): open_connect()))
+	r.add_child(_btn("Read it", func():
+		var chk = Agent.request("kubeconfig.inspect", {"content": te.text, "base_dir": "."}, 15.0)
+		if not chk["ok"]:
+			warn.text = chk["msg"]
+			return
+		var p = Connections.add_pasted(te.text, name_edit.text.strip_edges())
+		open_connect(str(p.get("id", ""))), "primary"))
+	body.add_child(r)
+	te.grab_focus.call_deferred()
 
 # ----- demo worlds: the simulated clusters you can try without connecting to anything
 
@@ -1381,7 +2192,63 @@ func on_action(a: Dictionary, r: Dictionary) -> void:
 
 const BOB_COL = Color(1.0, 0.8, 0.45)
 
+# A Krew member's portrait as they now are: their own model from the library,
+# lit and slowly turning in a little viewport of its own. Returns null where the
+# library is not used (the browser build), and the drawn portrait is shown instead.
+func _krew_portrait(id: String, bg: Color, head: bool) -> Control:
+	if not Models.available():
+		return null
+	var model = Models.instance(id)
+	if model == null:
+		return null
+	var box = TextureRect.new()
+	box.custom_minimum_size = Vector2(210, 230)
+	box.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	box.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	var vp = SubViewport.new()
+	vp.size = Vector2i(420, 460)
+	vp.own_world_3d = true
+	vp.transparent_bg = false
+	vp.msaa_3d = Viewport.MSAA_4X
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	box.add_child(vp)
+	box.texture = vp.get_texture()
+	var env = Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = bg
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.75, 0.8, 0.9)
+	env.ambient_light_energy = 0.9
+	var we = WorldEnvironment.new()
+	we.environment = env
+	vp.add_child(we)
+	var sun = DirectionalLight3D.new()
+	sun.rotation = Vector3(-0.7, 0.6, 0)
+	sun.light_energy = 1.5
+	vp.add_child(sun)
+	var b: AABB = model.get_meta("bounds")
+	var pivot = Node3D.new()
+	vp.add_child(pivot)
+	model.position = Vector3(-b.get_center().x, 0, -b.get_center().z)     # it turns about its own middle
+	pivot.add_child(model)
+	var cam = Camera3D.new()
+	cam.fov = 32.0
+	# a head-and-shoulders view for a figure, the whole of it for a vehicle
+	var look = Vector3(0, b.position.y + b.size.y * (0.68 if head else 0.5), 0)
+	var dist = b.size.y * 1.25 if head else maxf(b.size.x, maxf(b.size.y, b.size.z)) * 1.55
+	var cam_at = look + Vector3(0.28, 0.12 if head else 0.3, 1.0).normalized() * dist
+	cam.transform = Transform3D(Basis.looking_at(look - cam_at), cam_at)      # set outright: the viewport is not in the tree yet
+	vp.add_child(cam)
+	var tw = pivot.create_tween().set_loops()
+	pivot.rotation.y = -0.45
+	tw.tween_property(pivot, "rotation:y", 0.45, 4.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(pivot, "rotation:y", -0.45, 4.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return box
+
 func _bob_portrait() -> Control:
+	var model_view = _krew_portrait("bob", Color(0.1, 0.085, 0.06), true)
+	if model_view != null:
+		return model_view
 	# an old hand drawn from rectangles: flat cap, white hair and moustache, glasses, green cardigan
 	var c = Control.new()
 	c.custom_minimum_size = Vector2(210, 230)
@@ -1525,7 +2392,7 @@ func open_bob_case(uid: String) -> void:
 	var left = _col(6)
 	left.add_child(_bob_portrait())
 	left.add_child(_lbl("BOB", 18, BOB_COL))
-	left.add_child(_lbl("Reading glasses on", 12, DIM))
+	left.add_child(_lbl("Reading the log", 12, DIM))
 	left.add_child(_spacer())
 	left.add_child(_btn("Back to the fix list", open_bob))
 	left.add_child(_btn("Open the full log", func(): open_pod(uid)))
@@ -1640,6 +2507,9 @@ func _portainer_installed() -> bool:
 	return false
 
 func _portrait() -> Control:
+	var model_view = _krew_portrait("porter", Color(0.05, 0.09, 0.11), false)
+	if model_view != null:
+		return model_view
 	# a little robot face drawn from rectangles: hard hat, visor, blue overalls
 	var c = Control.new()
 	c.custom_minimum_size = Vector2(210, 230)
@@ -2045,19 +2915,85 @@ func open_welcome() -> void:
 		else:
 			close_modal(), "primary"))
 
+# ----- graphics presets (scripts/gfx.gd). They change how the world is drawn,
+# never what you can do in it.
+
+func open_graphics() -> void:
+	var body = _open_modal("graphics", null, "GRAPHICS", Vector2(820, 520))
+	var rec = Gfx.recommend()
+	var intro = _lbl("Three presets on the same world. Every tool, panel and action works identically on all of them; Standard is the look the game has always had and nothing is ever drawn below it.", 14, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 780
+	body.add_child(intro)
+	for lv in 3:
+		var active = Gfx.level == lv
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if active else Color(0, 0, 0, 0), 1 if active else 0, 10))
+		var r = _row(12)
+		var v = _col(2)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var head = _row(10)
+		head.add_child(_lbl(Gfx.NAMES[lv].to_upper(), 17, ORANGE if active else TXT))
+		if rec["level"] == lv:
+			head.add_child(_lbl("recommended for this machine", 12, K.health_color("ok")))
+		v.add_child(head)
+		v.add_child(_lbl(Gfx.BLURB[lv], 13, DIM))
+		r.add_child(v)
+		if active and Gfx.chosen != "auto":
+			r.add_child(_lbl("IN USE   ", 14, K.health_color("ok")))
+		else:
+			r.add_child(_btn("In use (automatic) - pin it" if active else "Use", func():
+				graphics_requested.emit(Gfx.id_of(lv))
+				open_graphics(), "primary" if not active else "normal"))
+		pc.add_child(r)
+		body.add_child(pc)
+	var auto = _row(10)
+	auto.add_child(_btn("Automatic: follow the recommendation", func():
+		graphics_requested.emit("auto")
+		open_graphics(), "normal", Gfx.chosen != "auto"))
+	auto.add_child(_spacer())
+	auto.add_child(_btn("Back", open_pause))
+	body.add_child(auto)
+	var hw = _lbl("Detected: %s%s. Changing preset rebuilds the scenery in place; the cluster connection, your position and open work are not affected." % [rec["gpu"], (" - " + rec["why"]) if rec["why"] != "" else ""], 12, DIM)
+	hw.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hw.custom_minimum_size.x = 780
+	body.add_child(hw)
+
 # ----- pause menu
 
 func open_pause() -> void:
 	var body = _open_modal("pause", null, "KUBEFACTORY  %s" % version, Vector2(480, 540))
 	body.add_child(_btn("Resume", close_modal, "primary"))
+	if touch != null:
+		body.add_child(_btn("Touch controls:  %s" % ("ON" if touch.allowed else "OFF"), func():
+			touch.set_allowed(not touch.allowed)
+			open_pause()))
+		if touch.active:
+			var sr = _row(8)
+			sr.add_child(_lbl("Look sensitivity  %d%%" % int(round(touch.sensitivity * 100.0)), 14))
+			sr.add_child(_spacer())
+			sr.add_child(_btn("  -  ", func():
+				touch.sensitivity = clampf(touch.sensitivity - 0.2, 0.4, 2.6)
+				open_pause()))
+			sr.add_child(_btn("  +  ", func():
+				touch.sensitivity = clampf(touch.sensitivity + 0.2, 0.4, 2.6)
+				open_pause()))
+			body.add_child(sr)
+			var th = _lbl("Left thumb: move.  Drag the view: look.  ACTION: what the crosshair offers (hold it for a tool's action).  JUMP twice: hoverpack.  AIM: face the nearest machine ahead.", 12, DIM)
+			th.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			th.custom_minimum_size.x = 440
+			body.add_child(th)
 	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
 	body.add_child(_btn("Logging station  (L)", func(): open_logs()))
+	body.add_child(_btn("LiveView: applications on screens  (V)", open_liveview))
 	body.add_child(_btn("Read-only mode:  %s" % ("ON" if cluster.read_only else "OFF"), func():
 		cluster.read_only = not cluster.read_only
 		on_state(cluster.state)
 		open_pause()))
+	if not Gfx.lite():
+		body.add_child(_btn("Graphics  (%s)" % (Gfx.NAMES[Gfx.level] + (", automatic" if Gfx.chosen == "auto" else "")), open_graphics))
 	body.add_child(_btn("Conveyor belts:  %s" % ("ON" if world.show_belts else "OFF"), func():
 		world.show_belts = not world.show_belts
 		world.apply_state(cluster.state)
@@ -2091,3 +3027,486 @@ func open_pause() -> void:
 	body.add_child(_btn("How to play", open_welcome))
 	body.add_child(_spacer())
 	body.add_child(_btn("Quit to desktop", func(): get_tree().quit(), "danger"))
+
+# ----- LiveView providers: Grafana and Tautulli (scripts/providers.gd, agent/providers.go)
+#
+# Setting one up, choosing a dashboard or panel, and the media activity panel.
+# A token typed here goes straight to the companion and is not kept by the game.
+
+var providers: Node = null       # set by main
+var _prov_list = []
+var _prov_cur = {}
+
+func _prov_fail(r: Dictionary) -> String:
+	return "%s: %s" % [Agent.kind_title(str(r.get("kind", "other"))), str(r.get("msg", "failed"))]
+
+func open_providers(msg: String = "", ok: bool = true) -> void:
+	var body = _open_modal("providers", null, "LIVEVIEW  //  GRAFANA AND TAUTULLI", Vector2(1060, 660))
+	var intro = _lbl("Point KubeFactory at a Grafana or Tautulli you already run. Dashboards and panels open as the real pages, in a private browser where you sign in yourself. An API token is only used to list dashboards and read activity; it is kept by this computer's own protected storage and never shown again.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 1010
+	body.add_child(intro)
+	if providers == null or not providers.available():
+		var l = _lbl("Providers are not available here. " + Agent.why_unavailable(), 15, K.health_color("warn"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 1010
+		body.add_child(l)
+		return
+	_dyn = _col(6)
+	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(_dyn)
+	_dyn.add_child(_lbl("Reading...", 13, DIM))
+	providers.ask("provider.list", {}, func(r):
+		if _modal_kind != "providers":
+			return
+		_clear(_dyn)
+		if msg != "":
+			var ml = _lbl(msg, 14, K.health_color("ok") if ok else K.health_color("warn"))
+			ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			ml.custom_minimum_size.x = 1010
+			_dyn.add_child(ml)
+		if not r["ok"]:
+			_dyn.add_child(_lbl(_prov_fail(r), 14, RED))
+			return
+		_prov_list = r["data"].get("providers", [])
+		var top = _row(8)
+		top.add_child(_btn("Add Grafana", func(): _provider_form("grafana", {}), "primary"))
+		top.add_child(_btn("Add Tautulli", func(): _provider_form("tautulli", {}), "primary"))
+		top.add_child(_spacer())
+		top.add_child(_btn("Back to LiveView", func(): open_liveview()))
+		_dyn.add_child(top)
+		if not bool(r["data"].get("can_store_tokens", false)):
+			_dyn.add_child(_lbl("This system has no protected storage KubeFactory can use, so tokens cannot be saved here.", 13, K.health_color("warn")))
+		_dyn.add_child(_lbl("YOUR PROVIDERS", 13, ORANGE))
+		if _prov_list.is_empty():
+			_dyn.add_child(_lbl("None yet.", 14, DIM))
+		for p in _prov_list:
+			var row = _row(8)
+			row.add_child(_fixed(_lbl(str(p["name"]), 15), 230))
+			var info = "%s   ·   %s   ·   %s" % ["Grafana" if p["type"] == "grafana" else "Tautulli", str(p["base_url"]), "token saved" if p["has_token"] else "no token"]
+			if bool(p.get("plain_http", false)):
+				info += "   ·   plain http"
+			var il = _lbl(info, 12, DIM)
+			il.clip_text = true
+			il.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(il)
+			if p["type"] == "grafana":
+				row.add_child(_btn("Dashboards", func(): open_grafana(p), "primary"))
+			else:
+				row.add_child(_btn("Activity", func(): open_tautulli(p), "primary"))
+			row.add_child(_btn("Open", func(): _provider_open_ui(p)))
+			row.add_child(_btn("Test", func(): _provider_test(p)))
+			row.add_child(_btn("Edit", func(): _provider_form(str(p["type"]), p)))
+			row.add_child(_btn("Remove", func():
+				providers.ask("provider.remove", {"id": p["id"]}, func(_r): open_providers("%s removed. Its token is gone with it." % p["name"])), "danger"))
+			_dyn.add_child(row)
+		# machines that run one of the two: a suggestion, confirmed by you in the form
+		var src = cluster.backend.label if cluster.backend != null else ""
+		var cands = providers.candidates(cluster.state, src) if src != "simulation" else []
+		if not cands.is_empty():
+			_dyn.add_child(_lbl("FOUND RUNNING HERE  (by the image it runs; nothing has been contacted)", 13, ORANGE))
+		for c in cands:
+			var row = _row(8)
+			row.add_child(_fixed(_lbl("%s/%s" % [c["ns"], c["name"]], 14), 420))
+			row.add_child(_lbl(str(c["url"]) if c["url"] != "" else "address not known: open it from LiveView's endpoint list, or type its address", 12, DIM))
+			row.add_child(_spacer())
+			row.add_child(_btn("Set up", func(): _provider_form(str(c["type"]), {}, str(c["url"]))))
+			_dyn.add_child(row)
+		if src == "simulation":
+			_dyn.add_child(_lbl("This is a simulated cluster: its Grafana and Tautulli machines are not real applications. A provider you add here still talks to a real one.", 13, DIM)))
+
+func _provider_test(p: Dictionary) -> void:
+	open_providers("Testing %s..." % p["name"])
+	providers.ask("provider.test", {"id": p["id"]}, func(r):
+		if _modal_kind != "providers":
+			return
+		if r["ok"]:
+			var d = r["data"]
+			open_providers("%s: this is %s%s. Token: %s." % [p["name"], d["app"], (" " + str(d["version"])) if str(d.get("version", "")) != "" else "", d["token"]])
+		else:
+			open_providers("%s: %s" % [p["name"], _prov_fail(r)], false))
+
+func _provider_form(type: String, p: Dictionary, prefill_url: String = "") -> void:
+	var title = "Grafana" if type == "grafana" else "Tautulli"
+	var body = _open_modal("providerform", null, "LIVEVIEW  //  %s %s" % ["EDIT" if not p.is_empty() else "ADD", title.to_upper()], Vector2(820, 520))
+	var mk = func(caption: String, text: String, hint: String, secret: bool) -> LineEdit:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(caption, 13, DIM), 130))
+		var e = LineEdit.new()
+		e.text = text
+		e.placeholder_text = hint
+		e.secret = secret
+		e.custom_minimum_size.x = 600
+		r.add_child(e)
+		body.add_child(r)
+		return e
+	var name_e: LineEdit = mk.call("NAME", str(p.get("name", "")), "what to call it (optional)", false)
+	var url_e: LineEdit = mk.call("ADDRESS", str(p.get("base_url", prefill_url)), "https://grafana.example.org/grafana" if type == "grafana" else "https://tautulli.example.org", false)
+	var tok_e: LineEdit = mk.call("TOKEN" if type == "grafana" else "API KEY", "", "saved: leave empty to keep it" if bool(p.get("has_token", false)) else ("a service account token with Viewer rights" if type == "grafana" else "Tautulli > Settings > Web Interface > API key"), true)
+	var help = _lbl("Grafana: Administration > Users and access > Service accounts > add one with the Viewer role > add a token. It is used only to list dashboards and panels; the pages themselves use your own sign-in." if type == "grafana"
+		else "The key is used for one read-only request: current activity as totals. Nothing about who is watching what is read or shown. Tautulli keys are powerful, so it never leaves this computer's companion.", 12, DIM)
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	help.custom_minimum_size.x = 770
+	body.add_child(help)
+	var allow_http = [bool(p.get("allow_http", false))]
+	var legacy = [bool(p.get("legacy_query_key", false))]
+	body.add_child(_check("Accept plain http to another computer (the token travels unprotected: only on a network you trust)", allow_http[0], func(on): allow_http[0] = on))
+	if type == "tautulli":
+		body.add_child(_check("Old Tautulli (before 2.18): send the key in the address instead of a header (it can end up in that server's logs)", legacy[0], func(on): legacy[0] = on))
+	var status = _lbl("", 13, RED)
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status.custom_minimum_size.x = 770
+	body.add_child(status)
+	var bar = _row(8)
+	bar.add_child(_btn("Save and test", func():
+		var args = {"id": str(p.get("id", "")), "type": type, "name": name_e.text.strip_edges(), "base_url": url_e.text.strip_edges(),
+			"token": tok_e.text, "allow_http": allow_http[0], "legacy_query_key": legacy[0]}
+		tok_e.text = ""        # the game keeps no copy
+		status.text = "Saving..."
+		providers.ask("provider.save", args, func(r):
+			if _modal_kind != "providerform":
+				return
+			if not r["ok"]:
+				status.text = _prov_fail(r)
+				return
+			_provider_test(r["data"])), "primary"))
+	bar.add_child(_btn("Cancel", func(): open_providers()))
+	body.add_child(bar)
+
+# The provider's own web interface on a display.
+func _provider_open_ui(p: Dictionary) -> void:
+	providers.ask("provider.link", {"id": p["id"]}, func(r):
+		if r["ok"]:
+			_provider_show(str(r["data"]["url"]), str(p["name"]), str(p["type"]))
+		else:
+			open_providers(_prov_fail(r), false))
+
+# Open a provider page through LiveView, tied to the machine that runs the
+# application (when there is one) so it can go on that machine's screen.
+func _provider_show(url: String, title: String, type: String) -> void:
+	var s = live.open(url, title)
+	var src = cluster.backend.label if cluster.backend != null else ""
+	for c in providers.candidates(cluster.state, src):
+		if c["type"] == type:
+			s["target"] = {"ns": c["ns"], "service": c["pod"]}
+			break
+	open_live(s)
+
+# ---- Grafana: dashboards, then panels
+
+func open_grafana(p: Dictionary, query: String = "") -> void:
+	_prov_cur = p
+	var body = _open_modal("grafana", null, "GRAFANA  //  %s" % p["name"], Vector2(1000, 660))
+	var sr = _row(8)
+	var q = LineEdit.new()
+	q.text = query
+	q.placeholder_text = "find a dashboard"
+	q.custom_minimum_size.x = 520
+	q.text_submitted.connect(func(t): open_grafana(p, t))
+	sr.add_child(q)
+	sr.add_child(_btn("Search", func(): open_grafana(p, q.text), "primary"))
+	sr.add_child(_spacer())
+	sr.add_child(_btn("Providers", func(): open_providers()))
+	body.add_child(sr)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(4)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	list.add_child(_lbl("Reading...", 13, DIM))
+	providers.ask("grafana.dashboards", {"id": p["id"], "query": query, "page": 1}, func(r):
+		if _modal_kind != "grafana":
+			return
+		_clear(list)
+		if not r["ok"]:
+			var l = _lbl(_prov_fail(r), 14, RED)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 940
+			list.add_child(l)
+			return
+		var ds = r["data"].get("dashboards", [])
+		var more = bool(r["data"].get("more", false))
+		var rows_box = _col(4)
+		var gd_fill = func():
+			_clear(rows_box)
+			var shown = _table_rows("grafana", ds, {"title": func(d): return d["title"], "folder": func(d): return str(d.get("folder", ""))})
+			if shown.is_empty():
+				rows_box.add_child(_lbl("No dashboard matches, or the token may not see any." if ds.is_empty() else "No dashboard here contains that.", 14, DIM))
+			for d in shown:
+				var row = _row(8)
+				row.add_child(_fixed(_lbl(str(d["title"]), 15), 480))
+				row.add_child(_fixed(_lbl(str(d.get("folder", "")), 12, DIM), 220))
+				row.add_child(_spacer())
+				row.add_child(_btn("Panels", func(): open_grafana_panels(p, d)))
+				row.add_child(_btn("Open dashboard", func(): _grafana_open(p, d, 0, "", {}), "primary"))
+				rows_box.add_child(row)
+			if more:
+				rows_box.add_child(_lbl("More than 100 match: narrow the search.", 12, DIM))
+		list.add_child(_table_head("grafana", [["title", "DASHBOARD", 480], ["folder", "FOLDER", 220]], gd_fill, ds.size()))
+		list.add_child(rows_box)
+		gd_fill.call())
+
+const GRAFANA_RANGES = [["the dashboard's own range", ""], ["last hour", "now-1h"], ["last 6 hours", "now-6h"], ["last 24 hours", "now-24h"], ["last 7 days", "now-7d"]]
+
+func open_grafana_panels(p: Dictionary, dash: Dictionary) -> void:
+	var body = _open_modal("grafana", null, "GRAFANA  //  %s" % dash["title"], Vector2(1000, 660))
+	var top = _row(8)
+	top.add_child(_lbl("TIME RANGE", 12, DIM))
+	var range_pick = OptionButton.new()
+	for g in GRAFANA_RANGES:
+		range_pick.add_item(g[0])
+	top.add_child(range_pick)
+	top.add_child(_spacer())
+	top.add_child(_btn("Dashboards", func(): open_grafana(p)))
+	body.add_child(top)
+	var var_box = _col(4)
+	body.add_child(var_box)
+	var var_edits = {}
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(4)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	list.add_child(_lbl("Reading...", 13, DIM))
+	var open = func(panel: int):
+		var vars = {}
+		for k in var_edits:
+			if var_edits[k].text.strip_edges() != "":
+				vars[k] = var_edits[k].text.strip_edges()
+		_grafana_open(p, dash, panel, GRAFANA_RANGES[range_pick.selected][1], vars)
+	providers.ask("grafana.panels", {"id": p["id"], "uid": dash["uid"]}, func(r):
+		if _modal_kind != "grafana":
+			return
+		_clear(list)
+		if not r["ok"]:
+			var l = _lbl(_prov_fail(r), 14, RED)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 940
+			list.add_child(l)
+			return
+		var d = r["data"]
+		# the dashboard's own variables: set by you, never guessed from a workload's name
+		for v in d.get("variables", []):
+			var vr = _row(8)
+			vr.add_child(_fixed(_lbl("VARIABLE  " + str(v), 12, DIM), 260))
+			var e = LineEdit.new()
+			e.placeholder_text = "leave empty for the dashboard's default"
+			e.custom_minimum_size.x = 400
+			vr.add_child(e)
+			var_box.add_child(vr)
+			var_edits[str(v)] = e
+		var whole = _row(8)
+		whole.add_child(_fixed(_lbl("The whole dashboard", 15), 480))
+		whole.add_child(_spacer())
+		whole.add_child(_btn("Open", func(): open.call(0), "primary"))
+		list.add_child(whole)
+		if not bool(d.get("panels_readable", true)):
+			var l = _lbl("This dashboard is in a layout whose panels KubeFactory cannot list. Nothing is made up: open the whole dashboard instead.", 13, K.health_color("warn"))
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 940
+			list.add_child(l)
+		var pns: Array = d.get("panels", [])
+		var prow_box = _col(4)
+		var gp_fill = func():
+			_clear(prow_box)
+			for pn in _table_rows("grafana-panels", pns, {"title": func(x): return x["title"], "type": func(x): return x["type"], "row": func(x): return str(x.get("row", ""))}):
+				var row = _row(8)
+				row.add_child(_fixed(_lbl(str(pn["title"]) if str(pn["title"]) != "" else "(untitled panel %d)" % int(pn["id"]), 14), 480))
+				row.add_child(_fixed(_lbl(str(pn["type"]), 12, DIM), 140))
+				row.add_child(_fixed(_lbl(str(pn.get("row", "")), 12, DIM), 180))
+				row.add_child(_spacer())
+				row.add_child(_btn("Open panel", func(): open.call(int(pn["id"]))))
+				prow_box.add_child(row)
+		if not pns.is_empty():
+			list.add_child(_table_head("grafana-panels", [["title", "PANEL", 480], ["type", "TYPE", 140], ["row", "ROW", 180]], gp_fill, pns.size()))
+		list.add_child(prow_box)
+		gp_fill.call())
+
+func _grafana_open(p: Dictionary, dash: Dictionary, panel: int, from: String, vars: Dictionary) -> void:
+	var args = {"id": p["id"], "uid": dash["uid"], "panel": panel, "vars": vars}
+	if from != "":
+		args["from"] = from
+		args["to"] = "now"
+	providers.ask("grafana.link", args, func(r):
+		if r["ok"]:
+			_provider_show(str(r["data"]["url"]), "%s  ·  %s" % [p["name"], dash["title"]], "grafana")
+		else:
+			open_providers(_prov_fail(r), false))
+
+# ---- Tautulli: media activity as totals
+
+func open_tautulli(p: Dictionary) -> void:
+	_prov_cur = p
+	var body = _open_modal("tautulli", null, "TAUTULLI  //  %s" % p["name"], Vector2(900, 620))
+	var note = _lbl("Plex activity as Tautulli reports it, as totals only. No user, address or title is read. This is monitoring, not playback.", 13, DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 850
+	body.add_child(note)
+	_dyn = _col(6)
+	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(_dyn)
+	_dyn.add_child(_lbl("Reading...", 13, DIM))
+	_tautulli_read(p)
+
+func _tautulli_read(p: Dictionary) -> void:
+	providers.ask("tautulli.activity", {"id": p["id"]}, _tautulli_fill.bind(p))
+
+func _tautulli_tick(p: Dictionary) -> void:
+	if _modal_kind == "tautulli" and _prov_cur.get("id") == p["id"]:
+		_tautulli_read(p)
+
+func _tautulli_fill(r: Dictionary, p: Dictionary) -> void:
+	if true:
+		if _modal_kind != "tautulli" or _prov_cur.get("id") != p["id"]:
+			return
+		_clear(_dyn)
+		if r["ok"]:
+			var d = r["data"]
+			var grid = GridContainer.new()
+			grid.columns = 2
+			grid.add_theme_constant_override("h_separation", 60)
+			for row in providers.summary_lines(d):
+				grid.add_child(_lbl(row[0], 15, DIM))
+				grid.add_child(_lbl(row[1], 20, TXT if row[1] != "unavailable" else DIM))
+			_dyn.add_child(grid)
+			_dyn.add_child(_lbl("Source: %s (Tautulli)   ·   read at %s UTC   ·   refreshes every 10 s while this is open" % [p["name"], str(d["at"]).get_slice("T", 1).trim_suffix("Z")], 12, DIM))
+		else:
+			var l = _lbl(_prov_fail(r), 14, RED)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 850
+			_dyn.add_child(l)
+		var bar = _row(8)
+		bar.add_child(_btn("Refresh", func(): _tautulli_read(p)))
+		bar.add_child(_btn("Open Tautulli", func(): _provider_open_ui(p)))
+		bar.add_child(_spacer())
+		bar.add_child(_btn("Providers", func(): open_providers()))
+		_dyn.add_child(bar)
+		# pin the summary to a machine that runs Plex or Tautulli
+		_dyn.add_child(_lbl("ON A MACHINE'S SCREEN", 13, ORANGE))
+		var media = providers.media_machines(cluster.state)
+		if media.is_empty():
+			_dyn.add_child(_lbl("No Plex or Tautulli machine in this world to put it on.", 13, DIM))
+		for m in media:
+			var uid = str(m["uid"])
+			var row = _row(8)
+			row.add_child(_fixed(_lbl("%s/%s" % [m["ns"], m["name"]], 14), 480))
+			row.add_child(_spacer())
+			if providers.pins.has(uid):
+				row.add_child(_btn("Take it off", func():
+					providers.unpin(uid)
+					_tautulli_read(p)))
+			else:
+				row.add_child(_btn("Show activity on its screen", func():
+					if not providers.pin(uid, p):
+						notify("That machine has no screen to show it on.", "warn")
+					_tautulli_read(p), "primary", r["ok"]))
+			_dyn.add_child(row)
+		get_tree().create_timer(10.0).timeout.connect(_tautulli_tick.bind(p))
+
+# ----- a machine's screen, opened large (scripts/machine_screens.gd, demo_screens.gd)
+#
+# The same four views the screen itself steps through with R: the application's
+# dashboard, the pod's metrics, its log and its storage. Choosing one here
+# changes what the machine shows too.
+
+const Icons = preload("res://scripts/icons.gd")
+
+var demo_screens: Node = null     # set by main
+var screens: Node = null          # set by main
+
+# A button big enough for a finger, when the touch controls are on.
+func _touch_size(b: Button) -> Button:
+	if touch_u > 0.0:
+		b.custom_minimum_size = Vector2(touch_u * 1.7, touch_u * 0.9)
+		b.add_theme_font_size_override("font_size", int(touch_u * 0.27))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return b
+
+func open_demo_screen(uid: String) -> void:
+	open_screen(uid)
+
+func open_screen(uid: String) -> void:
+	var p = K.find_pod(cluster.state, uid)
+	if p == null or screens == null:
+		open_liveview()
+		return
+	var mode: String = screens.mode_of(uid)
+	var tvp = get_viewport().get_visible_rect().size
+	var body = _open_modal("screen", uid, "SCREEN  //  " + str(p["name"]), Vector2(1180, 860) if touch_u <= 0.0 else Vector2(maxf(tvp.x * 0.94, 600.0), maxf(tvp.y * 0.9, 500.0)))
+	var head = _row(10)
+	var ic = TextureRect.new()
+	ic.texture = Icons.texture(Icons.kind_of(p))
+	ic.custom_minimum_size = Vector2(36, 36)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	head.add_child(ic)
+	head.add_child(_lbl("%s   ·   %s   ·   %s" % [Icons.label_of(Icons.kind_of(p)), p["ns"], p["status"]], 13, DIM))
+	head.add_child(_spacer())
+	var tabs = head
+	if touch_u > 0.0:
+		# on a phone the tabs get a row of their own, each a full finger wide
+		body.add_child(head)
+		tabs = _row(int(touch_u * 0.2))
+	for m in screens.MODES:
+		tabs.add_child(_touch_size(_btn(str(screens.TITLES[m]), func():
+			screens.set_mode(uid, m)
+			open_screen(uid), "primary" if m == mode else "normal")))
+	body.add_child(tabs)
+	if mode != "dashboard":
+		var bar = _row(8)
+		bar.add_child(_lbl({"metrics": "This pod's own state, as the cluster reports it.", "logs": "The end of its log; it refreshes while this view is up.", "storage": "What is mounted into it."}[mode], 13, DIM))
+		bar.add_child(_spacer())
+		if mode == "logs":
+			bar.add_child(_btn("Open the full log", func(): open_logs(uid)))
+		elif mode == "storage":
+			bar.add_child(_btn("Browse the files", func(): storage_requested.emit(uid)))
+		elif mode == "metrics":
+			bar.add_child(_btn("Inspect", func(): open_pod(uid)))
+		body.add_child(bar)
+		var panel: Control = screens.make_panel(uid)
+		panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(tvp.x * 0.9, maxf(tvp.y * 0.9 - touch_u * 3.4, 300.0))
+		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		body.add_child(panel)
+		return
+	# the dashboard: whatever application page is on this screen
+	match screens.dashboard_kind(uid):
+		"demo":
+			var kind = ""
+			for ds in demo_screens.screens():
+				if ds["uid"] == uid:
+					kind = str(ds["kind"])
+			var bar = _row(8)
+			bar.add_child(_lbl("Demo content from this simulated cluster, not a real page.   VIEW", 13, DIM))
+			var views: Array = demo_screens.VIEWS[kind]
+			for i in views.size():
+				bar.add_child(_btn(str(views[i]), func():
+					demo_screens.set_view(uid, i)
+					open_screen(uid), "primary" if demo_screens.view_of(uid) == i else "normal"))
+			bar.add_child(_spacer())
+			bar.add_child(_btn("All LiveView", func(): open_liveview()))
+			body.add_child(bar)
+			var panel: Control = demo_screens.make_panel(uid)
+			panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(tvp.x * 0.9, maxf(tvp.y * 0.9 - touch_u * 3.4, 300.0))
+			panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			body.add_child(panel)
+		"live":
+			for s in live.sessions.values():
+				if str(s.get("mounted", "")) == uid:
+					open_live(s)       # the real page, with mouse and keyboard
+					return
+		"provider":
+			for pr in _prov_list:
+				if str(pr["id"]) == str(providers.pins[uid]["provider"]):
+					open_tautulli(pr)
+					return
+			open_providers()
+		_:
+			var l = _lbl("No application page is on this screen.\n\nLiveView puts a running application's own web page here, and a Grafana or Tautulli provider can pin its dashboard or activity. Until then the screen shows the pod's state.\n\nMetrics, Logs and Storage above work for every machine.", 15, DIM)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 1100
+			body.add_child(l)
+			body.add_child(_btn("Open LiveView", func(): open_liveview(), "primary"))
