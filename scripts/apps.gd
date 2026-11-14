@@ -51,7 +51,7 @@ static func file_for(id: String, flavor: String) -> String:
 static func load_config() -> Dictionary:
 	var cfg = {"url": "", "api_key": "", "insecure_tls": false}
 	if true:
-		var d = KU.read_json(KU.data_path("portainer.json"))
+		var d = KU.read_json(KU.config_path("portainer.json"))
 		if typeof(d) == TYPE_DICTIONARY:
 			for k in d:
 				cfg[k] = d[k]
@@ -78,7 +78,7 @@ static func slug(title: String) -> String:
 # ---- app lists (catalogues)
 # Any list in Portainer's app-template format works: Portainer's own, the one
 # served by your Portainer server, or community lists. Built-in lists come from
-# catalogs.json next to play.bat; lists added in-game are kept in the user folder.
+# config/catalogs.json (beside the exe when installed); lists added in-game are kept in the user folder.
 
 
 static func _user_catalogs_path() -> String:
@@ -98,7 +98,7 @@ static func load_catalogs() -> Array:
 	if str(cfg.get("url", "")) != "":
 		res.append({"name": "My Portainer server", "url": str(cfg["url"]).trim_suffix("/") + "/api/templates",
 			"api_key": str(cfg.get("api_key", "")), "insecure_tls": bool(cfg.get("insecure_tls", false)), "builtin": true})
-	for c in _read_list(KU.data_path("catalogs.json")):
+	for c in _read_list(KU.config_path("catalogs.json")):
 		c["builtin"] = true
 		res.append(c)
 	for c in _read_list(_user_catalogs_path()):

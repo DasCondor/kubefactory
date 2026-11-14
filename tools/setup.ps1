@@ -6,7 +6,9 @@
 param([switch]$Cloud, [switch]$CheckOnly)
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+# In the source tree this script lives in tools\; in a release zip it sits beside KubeFactory.exe.
+$root = if (Test-Path (Join-Path $here "..\project.godot")) { (Resolve-Path (Join-Path $here "..")).Path } else { $here }
 $godotVersion = "4.3-stable"
 $godotExe = Join-Path $root "engine\Godot_v$godotVersion`_win64.exe"
 

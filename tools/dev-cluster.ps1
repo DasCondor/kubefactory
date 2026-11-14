@@ -8,7 +8,9 @@ param([switch]$Delete)
 
 $name = "kubefactory"
 $ctx = "kind-$name"
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+# In the source tree this script lives in tools\; in a release zip it sits beside KubeFactory.exe.
+$root = if (Test-Path (Join-Path $here "..\project.godot")) { (Resolve-Path (Join-Path $here "..")).Path } else { $here }
 
 if ($Delete) {
     kind delete cluster --name $name
@@ -20,8 +22,8 @@ if ($LASTEXITCODE -ne 0) { Write-Host "Docker is not running - start Docker Desk
 
 $existing = kind get clusters
 if ($existing -notcontains $name) {
-    kind create cluster --name $name --config (Join-Path $root "dev\kind-config.yaml")
+    kind create cluster --name $name --config (Join-Path $here "dev\kind-config.yaml")
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-kubectl --context $ctx apply -f (Join-Path $root "dev\sample-workloads.yaml")
+kubectl --context $ctx apply -f (Join-Path $here "dev\sample-workloads.yaml")
 Write-Host "`nDev cluster ready. Play with:  .\play.bat --context=$ctx`n" -ForegroundColor Cyan

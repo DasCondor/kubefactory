@@ -31,7 +31,7 @@ var targets = []
 var audit_lines = []
 var log_dir = ""
 # multi-user
-var local_policy = {}          # policy.json next to play.bat: per-context limits, audit webhook
+var local_policy = {}          # config/policy.json (beside the exe when installed): per-context limits, audit webhook
 var peers = []                 # other players on this cluster right now
 var presence_info = Callable() # set by main: returns {pos, tool, doing}
 var _ptimer = 0.0
@@ -53,7 +53,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(log_dir)
 	log_cfg = LogSources.load_config()
 	if true:
-		var d = K.read_json(K.data_path("policy.json"))
+		var d = K.read_json(K.config_path("policy.json"))
 		if typeof(d) == TYPE_DICTIONARY:
 			local_policy = d
 

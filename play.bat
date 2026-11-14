@@ -7,7 +7,7 @@ rem   play.bat --read-only                 look, don't touch
 setlocal
 set "GODOT=%~dp0engine\Godot_v4.3-stable_win64.exe"
 if not exist "%GODOT%" (
-  echo Godot engine not found. Run:  powershell -ExecutionPolicy Bypass -File "%~dp0setup.ps1"
+  echo Godot engine not found. Run:  powershell -ExecutionPolicy Bypass -File "%~dp0tools\setup.ps1"
   pause
   exit /b 1
 )

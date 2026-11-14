@@ -11,7 +11,9 @@
 #   .\play.bat --context=kf-bob               (third window)
 param([string]$Context = "kind-kubefactory")
 
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+# In the source tree this script lives in tools\; in a release zip it sits beside KubeFactory.exe.
+$root = if (Test-Path (Join-Path $here "..\project.godot")) { (Resolve-Path (Join-Path $here "..")).Path } else { $here }
 $k = @("--context", $Context)
 
 kubectl @k apply -f (Join-Path $root "deploy\kubefactory.yaml")

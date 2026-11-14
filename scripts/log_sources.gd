@@ -8,14 +8,14 @@ extends RefCounted
 #   azure       Azure Monitor (az CLI)             - needs a Log Analytics workspace id
 #   gcp         Google Cloud Logging (gcloud CLI)  - works out of the box on GKE
 #
-# Settings live in log-providers.json next to play.bat.
+# Settings live in config/log-providers.json (beside the exe when installed).
 
 const KU = preload("res://scripts/kutil.gd")
 
 static func load_config() -> Dictionary:
 	var cfg = {"hours": 1, "loki": {}, "cloudwatch": {}, "azure": {}, "gcp": {}}
 	if true:
-		var d = KU.read_json(KU.data_path("log-providers.json"))
+		var d = KU.read_json(KU.config_path("log-providers.json"))
 		if typeof(d) == TYPE_DICTIONARY:
 			for k in d:
 				cfg[k] = d[k]

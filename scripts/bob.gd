@@ -2,7 +2,7 @@ extends RefCounted
 # Bob 2.0: he reads a failing pod's log and events and tells you which lines
 # matter, what each one means and what to do about it.
 #
-# Optional config: bob.json next to the game (see config() below). Without it
+# Optional config: config/bob.json, beside the exe when installed (see config() below). Without it
 # the built-in rules are used as they are.
 
 const K = preload("res://scripts/kutil.gd")
@@ -114,7 +114,7 @@ const EXIT_CODES = {
 #                 {"match": "<regex>", "means": "...", "fix": "...", "weight": 1-3}
 static func config() -> Dictionary:
 	var c = {"log_review": true, "tail": 200, "previous": true, "max_findings": 6, "ignore": [], "rules": []}
-	var d = K.read_json(K.data_path("bob.json"))
+	var d = K.read_json(K.config_path("bob.json"))
 	if typeof(d) == TYPE_DICTIONARY:
 		for k in c:
 			if not d.has(k):

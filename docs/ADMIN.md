@@ -66,7 +66,7 @@ group must be listed with tier 5, or you are held to the default as well.
 | Mk.4 Destructive | delete a pod |
 | Mk.5 Critical | delete a workload, drain a node, remove an installed app |
 
-## Per-player rules and central audit (`policy.json` next to play.bat)
+## Per-player rules and central audit (`policy.json`)
 
     {
       "contexts": [ { "match": "prod", "max_tier": 3, "confirm_tier": 4 } ],
@@ -80,7 +80,7 @@ group must be listed with tier 5, or you are held to the default as well.
   work directly with Slack-style incoming webhooks.
 
 Ship your own `policy.json`, `catalogs.json` and `log-providers.json` in the zip
-you hand out (`package.ps1` builds it).
+you hand out (`tools\package.ps1` builds it; in the source tree the files are in `config\`).
 
 ## What to know before rolling it out
 
@@ -96,8 +96,8 @@ you hand out (`package.ps1` builds it).
 
 ## Try it on one machine
 
-    dev-cluster.ps1          local 3-node cluster
-    dev-users.ps1            applies the setup and creates two test logins
+    tools\dev-cluster.ps1    local 3-node cluster
+    tools\dev-users.ps1      applies the setup and creates two test logins
     play.bat --context=kind-kubefactory     admin
     play.bat --context=kf-alice             operator, namespace shop only
     play.bat --context=kf-bob               viewer
