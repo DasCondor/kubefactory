@@ -5,10 +5,10 @@ GPU: NVIDIA GeForce RTX 5070 Ti Laptop GPU. Median of 3 runs each. Reproduce wit
 
 | Build | Avg fps | vs release | Frame ms | 1% low fps | Draw calls | Objects | Primitives | Video mem MB |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Release (de600e8) | 427.4 | - | 2.34 | 333.7 | 2060 | 4347 | 964979 | 529.4 |
-| Standard | 597 | +40% | 1.68 | 494.8 | 1918 | 2775 | 974927 | 462.7 |
-| Enhanced | 402.4 | -6% | 2.49 | 341.6 | 2122 | 3119 | 1068548 | 623.5 |
-| Ultra | 172.2 | -60% | 5.81 | 119.8 | 2325 | 3430 | 1170211 | 1531.2 |
+| Release (de600e8) | 425.4 | - | 2.35 | 325.3 | 2055 | 4343 | 965098 | 529.4 |
+| Standard | 584.6 | +37% | 1.71 | 488.3 | 2385 | 2878 | 1123906 | 464.4 |
+| Enhanced | 394.4 | -7% | 2.54 | 325.8 | 2619 | 3187 | 1420687 | 625.7 |
+| Ultra | 168.8 | -60% | 5.92 | 116.5 | 2846 | 3463 | 1726802 | 1533.9 |
 
 ## Reading the table
 

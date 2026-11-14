@@ -12,8 +12,9 @@ extends RefCounted
 #   accent   the armour panels, recoloured with the workload's own colour
 #   lamp     the status lamp (the game sets its colour)
 #   door     the service door leaf, hung on its own pivot so it can open
-#   screen   the LiveView glass: a separate quad the game draws on, with the
-#            decorative glyph the model shipped with removed
+#   screen   the LiveView glass: a separate quad the game draws on
+#   name / list surfaces: the glasses that show the real resource name and
+#            container list; type_label: the permanent model-type plate
 #
 # Only categories built to the Porter V3 standard are used in the world
 # (krew, machines). The V2 categories stay in the library, catalogued, until
@@ -25,17 +26,10 @@ const Gfx = preload("res://scripts/gfx.gd")
 const TIERS = ["standard", "enhanced", "ultra"]
 # Corrections applied when a model is loaded: verified defects in the supplied
 # files, fixed here so the files themselves stay byte-identical to the library.
+# The V6 library needs none (the V4 display fault it used to correct is gone).
 #   move:  shift every node whose name starts with one of `nodes`
 #   posts: steel brackets added to carry what was moved, as [size, centre]
-const FIXUPS = {
-	# The display was modelled between the two vessel domes and cut into both
-	# (frame y 1.92-2.24 against cap tops at y 2.10). It now stands on two posts
-	# on top of the housing, clear of the vessels from every side.
-	"statefulset": {"nodes": ["LiveView_"], "move": Vector3(0, 0.56, -0.25),
-		"posts": [[Vector3(0.05, 0.1, 0.05), Vector3(-0.25, 2.445, 0.62)], [Vector3(0.05, 0.1, 0.05), Vector3(0.25, 2.445, 0.62)]]},
-	"database_server": {"nodes": ["LiveView_"], "move": Vector3(0, 0.56, -0.25),
-		"posts": [[Vector3(0.05, 0.1, 0.05), Vector3(-0.25, 2.445, 0.62)], [Vector3(0.05, 0.1, 0.05), Vector3(0.25, 2.445, 0.62)]]},
-}
+const FIXUPS = {}
 
 static var _catalog = {}
 static var _templates = {}
@@ -174,9 +168,17 @@ static func _box(size: Vector3, at: Vector3, mat: Material) -> Array:
 	b.material = mat
 	return ["_built", b, Transform3D(Basis.IDENTITY, at)]
 
-# A template for one model at one tier, or {} if it cannot be loaded:
-#   core, accent, lamp, door (ArrayMesh or null)   bounds (AABB, model units)
-#   screen: {pos, size, normal}   lamp_at   door: {hinge, aabb, side}   cavity: AABB
+# A template for one model at one tier, or {} if it cannot be loaded.
+#   core, accent, lamp (ArrayMesh or null)     bounds (AABB, model units)
+#   screen / name_surface / list_surface: {pos, size}   the model's display glasses, facing +Z
+#   type_label: {text, pos}                    the permanent model-type plate
+#   lamp_at
+#   door_mesh, door: {hinge, aabb, width, side, along, out}, cavity: AABB   where the model has a storage door
+#
+# The node contract is the library's (V5/V6): the leaf is every part named
+# DoorMoving_*, hung on the catalog's DoorPivot; the housing is already a sealed
+# shell with a real opening (ShellOpening / ShellBounds). The model's own drive
+# modules are left out: the game puts one module per real volume in the bay.
 static func template(id: String, t: String = "") -> Dictionary:
 	if t == "":
 		t = tier()
@@ -190,125 +192,57 @@ static func template(id: String, t: String = "") -> Dictionary:
 	var parts = []
 	_collect(scene, Transform3D.IDENTITY, parts)
 	scene.free()
+	var anchors: Dictionary = entry(id).get("variants", {}).get(t, {}).get("anchors", {})
 	var fix = FIXUPS.get(id, {})
-	var steel: Material = null
-	var frame: Material = null
 	var accent_name = ""
 	for p in parts:
-		var nm: String = p[0]
+		var nm: String = str(p[0]).get_slice(".", 0)
+		p[0] = nm
 		for pre in fix.get("nodes", []):
 			if nm.begins_with(pre):
 				p[2] = Transform3D(Basis.IDENTITY, fix["move"]) * p[2]
-		var mat = p[1].surface_get_material(0)
-		if nm.ends_with("_steel") and steel == null:
-			steel = mat
-		if nm.ends_with("_frame") and frame == null:
-			frame = mat
-		if nm.begins_with("TopArmor_"):
+		if nm.begins_with("Roof_"):
 			accent_name = nm.get_slice("_", 1)
-	for post in fix.get("posts", []):
-		parts.append(_box(post[0], post[1], steel))
-
 	var core = []
 	var accent = []
 	var lamp = []
 	var door = []
-	var screen_glass = []
-	var chassis = []
-	# The service door: the front door where the model has one, otherwise the rear
-	# service panel. `side` is +1 for a door on the front (+Z) face, -1 for the rear.
-	var front_leaf = ["Door_", "DoorInset_", "DoorHandle_", "HandleMount_", "FrontVent_"]
-	var rear_leaf = ["RearServicePanel_", "RearFan_", "RearVent_", "RearPort_"]
-	var is_leaf = func(nm: String, list: Array) -> bool:
-		return list.any(func(pre): return nm.begins_with(pre))
-	var side = 0
-	if parts.any(func(p): return str(p[0]).begins_with("Door_")):
-		side = 1
-	elif parts.any(func(p): return str(p[0]).begins_with("RearServicePanel_")):
-		side = -1
-	var door_leaf = front_leaf if side > 0 else rear_leaf
-	# is the screen mounted on the door? then it is part of the leaf and swings with it
-	var screen_on_door = false
-	if side > 0:
-		var d0 = _aabb(parts.filter(func(p): return is_leaf.call(str(p[0]), door_leaf)))
-		for p in parts:
-			if str(p[0]) == "LiveView_glass":
-				var c0 = (p[2] * p[1].get_aabb()).get_center()
-				screen_on_door = c0.x > d0.position.x and c0.x < d0.end.x and c0.y > d0.position.y and c0.y < d0.end.y
+	var has_door = anchors.has("DoorPivot") and anchors.has("ShellOpening") and parts.any(func(p): return str(p[0]).begins_with("DoorMoving_"))
+	var stock = ["DriveModule_", "DriveFace_", "DriveHandle_", "DriveLED_", "Shelf_"]
 	for p in parts:
 		var nm: String = p[0]
-		if nm.begins_with("StatusLamp_"):
+		if nm.begins_with("Beacon_"):
 			lamp.append(p)
-		elif nm.begins_with("LiveView_") and not nm.ends_with("_frame") and not nm.ends_with("_glass"):
-			pass    # the decorative glyph: dropped, the game draws the real screen
-		elif nm.begins_with("LiveView_glass"):
-			screen_glass.append(p)
-			if screen_on_door:
-				door.append(p)
-		elif nm == "Chassis_frame":
-			chassis.append(p)
-		elif side != 0 and (is_leaf.call(nm, door_leaf) or (screen_on_door and nm.begins_with("LiveView_frame"))):
+		elif nm.begins_with("DoorMoving_"):
 			door.append(p)
+		elif has_door and stock.any(func(pre): return nm.begins_with(pre)):
+			pass
 		elif accent_name != "" and nm.ends_with("_" + accent_name):
 			accent.append(p)
 		else:
 			core.append(p)
 	var res = {"id": id, "tier": t, "bounds": _aabb(parts)}
-	# the screen: where the glass is, facing +Z (the asset front)
-	if not screen_glass.is_empty():
-		var g = _aabb(screen_glass)
-		res["screen"] = {"pos": g.get_center() + Vector3(0, 0, g.size.z / 2.0 + 0.004), "size": Vector2(g.size.x, g.size.y), "on_door": screen_on_door}
-		if not screen_on_door:
-			core.append_array(screen_glass)
+	for pair in [["LiveViewSurface", "screen"], ["ResourceNameSurface", "name_surface"], ["ContainerListSurface", "list_surface"]]:
+		var a = anchors.get(pair[0])
+		if typeof(a) == TYPE_DICTIONARY and a.has("position") and a.has("size"):
+			res[pair[1]] = {"pos": _v3(a["position"]) + Vector3(0, 0, 0.004), "size": Vector2(a["size"][0], a["size"][1]), "on_door": false}
+	var tl = anchors.get("TypeLabel")
+	if typeof(tl) == TYPE_DICTIONARY and tl.has("position"):
+		var plate = _aabb(parts.filter(func(p): return str(p[0]).begins_with("TypeLabel_")))
+		res["type_label"] = {"text": str(tl.get("text", "")), "pos": _v3(tl["position"]), "size": Vector2(plate.size.x, plate.size.y), "front": plate.end.z}
 	if not lamp.is_empty():
 		res["lamp_at"] = _aabb(lamp).get_center()
-	# The solid chassis block is replaced by a hollow housing (five walls and a
-	# framed opening), so there is a real interior behind the door.
-	if side != 0 and not door.is_empty() and not chassis.is_empty():
-		var c = _aabb(chassis)
+	if has_door:
+		var hinge = _v3(anchors["DoorPivot"])
 		var d = _aabb(door)
-		var w = 0.05     # wall thickness
-		var lo = c.position
-		var hi = c.end
-		var cc = c.get_center()
-		var open_z = (hi.z - w / 2.0) if side > 0 else (lo.z + w / 2.0)
-		var back_z = (lo.z + w / 2.0) if side > 0 else (hi.z - w / 2.0)
-		core.append(_box(Vector3(c.size.x, c.size.y, w), Vector3(cc.x, cc.y, back_z), frame))
-		core.append(_box(Vector3(w, c.size.y, c.size.z), Vector3(lo.x + w / 2.0, cc.y, cc.z), frame))
-		core.append(_box(Vector3(w, c.size.y, c.size.z), Vector3(hi.x - w / 2.0, cc.y, cc.z), frame))
-		core.append(_box(Vector3(c.size.x, w, c.size.z), Vector3(cc.x, lo.y + w / 2.0, cc.z), frame))
-		core.append(_box(Vector3(c.size.x, w, c.size.z), Vector3(cc.x, hi.y - w / 2.0, cc.z), frame))
-		# the door's face, as four strips round the opening (the leaf overlaps them by its rim)
-		var rim = 0.045
-		var ox0 = maxf(d.position.x + rim, lo.x + w)
-		var ox1 = minf(d.end.x - rim, hi.x - w)
-		var oy0 = maxf(d.position.y + rim, lo.y + w)
-		var oy1 = minf(d.end.y - rim, hi.y - w)
-		core.append(_box(Vector3(ox0 - lo.x, c.size.y, w), Vector3((ox0 + lo.x) / 2.0, cc.y, open_z), frame))
-		core.append(_box(Vector3(hi.x - ox1, c.size.y, w), Vector3((hi.x + ox1) / 2.0, cc.y, open_z), frame))
-		core.append(_box(Vector3(ox1 - ox0, oy0 - lo.y, w), Vector3((ox0 + ox1) / 2.0, (oy0 + lo.y) / 2.0, open_z), frame))
-		core.append(_box(Vector3(ox1 - ox0, hi.y - oy1, w), Vector3((ox0 + ox1) / 2.0, (hi.y + oy1) / 2.0, open_z), frame))
-		# The hinge line: where the model put its hinge hardware on a front door (its
-		# right-hand edge), the matching edge on a rear panel. The leaf hangs from it
-		# along `along` and swings out towards `out`.
-		var hinge: Vector3
-		if side > 0:
-			hinge = Vector3(d.end.x, d.get_center().y, d.position.z)
-			for p in parts:
-				if str(p[0]).begins_with("DoorHinge_"):
-					var h = p[2] * p[1].get_aabb()
-					hinge = Vector3(h.get_center().x, d.get_center().y, h.get_center().z)
-		else:
-			hinge = Vector3(d.position.x, d.get_center().y, d.end.z)
-		res["door"] = {"hinge": hinge, "aabb": d, "width": d.size.x, "side": side,
-			"along": Vector3(-1, 0, 0) if side > 0 else Vector3(1, 0, 0), "out": Vector3(0, 0, side)}
-		var depth = c.size.z - 2.0 * w
-		res["cavity"] = AABB(Vector3(ox0, oy0, lo.z + w), Vector3(ox1 - ox0, oy1 - oy0, depth))
+		var so: Dictionary = anchors["ShellOpening"]
+		var sb: Dictionary = anchors.get("ShellBounds", {})
+		var back = float(sb.get("z_min", d.position.z - 1.0)) + 0.06
+		res["door"] = {"hinge": hinge, "aabb": d, "width": d.size.x, "side": 1, "along": Vector3(-1, 0, 0), "out": Vector3(0, 0, 1)}
+		res["cavity"] = AABB(Vector3(float(so["x_min"]), float(so["y_min"]), back),
+			Vector3(float(so["x_max"]) - float(so["x_min"]), float(so["y_max"]) - float(so["y_min"]), float(so["z"]) - back))
 		res["door_mesh"] = _merge(door, -hinge)      # modelled about its hinge, so the pivot node sits on the hinge
 	else:
-		if res.has("screen"):
-			res["screen"]["on_door"] = false
-		core.append_array(chassis)
 		core.append_array(door)
 	res["core"] = _merge(core)
 	res["accent"] = _merge(accent)
@@ -316,6 +250,8 @@ static func template(id: String, t: String = "") -> Dictionary:
 	_templates[key] = res
 	return res
 
+static func _v3(a) -> Vector3:
+	return Vector3(float(a[0]), float(a[1]), float(a[2]))
 # A whole model as one node, parts merged by material (characters, props).
 static func instance(id: String, t: String = "") -> Node3D:
 	if not available():

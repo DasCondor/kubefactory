@@ -54,9 +54,20 @@ exactly that: the code exists and has not been run against the real thing.
   Krew members and the 101 V2 models (network, storage, structures, props,
   displays, tools) are shipped but not used: they are below the Porter V3
   standard or belong to features that do not exist yet.
-- `statefulset` and `database_server` have a display modelled into the vessel
-  domes. The game moves it when loading; the files are unchanged.
-- 11 models reach 15-70 mm below the ground (`MODEL_AUDIT.md`).
+- The library is V6. Its own notes say what it is not: no model is approved for
+  release, 50 designs are still V2 legacy geometry, and its checks were
+  sampled, not exhaustive. Nothing here changes that.
+- 22 of the 25 machines have a storage door. `cooling_unit`, `load_balancer`
+  and `network_appliance` have none.
+- The six V6 handheld tool models (operator-facing displays) are **not used**:
+  the first-person tools are still the game's own. The Krew display surfaces
+  (chest, hand, laptop) are not bound to anything, and nothing is rigged or
+  animated beyond the door.
+- The model's own drive modules are left out of the bay; the game shows one
+  module per real volume instead.
+- 10 models reach 7-70 mm below the ground (`MODEL_AUDIT.md`); none of them is
+  placed in the world.
+- The asset reviewer page that came with the library is not hosted.
 - The audit cannot detect two solid parts pushed into each other unless one of
   them is a display.
 

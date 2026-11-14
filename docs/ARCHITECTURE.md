@@ -28,7 +28,7 @@ is no server, no account and no telemetry.
 | `scripts/cluster.gd` | owns the active backend; polls on a worker thread; runs actions; audit log; signals `data_ready`, `connect_failed`, `agent_event` |
 | `scripts/world.gd` | turns cluster state into platforms (nodes), machines (pods), belts (services), Porter, Bob |
 | `scripts/machine.gd` | one pod: library model or code-drawn model, door, interior, screen |
-| `scripts/models.gd` | the model library: catalog, tier choice, load-time corrections, door and screen extraction |
+| `scripts/models.gd` | the model library: catalog, tier choice, door, display surfaces and type plate taken from the catalog's anchors |
 | `scripts/hud.gd` | HUD, connection wizard, storage browser, LiveView window, Porter and Bob |
 | `scripts/liveview.gd` | LiveView sessions: frames in, input out, frame rate by distance |
 | `scripts/connections.gd` | saved kubeconfig profiles and which exec helpers you have trusted |

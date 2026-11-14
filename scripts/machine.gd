@@ -42,6 +42,8 @@ var _tank_x = 2.62
 var _top = 4.0
 var _live = false
 var _live_mat: StandardMaterial3D = null
+var _name_plate: Label3D = null     # the model's resource-name display
+var _list_plate: Label3D = null     # the model's container list display
 
 static func _box(key: String, size: Vector3) -> BoxMesh:
 	if not _m.has(key):
@@ -257,6 +259,20 @@ func _build_model(p: Dictionary, col: Color) -> bool:
 	else:
 		_screen = MeshInstance3D.new()
 		_body.add_child(_screen)
+	# the model's other displays carry real data: this pod's name, its containers
+	_name_plate = _plate(tpl.get("name_surface"), Color(0.86, 0.95, 1.0), HORIZONTAL_ALIGNMENT_CENTER)
+	_list_plate = _plate(tpl.get("list_surface"), Color(0.8, 0.92, 0.86), HORIZONTAL_ALIGNMENT_LEFT)
+	if tpl.has("type_label") and str(tpl["type_label"]["text"]) != "":
+		var tl = tpl["type_label"]
+		var l = Label3D.new()
+		l.text = str(tl["text"])
+		l.font_size = 48
+		l.modulate = Color(0.08, 0.09, 0.11)
+		l.outline_size = 0
+		l.shaded = true
+		l.position = Vector3(tl["pos"].x, tl["pos"].y, tl["front"] + 0.003)
+		K.fit_label(l, tl["size"].x * 0.9, tl["size"].y * 0.72, 0.004)
+		_body.add_child(l)
 	_fan = Node3D.new()
 	add_child(_fan)
 	var b: AABB = tpl["bounds"]
@@ -264,14 +280,37 @@ func _build_model(p: Dictionary, col: Color) -> bool:
 	_top = b.end.y * MODEL_SCALE
 	return true
 
+# A text display lying on one of the model's glass surfaces (null if it has none).
+func _plate(surface, col: Color, align: int) -> Label3D:
+	if surface == null:
+		return null
+	var l = Label3D.new()
+	l.font_size = 40
+	l.modulate = col
+	l.outline_size = 0
+	l.horizontal_alignment = align
+	l.position = surface["pos"]
+	l.set_meta("size", surface["size"])
+	l.visibility_range_end = 45.0
+	_body.add_child(l)
+	return l
+
+func _plate_text(l: Label3D, text: String) -> void:
+	if l == null or l.text == text:
+		return
+	l.text = text
+	var sz: Vector2 = l.get_meta("size")
+	K.fit_label(l, sz.x * 0.92, sz.y * 0.8, 0.0022)
+
 # Shelves and storage bays behind the door. The bays stay empty until the pod's
 # real volume mounts are known (set_modules), so nothing inside is invented.
 func _build_interior(cav: AABB, side: int) -> void:
 	var steel = Tex.shared("steel")
 	var dark = Tex.shared("dark")
 	_bays.clear()
-	var rows = 3
-	var cols = 2
+	# as many columns as the bay is wide, rows as it is tall (modules about 0.4 m wide, 0.22 m high)
+	var cols = clampi(int(round(cav.size.x / 0.42)), 2, 5)
+	var rows = clampi(int(round(cav.size.y / 0.24)), 1, 4)
 	var cw = cav.size.x / cols
 	var rh = cav.size.y / rows
 	for r in rows:
@@ -333,7 +372,7 @@ func door_view() -> Array:
 	var screen_right = (-out).cross(Vector3.UP).normalized()
 	# stand on the side the leaf does not swing to, close enough to stay clear of the
 	# next row, and look past the opening so it sits left of the storage panel
-	return [centre + out * 3.4 + along * 0.9 + Vector3(0, -centre.y + 0.25, 0), centre + screen_right * 2.3]
+	return [centre + out * (2.4 + d["width"] * MODEL_SCALE * 0.6) + along * 0.9 + Vector3(0, -centre.y + 0.25, 0), centre + screen_right * 2.3]
 
 func has_door() -> bool:
 	return _door != null
@@ -588,8 +627,17 @@ func update(p: Dictionary) -> void:
 		elif h != "bad" and _siren.playing:
 			_siren.stop()
 	_warn.text = "!  " + p["status"]
-	# Container tanks along the +X side
 	var conts = p["containers"]
+	_plate_text(_name_plate, str(p["name"]))
+	if _list_plate != null:
+		var rows = PackedStringArray()
+		for i in mini(conts.size(), 6):
+			var c = conts[i]
+			rows.append("%s   %s" % [str(c["name"]), str(c["state"]) if str(c.get("reason", "")) == "" else str(c["reason"])])
+		if conts.size() > 6:
+			rows.append("+ %d more" % (conts.size() - 6))
+		_plate_text(_list_plate, "\n".join(rows))
+	# Container tanks along the +X side
 	var want = mini(conts.size(), 4)
 	while _tanks.size() < want:
 		var i = _tanks.size()

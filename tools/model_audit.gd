@@ -72,6 +72,10 @@ func _init() -> void:
 	print("audit: ", totals, "  rows: ", rows.size())
 	quit()
 
+# A glass the game or a Krew member shows something on.
+func _is_display(n: String) -> bool:
+	return n.contains("Surface_glass") or (n.begins_with("LiveView_") and n.contains("glass"))
+
 # "LiveView_glass.001" -> "LiveView_glass"
 func _stem(n: String) -> String:
 	return n.get_slice(".", 0).rstrip("0123456789")
@@ -103,7 +107,7 @@ func _check(id: String, v: Dictionary, parts: Array, fixed: bool) -> Array:
 			out.append("reaches %.3f m below the ground" % -all.position.y)
 	for i in parts.size():
 		var n = str(parts[i][0])
-		if not (n.begins_with("LiveView_") and n.to_lower().contains("glass")):
+		if not _is_display(n):
 			continue
 		var g: AABB = boxes[i][0]
 		var axis = g.get_shortest_axis_index()
@@ -118,7 +122,7 @@ func _check(id: String, v: Dictionary, parts: Array, fixed: bool) -> Array:
 		var hits = {}
 		var blocked = 0
 		for j in parts.size():
-			if j == i or str(parts[j][0]).begins_with("LiveView_") or not boxes[j][0].intersects(prism):
+			if j == i or _is_display(str(parts[j][0])) or str(parts[j][0]).contains("Caption") or not boxes[j][0].intersects(prism):
 				continue
 			var f: PackedVector3Array = parts[j][1].get_faces()
 			var xf: Transform3D = boxes[j][1]
@@ -140,7 +144,7 @@ func _check(id: String, v: Dictionary, parts: Array, fixed: bool) -> Array:
 
 func _write(rows: Array, totals: Dictionary) -> void:
 	var md = PackedStringArray()
-	md.append("# Model audit")
+	md.append("# Model audit (library V6)")
 	md.append("")
 	md.append("Written by `tools/model_audit.gd`. Do not edit by hand: run the tool again.")
 	md.append("")
@@ -177,6 +181,8 @@ func _write(rows: Array, totals: Dictionary) -> void:
 	md.append("")
 	md.append("The library files stay byte-identical to what was supplied; `scripts/models.gd` (`FIXUPS`) moves the named parts when a model is loaded.")
 	md.append("")
+	if Models.FIXUPS.is_empty():
+		md.append("None: this version of the library needs no corrections.")
 	for id in Models.FIXUPS:
 		var fx = Models.FIXUPS[id]
 		md.append("- `%s`: parts `%s*` moved by %s, %d bracket posts added." % [id, "`, `".join(fx["nodes"]), str(fx["move"]), fx.get("posts", []).size()])
