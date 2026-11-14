@@ -367,6 +367,7 @@ func _ready() -> void:
 	# saved per-user settings
 	settings = K.load_settings()
 	hud.settings = settings
+	hud._minimap_visibility()
 	player.sensitivity = clampf(float(settings["sensitivity"]), 0.2, 4.0)
 	player.invert_y = bool(settings.get("invert_y", false))
 	player.pad_look = clampf(float(settings.get("pad_look", 1.0)), 0.3, 3.0)
@@ -446,6 +447,7 @@ func _setup_input() -> void:
 	_key("screen_next", [KEY_R])
 	_key("krew", [KEY_K])
 	_key("foreman", [KEY_H])
+	_key("minimap", [KEY_N])
 	_key("mute", [KEY_M])
 	_key("fullscreen", [KEY_F11])
 	for pair in [["fire", MOUSE_BUTTON_LEFT], ["sample", MOUSE_BUTTON_MIDDLE]]:
@@ -965,6 +967,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		hud.open_krew()
 	elif ev.is_action_pressed("foreman"):
 		hud.open_foreman()
+	elif ev.is_action_pressed("minimap"):
+		hud.toggle_minimap()
 	elif ev.is_action_pressed("next_problem"):
 		_next_problem()
 	elif ev.is_action_pressed("interact"):

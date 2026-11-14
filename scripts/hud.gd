@@ -14,6 +14,7 @@ const Gauge = preload("res://scripts/gauge.gd")
 const DemoSim = preload("res://scripts/backend_demo.gd")
 const Gfx = preload("res://scripts/gfx.gd")
 const Controls = preload("res://scripts/controls.gd")
+const Minimap = preload("res://scripts/minimap.gd")
 const Models = preload("res://scripts/models.gd")
 const Agent = preload("res://scripts/agent.gd")
 const Native = preload("res://scripts/backend_native.gd")
@@ -56,6 +57,19 @@ var _prog_bg: ColorRect
 var _slots = []
 var _help: Label = null
 var touch: CanvasLayer = null     # the touch controls, when the browser demo is on a touch screen
+var minimap: Control = null
+
+# N, or the pause menu: show or hide the minimap (kept in settings.json)
+func toggle_minimap() -> void:
+	settings["minimap"] = not bool(settings.get("minimap", true))
+	K.save_settings(settings)
+	_minimap_visibility()
+	notify("Minimap %s" % ("shown" if settings["minimap"] else "hidden"), "info")
+
+func _minimap_visibility() -> void:
+	if minimap != null:
+		minimap.enabled = bool(settings.get("minimap", true))
+		minimap.visible = minimap.enabled and not (touch != null and touch.active)
 var touch_u = 0.0                 # their unit size while they are on; 0 = desktop
 
 var _notes: VBoxContainer
@@ -327,6 +341,18 @@ func _ready() -> void:
 	_notes.offset_right = -16
 	_notes.offset_top = 16
 	_root.add_child(_notes)
+
+	minimap = Minimap.new()
+	minimap.world = world
+	minimap.player = player
+	minimap.hud = self
+	minimap.anchor_top = 1.0
+	minimap.anchor_bottom = 1.0
+	minimap.offset_left = 16
+	minimap.offset_top = -258
+	minimap.offset_right = 16 + Minimap.SIZE
+	minimap.offset_bottom = -48
+	_root.add_child(minimap)
 
 	_ignore_mouse(_root)
 	set_mode(0, null)
@@ -3202,6 +3228,9 @@ func open_pause() -> void:
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
 	body.add_child(_btn("Settings  (controls, controller, display, accessibility)", open_settings, "primary"))
+	body.add_child(_btn("Minimap:  %s   (N)" % ("ON" if bool(settings.get("minimap", true)) else "OFF"), func():
+		toggle_minimap()
+		open_pause()))
 	body.add_child(_btn("Krew operations  (K)", func(): open_krew()))
 	body.add_child(_btn("Foreman  (H)", func(): open_foreman()))
 	body.add_child(_btn("Gauge  (resource desk)", open_gauge))

@@ -423,6 +423,13 @@ Rancher needs nothing extra: download the cluster's kubeconfig from the Rancher 
 
 ## 👀 What you see
 
+The **minimap** in the bottom-left corner turns with you (what you face is
+up): node platforms, every machine as a dot in its health colour (failing
+ones pulse), the HUB, the cluster gates, Bob, Porter, Gauge, Foreman and the
+Krew's stations. `N` or the pause menu shows and hides it.
+
+![The minimap, bottom left](docs/minimap.png)
+
 | In the game | In the cluster |
 |---|---|
 | Foundation platform with a gantry sign | Node (status, CPU / memory requests, zone, instance type) |
