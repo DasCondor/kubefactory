@@ -7,7 +7,22 @@ extends Node3D
 # (inside the player's collision radius) so it never pokes through a wall.
 
 const Tex = preload("res://scripts/tex.gd")
+const Models = preload("res://scripts/models.gd")
+const K = preload("res://scripts/kutil.gd")
 
+# The library's handheld tools (desktop renderer). They are modelled aiming +Z
+# with their display facing -Z, so the whole tool is turned half round in the
+# hand: it aims where you look and its display faces you, the right way round.
+const LIB_IDS = ["scanner", "datapad", "build_gun", "wrench", "dismantler", "demolisher"]
+const LIB_SCALE = 0.52        # library tools are about a metre tall; the hand-built ones a third of that
+const LIB_POSES = [   # resting [position, rotation] per tool, in camera space
+	[Vector3(0.155, -0.118, -0.300), Vector3(0.05, 0.24, 0.0)],     # scanner
+	[Vector3(0.060, -0.150, -0.300), Vector3(-0.20, 0.14, 0.02)],   # datapad
+	[Vector3(0.155, -0.118, -0.300), Vector3(0.05, 0.24, 0.0)],     # build gun
+	[Vector3(0.170, -0.130, -0.300), Vector3(-0.45, 0.30, 0.35)],   # wrench
+	[Vector3(0.155, -0.118, -0.300), Vector3(0.05, 0.24, 0.0)],     # dismantler
+	[Vector3(0.155, -0.118, -0.300), Vector3(0.05, 0.24, 0.0)],     # demolisher
+]
 const SCALE = 0.3
 const POSES = [   # resting [position, rotation] per tool, in camera space
 	[Vector3(0.190, -0.120, -0.270), Vector3(0.03, 0.16, 0.0)],     # scanner
@@ -42,6 +57,9 @@ var _last_yaw = 0.0
 var _last_pitch = 0.0
 var _was_floor = true
 var _fall = 0.0
+var _lib = false          # the tool in hand is a library model
+var _readout: Label3D = null
+var _readout_text = ""
 
 func _ready() -> void:
 	_pivot = Node3D.new()
@@ -54,6 +72,83 @@ func set_tool(index: int, color: Color) -> void:
 		_build(index, color)
 	else:
 		_next = [index, color]
+
+# What the tool's own display shows: real state from the game (tool, target,
+# what the trigger would do), never a stand-in.
+func set_readout(text: String) -> void:
+	if text == _readout_text:
+		return
+	_readout_text = text
+	_fit_readout()
+
+func _fit_readout() -> void:
+	if _readout == null:
+		return
+	_readout.text = _readout_text
+	var sz: Vector2 = _readout.get_meta("size")
+	K.fit_label(_readout, sz.x * 0.9, sz.y * 0.84, 0.0016)
+
+# The library model for this tool, held by the same gloved arm. False if the
+# library is not there (browser build, missing files): the hand-built tool is used.
+func _build_library(index: int, color: Color) -> bool:
+	if not Models.available():
+		return false
+	var id = LIB_IDS[index]
+	var scene = Models._load_scene(id, Models.tier())
+	if scene == null:
+		return false
+	var parts = []
+	Models._collect(scene, Transform3D.IDENTITY, parts)
+	scene.free()
+	var anchors: Dictionary = Models.entry(id).get("variants", {}).get(Models.tier(), {}).get("anchors", {})
+	var grip = Models._v3(anchors.get("Grip", [0, 0.3, 0]))
+	var holder = Node3D.new()
+	holder.rotation.y = PI
+	holder.scale = Vector3.ONE * LIB_SCALE
+	_model.add_child(holder)
+	# the grip sits where the hand is; everything else follows from it
+	var hand = Vector3(0, -0.15, 0.07) if index != 1 else Vector3(0.16, -0.06, 0.02)
+	holder.position = hand - (holder.transform.basis * grip)
+	var solid = []
+	var lit = []
+	for p in parts:
+		var nm = str(p[0]).get_slice(".", 0)
+		if nm.begins_with("Lens_") or nm.begins_with("Emitter_") or nm.begins_with("RamTip_") or nm.begins_with("Button_"):
+			lit.append(p)
+		else:
+			solid.append(p)
+	for group in [solid, lit]:
+		if group.is_empty():
+			continue
+		var mi = MeshInstance3D.new()
+		mi.mesh = Models._merge(group)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if group == lit:
+			mi.material_override = _glow(color, 2.2)
+		holder.add_child(mi)
+	var sc = anchors.get("LiveViewSurface")
+	if typeof(sc) == TYPE_DICTIONARY:
+		_readout = Label3D.new()
+		_readout.font_size = 40
+		_readout.outline_size = 0
+		_readout.modulate = color.lightened(0.55)
+		_readout.no_depth_test = false
+		_readout.position = Models._v3(sc["position"]) + Models._v3(sc["normal"]) * 0.004
+		_readout.rotation.y = PI          # the glass faces -Z in the model
+		_readout.set_meta("size", Vector2(sc["size"][0], sc["size"][1]))
+		holder.add_child(_readout)
+		_fit_readout()
+	# the glove closes round the library grip, which is thicker than the hand-built ones
+	var keep = _model
+	var arm = Node3D.new()
+	arm.scale = Vector3.ONE * 1.5
+	arm.position = hand + (Vector3(0, -0.01, 0.0) if index != 1 else Vector3(0.02, -0.05, 0.03))
+	keep.add_child(arm)
+	_model = arm
+	_arm(Vector3.ZERO, Vector3(0.5, 0.25, 0.0) if index != 1 else Vector3(0.75, 0.1, 0.0))
+	_model = keep
+	_lib = true
+	return true
 
 func kick(strength: float = 1.0) -> void:
 	_kick = maxf(_kick, strength)
@@ -129,6 +224,10 @@ func _build(index: int, color: Color) -> void:
 	_model = Node3D.new()
 	_model.scale = Vector3.ONE * SCALE
 	_pivot.add_child(_model)
+	_readout = null
+	_lib = false
+	if _build_library(index, color):
+		return
 	var dark = Tex.shared("dark")
 	var steel = Tex.shared("steel")
 	match index:
@@ -285,7 +384,7 @@ func _process(delta: float) -> void:
 	_carry = lerpf(_carry, 1.0 if running and charge <= 0.0 else 0.0, clampf(delta * 7.0, 0.0, 1.0))
 	_kick = lerpf(_kick, 0.0, clampf(delta * 11.0, 0.0, 1.0))
 
-	var home = POSES[_index]
+	var home = LIB_POSES[_index] if _lib else POSES[_index]
 	var pos: Vector3 = home[0]
 	var rot: Vector3 = home[1]
 	pos += Vector3(sin(_bob) * amp, sin(_bob * 2.0) * amp * 0.7 + sin(_t * 1.6) * 0.0012, 0.0)

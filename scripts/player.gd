@@ -54,6 +54,10 @@ func tool_kick(strength: float = 1.0) -> void:
 func tool_charge(f: float) -> void:
 	view.charge = f
 
+# Text for the display on the tool in hand.
+func tool_readout(text: String) -> void:
+	view.set_readout(text)
+
 func teleport(pos: Vector3, look_at_point = null) -> void:
 	global_position = pos
 	velocity = Vector3.ZERO
