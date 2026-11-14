@@ -54,9 +54,24 @@ exactly that: the code exists and has not been run against the real thing.
   Krew members and the 101 V2 models (network, storage, structures, props,
   displays, tools) are shipped but not used: they are below the Porter V3
   standard or belong to features that do not exist yet.
-- The library is V6. Its own notes say what it is not: no model is approved for
-  release, 50 designs are still V2 legacy geometry, and its checks were
-  sampled, not exhaustive. Nothing here changes that.
+- The library is V8 (the V7 readability patch: repaired lettering and neutral
+  display planes on 249 files; V8 changed no models). Its own notes say what it
+  is not: no model is approved for release, 50 designs are still V2 legacy
+  geometry, and its checks were sampled, not exhaustive. Nothing here changes
+  that.
+- **A machine is a pod, and its plate says so.** Pods read POD and Docker
+  containers CONTAINER; a pod gets a role model (DATABASE SERVER, CACHE
+  SERVER, NETWORK APPLIANCE...) only when the image it runs is that software.
+  The Deployment, StatefulSet, DaemonSet, ReplicaSet, Job and Compose models
+  are therefore not placed: the world has no object for the workload itself
+  yet. Fewer distinct silhouettes is the cost of the plates being true.
+- **V8's Grafana and Tautulli providers are not implemented.** The Go starter
+  adapters that came with it are not in the repository. LiveView opens those
+  applications as ordinary pages, like any other.
+- From the V7 notes, not done: new silhouettes per kind, sliding or split
+  doors for narrow aisles, removing the floating name labels, and distinct
+  LiveView states (no endpoint, loading, sign-in needed) on the machine glass:
+  it shows the pod's status as one small line until a page is opened.
 - 22 of the 25 machines have a storage door. `cooling_unit`, `load_balancer`
   and `network_appliance` have none.
 - The six V6 handheld tools are used in first person on the desktop renderer:

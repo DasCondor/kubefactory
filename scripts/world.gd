@@ -109,7 +109,7 @@ func _ready() -> void:
 	_select_mat = Tex.glow(Tex.ORANGE, 2.0)
 	_select_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	var unit = BoxMesh.new()
-	for i in 12:
+	for i in 24:      # corner brackets: a short stub at each end of each of the 12 edges
 		var e = MeshInstance3D.new()
 		e.mesh = unit
 		e.material_override = _select_mat
@@ -790,22 +790,27 @@ func select(collider, col: Color = Color(0.98, 0.584, 0.286)) -> void:
 	var size = cs.shape.size + Vector3.ONE * 0.2
 	if size != _select_size:
 		_select_size = size
-		var t = 0.07
+		# thin brackets at the eight corners rather than a full cage, so the
+		# highlight frames the thing without drawing lines across it
+		var t = 0.035
 		var i = 0
 		for axis in 3:
 			var b = (axis + 1) % 3
 			var c = (axis + 2) % 3
+			var stub = minf(0.7, size[axis] * 0.2)
 			for sb in [-0.5, 0.5]:
 				for sc in [-0.5, 0.5]:
-					var e = _select.get_child(i)
-					var sv = Vector3(t, t, t)
-					sv[axis] = size[axis] + t
-					var pv = Vector3.ZERO
-					pv[b] = size[b] * sb
-					pv[c] = size[c] * sc
-					e.scale = sv
-					e.position = pv
-					i += 1
+					for end in [-1.0, 1.0]:
+						var e = _select.get_child(i)
+						var sv = Vector3(t, t, t)
+						sv[axis] = stub
+						var pv = Vector3.ZERO
+						pv[axis] = end * (size[axis] - stub) * 0.5
+						pv[b] = size[b] * sb
+						pv[c] = size[c] * sc
+						e.scale = sv
+						e.position = pv
+						i += 1
 
 func _node_rank(n: Dictionary) -> String:
 	return ("0" if str(n["roles"]).contains("control-plane") or str(n["roles"]).contains("master") else "1") + n["name"]

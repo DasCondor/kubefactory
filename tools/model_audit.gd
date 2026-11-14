@@ -144,7 +144,7 @@ func _check(id: String, v: Dictionary, parts: Array, fixed: bool) -> Array:
 
 func _write(rows: Array, totals: Dictionary) -> void:
 	var md = PackedStringArray()
-	md.append("# Model audit (library V6)")
+	md.append("# Model audit (library V8)")
 	md.append("")
 	md.append("Written by `tools/model_audit.gd`. Do not edit by hand: run the tool again.")
 	md.append("")

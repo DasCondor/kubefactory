@@ -1,4 +1,4 @@
-# Model audit (library V6)
+# Model audit (library V8)
 
 Written by `tools/model_audit.gd`. Do not edit by hand: run the tool again.
 
