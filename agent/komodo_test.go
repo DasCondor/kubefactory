@@ -63,6 +63,13 @@ func TestKomodo(t *testing.T) {
 	registerAll()
 	var seen []string
 	f := fakeKomodo(t, &seen)
+	if !canSeal() {
+		// no protected storage here (Linux, macOS today): a key must be refused, never kept in the clear
+		if _, e := call(t, "komodo.save", map[string]any{"base_url": f.URL, "key": testKomodoKey, "secret": testKomodoSecret}); e == nil || e.Kind != "unsupported" {
+			t.Fatalf("a key was accepted without protected storage: %v", e)
+		}
+		t.Skip("keys are refused on this system, as checked; the rest needs protected storage")
+	}
 
 	if _, e := call(t, "komodo.save", map[string]any{"base_url": f.URL, "key": testKomodoKey}); e == nil {
 		t.Fatal("a key without its secret was accepted")
