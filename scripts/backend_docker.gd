@@ -13,11 +13,39 @@ var context = ""
 var log_cfg = {}
 var providers = [{"id": "kube", "name": "Docker Engine", "ready": true, "note": "docker logs"}]
 var _host = {}
+# Which Docker context (the docker CLI's named engines: this machine, or another
+# host over tcp:// or ssh://). "" is the CLI's current one. Every command is
+# run against it, so several hosts are several connections.
+var docker_context = ""
+var endpoint = ""          # its address, as the context states it
+var remote = false         # not this machine's own engine
+
+func _args(args: Array) -> PackedStringArray:
+	return PackedStringArray((["--context", docker_context] if docker_context != "" else []) + args)
 
 func _run(args: Array, with_err: bool = true) -> Dictionary:
 	var out = []
-	var code = OS.execute("docker", PackedStringArray(args), out, with_err)
+	var code = OS.execute("docker", _args(args), out, with_err)
 	return {"code": code, "out": (str(out[0]) if out.size() > 0 else "")}
+
+# The docker CLI's contexts: [{name, endpoint, current, remote}]. Nothing is contacted.
+static func contexts() -> Array:
+	var out = []
+	if OS.execute("docker", PackedStringArray(["context", "ls", "--format", "{{json .}}"]), out, false) != 0 or out.is_empty():
+		return []
+	var res = []
+	for line in str(out[0]).split("\n", false):
+		var d = JSON.parse_string(line.strip_edges())
+		if typeof(d) != TYPE_DICTIONARY or str(d.get("Error", "")) != "":
+			continue
+		var ep = str(d.get("DockerEndpoint", ""))
+		res.append({"name": str(d.get("Name", "")), "endpoint": ep, "current": bool(d.get("Current", false)), "remote": is_remote(ep)})
+	return res
+
+# This machine's own engine is a local socket or pipe; tcp:// and ssh:// are another host
+# (a tcp://127.0.0.1 port is usually a tunnel or proxy to one).
+static func is_remote(ep: String) -> bool:
+	return not (ep.begins_with("unix://") or ep.begins_with("npipe://"))
 
 func probe() -> Dictionary:
 	var r = _run(["info", "--format", "{{json .}}"], false)
@@ -27,7 +55,11 @@ func probe() -> Dictionary:
 	if typeof(d) != TYPE_DICTIONARY:
 		return {"ok": false, "msg": "could not read docker info"}
 	_host = d
-	context = str(d.get("Name", "docker"))
+	context = docker_context if docker_context != "" else str(d.get("Name", "docker"))
+	for c in contexts():
+		if c["name"] == docker_context or (docker_context == "" and c["current"]):
+			endpoint = c["endpoint"]
+			remote = c["remote"]
 	return {"ok": true, "msg": context}
 
 var _inspect = {}      # container id -> {state, sec, finished}: `docker inspect` is asked only for what changed
@@ -141,8 +173,7 @@ func run_action(a: Dictionary) -> Dictionary:
 			return {"ok": r.code == 0, "msg": "", "text": r.out}
 		_:
 			return {"ok": false, "msg": "not supported for Docker"}
-	var lines = r.out.strip_edges().split("\n")
-	return {"ok": r.code == 0, "msg": lines[lines.size() - 1] if r.code != 0 else "docker: %s %s" % [a["op"], a.get("pod", a["name"]) if a["op"] == "restart" else a["name"]]}
+	return {"ok": r.code == 0, "msg": _tail(r) if r.code != 0 else "docker: %s %s" % [a["op"], a.get("pod", a["name"]) if a["op"] == "restart" else a["name"]]}
 
 # ---- Porter / Portainer: full app setups as Compose projects, template runs
 
@@ -157,7 +188,10 @@ func _env_file(project: String) -> String:
 	return path
 
 func _tail(r: Dictionary) -> String:
-	var lines = r.out.strip_edges().split("\n")
+	var all = r.out.strip_edges()
+	if all.contains("403 Forbidden") or all.contains("forbidden by administrative rules"):
+		return "The Docker host refused this (403 Forbidden): it only allows looking, through a read-only proxy."
+	var lines = all.split("\n")
 	return lines[lines.size() - 1]
 
 # ---- read-only storage inspection (the storage doors)
@@ -230,7 +264,7 @@ func _file_action(a: Dictionary) -> Dictionary:
 	# `docker cp` would follow the file out of the container; a bounded read through exec does not
 	var args = ["exec", a["name"], "head", "-c", "65536", "--", full] if page == 0 else ["exec", a["name"], "dd", "if=" + full, "bs=65536", "skip=%d" % page, "count=1"]
 	var out = []
-	var code = OS.execute("docker", PackedStringArray(args), out, false)
+	var code = OS.execute("docker", _args(args), out, false)
 	DirAccess.remove_absolute(tmp)
 	if code != 0:
 		return {"ok": false, "kind": "rbac", "msg": "The container's user may not read this file.", "data": {}}

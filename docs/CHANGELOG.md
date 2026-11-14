@@ -19,6 +19,12 @@ against live infrastructure.
 - **Minimap** (`N`): a top-down view that turns with you, with node platforms,
   machines in their health colours (failing ones pulse), the HUB, gates and
   the Krew. Saved on or off; it steps aside for touch controls.
+- **Docker hosts as connections.** Every Docker CLI context is listed on the
+  cluster switcher and can be chosen (`--docker --context=<name>`); one on
+  another machine opens read-only. `deploy/docker-readonly/` runs a pinned
+  read-only socket proxy (`POST=0`) for each host, reachable over an SSH tunnel
+  without docker group or root (`docs/DOCKER_HOSTS.md`). A change refused by
+  the host is reported in plain words.
 - **Foreman** (key `H`): correlates the Krew's findings into incidents and a
   shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
   Claude, any OpenAI-compatible endpoint) answer plain-language questions from

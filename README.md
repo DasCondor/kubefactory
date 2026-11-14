@@ -196,6 +196,16 @@ kubeconfigs...**), or just drop a kubeconfig file on the window. It:
 - says what went wrong in plain words: cannot reach the server, certificate not
   trusted, sign-in refused or expired, not permitted.
 
+### Docker hosts, read-only, without root
+
+Every Docker CLI context is a connection of its own on the cluster list, so
+several Docker hosts are several connections (`-- --docker --context=<name>`
+picks one at start). A context on another machine **opens read-only**. To
+make the host itself refuse changes, and to avoid giving anything root
+(Docker access is root), run the read-only proxy in
+`deploy/docker-readonly/` on each host and reach it over an SSH tunnel as an
+ordinary user: **[docs/DOCKER_HOSTS.md](docs/DOCKER_HOSTS.md)**.
+
 ## 🚪 Open a machine: storage inspection (key `F`)
 
 Machines that have a door open it. Inside are the pod's volumes as drawers.

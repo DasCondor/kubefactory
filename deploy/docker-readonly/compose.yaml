@@ -1,0 +1,37 @@
+# A read-only door to this host's Docker engine, for KubeFactory (or anything
+# else that only needs to look). Run it on each Docker host:
+#
+#   docker compose -f compose.yaml up -d
+#
+# The proxy answers GET requests for the sections below and refuses every
+# change (POST=0): starting, stopping, removing, exec and builds are rejected
+# by the proxy itself, whatever the client sends.
+#
+# It listens on 127.0.0.1 only. Reach it over SSH as an ordinary user (no
+# docker group, no root), see docs/DOCKER_HOSTS.md:
+#
+#   ssh -N -L 23751:127.0.0.1:2375 you@this-host
+#   docker context create this-host --docker host=tcp://127.0.0.1:23751
+#
+# Read-only still means readable: `docker inspect` shows container
+# environment variables, which can hold passwords. Keep the port off the
+# network; the SSH tunnel is the way in.
+services:
+  docker-readonly:
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      POST: "0"          # nothing but reads
+      CONTAINERS: "1"    # list, inspect, logs
+      IMAGES: "1"        # image list and inspect (Forge, Scrappy's scan)
+      INFO: "1"          # docker info: the host's CPU and memory
+      NETWORKS: "1"
+      VOLUMES: "1"
+      SYSTEM: "1"        # docker system df (the image and volume scan)
+      EVENTS: "1"
+      PING: "1"
+      VERSION: "1"

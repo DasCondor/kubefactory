@@ -49,6 +49,16 @@ exactly that: the code exists and has not been run against the real thing.
   "(K)"); a hint written another way keeps the default key's name.
 - Interface size applies when you press **Apply interface size**, so the menu
   does not jump under the pointer while dragging.
+## Docker hosts
+
+- Docker contexts are listed without being contacted; one that does not answer
+  says so when chosen. The read-only proxy was tested on this machine's engine
+  through `tcp://127.0.0.1`; the SSH tunnel and a separate physical host were
+  not tested.
+- Through the read-only proxy, opening a machine's storage door is not
+  available (it needs `exec`), and neither are logs' follow mode or any action.
+- Read-only for another host is switched on when you connect; turning it off
+  from the Esc menu is your choice, and only the proxy makes it binding.
 
 ## By design, for now
 

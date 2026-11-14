@@ -235,6 +235,14 @@ func _gather_targets(include_local: bool) -> Dictionary:
 	var dr = d.probe() if include_local else {"ok": false, "msg": "local discovery not requested"}
 	if dr.ok:
 		list.append({"source": "docker", "context": d.context, "provider": "Docker Engine"})
+	# every other Docker context (another host over tcp:// or ssh://) is a connection of its
+	# own; they are listed, not contacted, until one is chosen
+	if include_local and edition != "demo":
+		for c in Docker.contexts():
+			if c["current"] and dr.ok:
+				continue
+			list.append({"source": "docker", "context": c["name"], "docker_context": c["name"], "endpoint": c["endpoint"],
+				"provider": "Docker host (opens read-only)" if c["remote"] else "Docker Engine"})
 	for f in Demo.FLAVORS:
 		list.append({"source": "simulation", "context": f, "provider": Demo.FLAVORS[f]["provider"]})
 	return {"list": list, "docker": d, "docker_result": dr, "native": native, "use_kube": use_kube}
@@ -324,7 +332,16 @@ func _detect(mode: String, ctx: String, gen: int, profile: String = "") -> void:
 				note += "The native companion is missing, so this is the kubectl mode. "
 		else:
 			note += "Kubernetes: %s. " % r.msg
-	if b == null and (mode == "docker" or mode == "auto"):
+	if b == null and mode == "docker" and ctx != "" and Docker.contexts().any(func(c): return c["name"] == ctx):
+		# a named Docker context: that host, and only that host
+		var dc = Docker.new()
+		dc.docker_context = ctx
+		var r = dc.probe()
+		if r.ok:
+			b = dc
+		else:
+			note += "Docker (%s): %s. " % [ctx, r.msg]
+	elif b == null and (mode == "docker" or mode == "auto"):
 		if dr.ok:
 			b = d
 		else:
@@ -352,6 +369,11 @@ func _detected(b, gen: int, note: String, list: Array, failure: Dictionary = {})
 		state["groups"] = b.groups
 		state["scoped_ns"] = b.scoped_ns
 		state["multiuser"] = b.presence_ok
+	if b.label == "docker" and b.get("remote") == true and not read_only:
+		# another machine's engine: look first. Esc > Read-only mode turns it off; a
+		# read-only proxy on that host (docs/DOCKER_HOSTS.md) makes the engine itself refuse
+		read_only = true
+		note += "Another host's Docker engine: opened read-only. "
 	_joined_at = Time.get_unix_time_from_system()
 	_ptimer = 2.0
 	peers_updated.emit(peers)

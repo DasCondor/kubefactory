@@ -54,6 +54,7 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Read-only storage browser | **verified live** on kind and on a real Docker container; links are never followed |
 | | Porter V3 as minimum standard | machines, Porter and Bob use V3; V2 models are not placed |
 | 02 Docker | Native Docker Engine API | unsupported (docker CLI kept) |
+| | Several Docker hosts (CLI contexts), read-only by default for other machines, read-only proxy recipe | **verified live** through a throw-away read-only proxy: state, `docker inspect`, the image scan, and the host refusing a removal with read-only off. The SSH tunnel and a separate physical host not tested |
 | 02 Kubernetes | Server-side apply, cordon, scale, rollout restart | verified on a real API server |
 | | Drain with pods to evict | **verified live** on the disposable kind cluster |
 | | Exec / terminal, ephemeral debug containers, Helm, CRD browsing | unsupported |
