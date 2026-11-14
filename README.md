@@ -222,6 +222,22 @@ make the host itself refuse changes, and to avoid giving anything root
 (Docker access is root), run the read-only proxy in
 `deploy/docker-readonly/` on each host and reach it over an SSH tunnel as an
 ordinary user: **[docs/DOCKER_HOSTS.md](docs/DOCKER_HOSTS.md)**.
+### A KubeFactory server: play like a game client
+
+Run KubeFactory once as a server beside your cluster (`--headless -- --server`)
+and everyone else connects to it (Esc > Switch cluster > **KubeFactory
+server...**) with a token: no kubeconfig or Docker access on their machines.
+Viewers only look; operators act up to MK.4; the server checks every request
+and logs it. See **[docs/SERVER.md](docs/SERVER.md)**.
+
+### Backend plugins
+
+New kinds of sources can be added as plugins: separate programs, in any
+language, that report machines over a small JSON protocol. A plugin runs only
+once you trust it (tied to a hash of its files) and can only look unless you
+also allow changes. See **[docs/PLUGINS.md](docs/PLUGINS.md)** and
+`examples/plugins/static-world`.
+
 ### Komodo (read-only)
 
 Using [Komodo](https://komo.do) for your Docker hosts? Esc > Switch cluster >

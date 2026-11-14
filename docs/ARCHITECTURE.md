@@ -33,6 +33,9 @@ is no server, no account and no telemetry.
 | `scripts/liveview.gd` | LiveView sessions: frames in, input out, frame rate by distance |
 | `scripts/machine_screens.gd` | what each machine's screen shows: dashboard, metrics (usage graphs), logs, storage |
 | `scripts/foreman.gd` | Foreman: incidents from the Krew's findings; the AI pipeline (context, redaction, reply parsing, tool registry checks); provider choice and identity |
+| `scripts/server.gd` | server mode: WebSocket server, token sign-in (hashes only), roles and read-only enforced per request, state pushed to players |
+| `scripts/backend_remote.gd` | a KubeFactory server as a source (the client side of server mode) |
+| `scripts/plugins.gd`, `scripts/backend_plugin.gd` | backend plugins: discovery, trust by hash, the JSON-lines protocol, checking what a plugin sends |
 | `scripts/krew.gd` | the Krew (Bob, Gauge, Sentinel, Scout, Scrappy, Archie, Forge, Blueprint): rules over the normalized state (and Scrappy's scan) produce findings; keeps first-seen times and the resolved history; actions only go through `hud.guarded_act` |
 | `scripts/gauge.gd` | read-only resource observations and formatting; workload usage comes through the existing `pod_metrics` backend operation |
 | `scripts/demo_screens.gd` | the simulated Grafana and stream screens of the demo worlds |

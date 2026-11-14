@@ -6,6 +6,15 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Server mode.** `--server` runs KubeFactory as a server for a cluster or
+  Docker engine; players connect over WebSocket with a token (`--remote=`, or
+  Esc > Switch cluster > KubeFactory server...). Roles (viewer, operator up to
+  MK.4) and read-only mode are enforced by the server; only token hashes are
+  stored; every action is audited. `docs/SERVER.md`.
+- **Backend plugin API (1).** Plugins are separate programs speaking JSON lines
+  (`docs/PLUGINS.md`); they run only when trusted (by a hash of their files),
+  are read-only unless allowed to change things, and everything they send is
+  checked and capped. Example: `examples/plugins/static-world`.
 - **High graphics in the browser demo.** Esc → Graphics → High (or `?gfx=high`)
   fetches the model library's machines, Krew and tools from the same site
   (about 13 MB, each file checked against the catalog's SHA-256) and adds 4x

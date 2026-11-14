@@ -17,6 +17,7 @@ const Providers = preload("res://scripts/providers.gd")
 const DemoScreens = preload("res://scripts/demo_screens.gd")
 const MachineScreens = preload("res://scripts/machine_screens.gd")
 const KrewManager = preload("res://scripts/krew.gd")
+const ServerNode = preload("res://scripts/server.gd")
 const WebAssets = preload("res://scripts/web_assets.gd")
 const Controls = preload("res://scripts/controls.gd")
 const Tex = preload("res://scripts/tex.gd")
@@ -88,6 +89,11 @@ var _touch_forced = false          # --touch: show them on the desktop, for test
 var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
 var _web_note = ""       # browser: why High could not be used, shown once the HUD is up
+var server: Node = null     # --server: this instance serves players (server.gd)
+var server_port = 0
+var server_listen = "127.0.0.1"
+var server_cert = ""
+var server_key = ""
 var _pad_used = false    # a controller has been used: its actions work without the mouse captured
 var _pad_scroll = 0.0
 var _pad_a = false
@@ -315,6 +321,19 @@ func _ready() -> void:
 		elif a.begins_with("--sim="):
 			source = "simulation"
 			ctx = a.trim_prefix("--sim=")
+		elif a == "--server" or a.begins_with("--server="):
+			server_port = int(a.trim_prefix("--server=")) if a.begins_with("--server=") else 7666
+		elif a.begins_with("--listen="):
+			server_listen = a.trim_prefix("--listen=")
+		elif a.begins_with("--tls-cert="):
+			server_cert = a.trim_prefix("--tls-cert=")
+		elif a.begins_with("--tls-key="):
+			server_key = a.trim_prefix("--tls-key=")
+		elif a.begins_with("--remote="):
+			# a KubeFactory server; the token comes from KF_REMOTE_TOKEN, never the command line
+			source = "remote"
+			ctx = a.trim_prefix("--remote=")
+			cluster.remote_token = OS.get_environment("KF_REMOTE_TOKEN")
 		elif a == "--read-only":
 			cluster.read_only = true
 		elif a.begins_with("--shots="):
@@ -399,6 +418,18 @@ func _ready() -> void:
 	if _web_note != "":
 		hud.notify.call_deferred(_web_note, "warn")
 	cluster.start(source, ctx, "cli" if kubeconfig != "" else "")
+	if server_port > 0:
+		server = ServerNode.new()
+		server.cluster = cluster
+		server.port = server_port
+		server.address = server_listen
+		server.tls_cert = server_cert
+		server.tls_key = server_key
+		add_child(server)
+		var sr = server.start()
+		if not sr.ok:
+			printerr("KubeFactory server: ", sr.msg)
+			get_tree().quit(1)
 	if not Controls.changed().is_empty():
 		get_tree().create_timer(2.0).timeout.connect(func(): world.refresh_hints())
 	if shots != "" and shots != "-":

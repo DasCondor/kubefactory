@@ -1112,6 +1112,9 @@ func open_clusters() -> void:
 	top.add_child(_btn("Add or manage kubeconfigs...", func(): open_connect(), "primary"))
 	if Agent.available() and cluster.edition != "demo":
 		top.add_child(_btn("Komodo...", open_komodo))
+	if not OS.has_feature("web") and cluster.edition != "demo":
+		top.add_child(_btn("Plugins...", open_plugins))
+	top.add_child(_btn("KubeFactory server...", open_remote))
 	body.add_child(top)
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1152,6 +1155,88 @@ func _cluster_row(t: Dictionary) -> Control:
 		pc.add_child(r)
 		return pc
 	return null
+
+# ----- Backend plugins (docs/PLUGINS.md): nothing runs until trusted, nothing acts until allowed
+
+const PluginList = preload("res://scripts/plugins.gd")
+
+func open_plugins() -> void:
+	var body = _open_modal("plugins", null, "PLUGINS", Vector2(940, 620))
+	var intro = _lbl("A plugin is a separate program that shows another kind of source as a factory. It runs only once you trust it, and trust is tied to its files: if they change, it must be trusted again. It can only look unless you also allow changes, and even then every action goes through the usual tiers and confirmations.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 880
+	body.add_child(intro)
+	var found = PluginList.discover()
+	if found.is_empty():
+		var none = _lbl("No plugins found. Put a plugin's folder in:\n" + "\n".join(PackedStringArray(PluginList.dirs().map(func(d): return "    " + K.tidy_path(d)))) + "\nexamples/plugins/static-world is one to start from.", 13, DIM)
+		none.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		none.custom_minimum_size.x = 880
+		body.add_child(none)
+	for p in found:
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if p["trusted"] else Color(0.3, 0.3, 0.32), 1, 8))
+		var v = _col(4)
+		pc.add_child(v)
+		v.add_child(_lbl("%s  %s" % [p["name"], p["version"]], 15, TXT))
+		if p["error"] != "":
+			v.add_child(_lbl("Cannot be used: " + p["error"], 13, K.health_color("bad")))
+		else:
+			var dl = _lbl(p["description"], 12, DIM)
+			dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			dl.custom_minimum_size.x = 860
+			v.add_child(dl)
+			v.add_child(_lbl("Runs: %s" % " ".join(PackedStringArray(p["command"])).replace("{dir}", "<plugin folder>"), 12, DIM))
+			var r = _row(8)
+			r.add_child(_btn("Trusted (click to stop)" if p["trusted"] else "Trust this plugin", func():
+				PluginList.set_trust(p, not p["trusted"], false)
+				cluster.discover_targets()
+				open_plugins(), "normal" if p["trusted"] else "primary"))
+			if p["trusted"]:
+				r.add_child(_btn("Changes: ALLOWED" if p["actions_allowed"] else "Changes: NOT ALLOWED", func():
+					PluginList.set_trust(p, true, not p["actions_allowed"])
+					open_plugins(), "mk3" if p["actions_allowed"] else "normal"))
+				r.add_child(_btn("Connect", func():
+					close_modal()
+					target_requested.emit({"source": "plugin", "context": p["name"], "plugin_id": p["id"], "provider": "Plugin"}), "primary"))
+			v.add_child(r)
+		body.add_child(pc)
+	var br = _row(8)
+	br.add_child(_spacer())
+	br.add_child(_btn("Back to clusters", open_clusters))
+	body.add_child(br)
+
+# ----- A KubeFactory server (server.gd): play against it like a game client
+
+var _remote_form = {"url": "", "token": ""}
+
+func open_remote() -> void:
+	var body = _open_modal("remote", null, "KUBEFACTORY SERVER", Vector2(860, 420))
+	var intro = _lbl("Connect to a KubeFactory server that someone runs for the cluster. You need its address and a token from its admin. You hold no credential for the cluster itself: the server checks your role and its own read-only mode before anything runs. The token is not saved.", 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 800
+	body.add_child(intro)
+	for fld in [["Address", "url", "wss://kubefactory.example.lan:7666", false], ["Token", "token", "from the server's admin", true]]:
+		var r = _row(8)
+		r.add_child(_fixed(_lbl(fld[0], 13, DIM), 100))
+		var le = LineEdit.new()
+		le.text = str(_remote_form[fld[1]])
+		le.placeholder_text = fld[2]
+		le.secret = fld[3]
+		le.custom_minimum_size.x = 600
+		var key = fld[1]
+		le.text_changed.connect(func(v): _remote_form[key] = v)
+		r.add_child(le)
+		body.add_child(r)
+	var br = _row(8)
+	br.add_child(_btn("Connect", func():
+		var url = str(_remote_form["url"]).strip_edges()
+		cluster.remote_token = str(_remote_form["token"]).strip_edges()
+		_remote_form["token"] = ""
+		close_modal()
+		target_requested.emit({"source": "remote", "context": url, "provider": "KubeFactory server"}), "primary"))
+	br.add_child(_spacer())
+	br.add_child(_btn("Back to clusters", open_clusters))
+	body.add_child(br)
 
 # ----- Komodo connections (agent/komodo.go): read-only, key and secret sealed by the companion
 

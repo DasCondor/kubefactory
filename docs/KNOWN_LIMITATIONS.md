@@ -86,6 +86,19 @@ exactly that: the code exists and has not been run against the real thing.
 - The helper scripts (install, dev cluster, packaging) are PowerShell on
   Windows; Linux and macOS have `tools/package.sh` only.
 
+## Server mode and plugins
+
+- **Server mode** was tested with a headless server and client games on this
+  machine over `ws://127.0.0.1`. `wss://` with a certificate, a reverse proxy
+  and players on other machines were not tested. Players' avatars, the shared
+  feed and per-namespace limits of the Kubernetes multi-user mode are not
+  carried over a server connection yet; roles are per token, not per
+  namespace. Tokens are managed by editing `server-tokens.json`.
+- **Plugins** were tested with the example plugin only. A trusted plugin is a
+  program running with your rights: trust only plugins you have read. Plugins
+  cannot draw their own models or screens; their machines use the standard
+  ones. Plugins are not available in the browser build.
+
 ## By design, for now
 
 - **Docker still uses the `docker` command.** Only Kubernetes is native.

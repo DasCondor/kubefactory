@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {"name": "garage-pi", "ready": true, "roles": "raspberry pi", "cpu": 4, "mem": 8000000000},
+    {"name": "attic-nuc", "ready": true, "roles": "mini pc", "cpu": 8, "mem": 32000000000}
+  ],
+  "pods": [
+    {"name": "pihole", "ns": "network", "node": "garage-pi", "status": "Running", "image": "pihole/pihole:2024.07.0", "labels": {"app": "pihole"}},
+    {"name": "unifi", "ns": "network", "node": "garage-pi", "status": "Running", "image": "jacobalberty/unifi:v8.4", "labels": {"app": "unifi"}},
+    {"name": "jellyfin", "ns": "media", "node": "attic-nuc", "status": "Running", "image": "jellyfin/jellyfin:10.9.9", "labels": {"app": "jellyfin"}},
+    {"name": "backup-job", "ns": "ops", "node": "attic-nuc", "status": "Error", "image": "restic/restic:0.17.0", "restarts": 3}
+  ],
+  "workloads": [
+    {"kind": "Deployment", "name": "pihole", "ns": "network", "replicas": 1, "ready": 1},
+    {"kind": "Deployment", "name": "jellyfin", "ns": "media", "replicas": 1, "ready": 1}
+  ],
+  "services": [
+    {"name": "pihole", "ns": "network", "type": "LoadBalancer", "ports": "53/UDP", "selector": {"app": "pihole"}},
+    {"name": "jellyfin", "ns": "media", "type": "ClusterIP", "ports": "8096/TCP", "selector": {"app": "jellyfin"}}
+  ]
+}
