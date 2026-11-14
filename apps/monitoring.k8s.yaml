@@ -1,0 +1,448 @@
+# Monitoring dashboard: Grafana (dashboard "Containers", user admin, password in secret app-db),
+# Prometheus, and cAdvisor + node-exporter on every node. cAdvisor reads the node's own
+# filesystem (hostPath, read-only) to see the containers; Prometheus finds both through DNS,
+# so no cluster-wide RBAC is needed and this works in any namespace.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  labels: {kubefactory/app: monitoring}
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: kubefactory
+        type: file
+        options:
+          path: /etc/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  labels: {kubefactory/app: monitoring}
+data:
+  containers.json: |
+    {
+      "uid": "kubefactory-containers",
+      "title": "Containers",
+      "tags": [
+        "kubefactory"
+      ],
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "time": {
+        "from": "now-30m",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Running containers",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 6,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "count(container_last_seen{name!=\"\"})",
+              "legendFormat": ""
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Host CPU in use",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 6,
+            "y": 0,
+            "w": 6,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[2m]))",
+              "legendFormat": ""
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Host memory in use",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 0,
+            "w": 6,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes",
+              "legendFormat": ""
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Host disk in use (/)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 18,
+            "y": 0,
+            "w": 6,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
+              "legendFormat": ""
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "CPU by container (cores)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 4,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[2m]))",
+              "legendFormat": "{{name}}"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Memory by container",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 4,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (name) (container_memory_working_set_bytes{name!=\"\"})",
+              "legendFormat": "{{name}}"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Network received by container",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 12,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!=\"\"}[2m]))",
+              "legendFormat": "{{name}}"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Network sent by container",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 12,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!=\"\"}[2m]))",
+              "legendFormat": "{{name}}"
+            }
+          ]
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels: {kubefactory/app: monitoring}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: cadvisor
+        dns_sd_configs:
+          - names: ["cadvisor"]
+            type: A
+            port: 8080
+      - job_name: node
+        dns_sd_configs:
+          - names: ["node-exporter"]
+            type: A
+            port: 9100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels: {app: grafana, kubefactory/app: monitoring}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: grafana}
+  template:
+    metadata:
+      labels: {app: grafana}
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.2.0
+          ports: [{containerPort: 3000}]
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: app-db, key: password}
+          readinessProbe:
+            httpGet: {path: /api/health, port: 3000}
+          volumeMounts:
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/datasources/prometheus.yaml, subPath: datasource.yaml}
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/dashboards/kubefactory.yaml, subPath: dashboards.yaml}
+            - {name: dashboards, mountPath: /etc/grafana/dashboards}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+      volumes:
+        - name: provisioning
+          configMap: {name: grafana-provisioning}
+        - name: dashboards
+          configMap: {name: grafana-dashboards}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  labels: {kubefactory/app: monitoring}
+spec:
+  type: NodePort
+  selector: {app: grafana}
+  ports: [{port: 3000, targetPort: 3000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels: {app: prometheus, kubefactory/app: monitoring}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: prometheus}
+  template:
+    metadata:
+      labels: {app: prometheus}
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.54.1
+          ports: [{containerPort: 9090}]
+          readinessProbe:
+            httpGet: {path: /-/ready, port: 9090}
+          volumeMounts:
+            - {name: config, mountPath: /etc/prometheus}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+      volumes:
+        - name: config
+          configMap: {name: prometheus-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels: {kubefactory/app: monitoring}
+spec:
+  selector: {app: prometheus}
+  ports: [{port: 9090, targetPort: 9090}]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cadvisor
+  labels: {app: cadvisor, kubefactory/app: monitoring}
+spec:
+  selector:
+    matchLabels: {app: cadvisor}
+  template:
+    metadata:
+      labels: {app: cadvisor}
+    spec:
+      containers:
+        - name: cadvisor
+          image: gcr.io/cadvisor/cadvisor:v0.49.1
+          ports: [{containerPort: 8080}]
+          volumeMounts:
+            - {name: rootfs, mountPath: /rootfs, readOnly: true}
+            - {name: var-run, mountPath: /var/run, readOnly: true}
+            - {name: sys, mountPath: /sys, readOnly: true}
+            - {name: containers, mountPath: /var/lib, readOnly: true}
+          resources:
+            requests: {cpu: 50m, memory: 100Mi}
+      volumes:
+        - name: rootfs
+          hostPath: {path: /}
+        - name: var-run
+          hostPath: {path: /var/run}
+        - name: sys
+          hostPath: {path: /sys}
+        - name: containers
+          hostPath: {path: /var/lib}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cadvisor
+  labels: {kubefactory/app: monitoring}
+spec:
+  clusterIP: None   # headless, so Prometheus finds every pod of the DaemonSet through DNS
+  selector: {app: cadvisor}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  labels: {app: node-exporter, kubefactory/app: monitoring}
+spec:
+  selector:
+    matchLabels: {app: node-exporter}
+  template:
+    metadata:
+      labels: {app: node-exporter}
+    spec:
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.8.2
+          ports: [{containerPort: 9100}]
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  labels: {kubefactory/app: monitoring}
+spec:
+  clusterIP: None   # headless, so Prometheus finds every pod of the DaemonSet through DNS
+  selector: {app: node-exporter}
+  ports: [{port: 9100, targetPort: 9100}]

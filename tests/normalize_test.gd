@@ -75,6 +75,59 @@ func _init():
 line2\" injected: true"]])
 	check.call("manifest value stays quoted", man.contains("injected: true
 "), false)
+	# Bob's diagnoses and log reading
+	var jobs = K.issues(st)
+	check.call("bob lists the crashing pod first", jobs[0]["name"] + " " + jobs[0]["status"], p[1]["name"] + " CrashLoopBackOff")
+	check.call("bob lists the unscheduled pod", jobs.filter(func(j): return j["status"] == "Unschedulable").size(), 1)
+	check.call("bob crashloop remedy", K.diagnose("CrashLoopBackOff")[2], "restart")
+	check.call("bob image remedy has no button", K.diagnose("ImagePullBackOff")[2], "")
+	var Bob = load("res://scripts/bob.gd")
+	var rules = Bob.compile({"rules": [{"match": "widget quota", "means": "Out of widgets.", "fix": "Buy widgets.", "weight": 3}, {"match": "(unclosed"}], "ignore": ["healthz"]})
+	check.call("bob skips a bad custom regex", rules["bad"], 1)
+	var log = "INFO  starting\nINFO  GET /healthz 500 connection refused\nERROR db handshake failed: connection refused (10.0.0.5:5432)\nERROR db handshake failed: connection refused (10.0.0.5:5432)\nFATAL giving up, exiting with code 137\nWARN  widget quota exceeded"
+	var found = Bob.rank(Bob.review(log, "log", rules), 6)
+	var by = {}
+	for f in found:
+		by[f["rule"]] = f
+	check.call("bob finds the refused connection", by.has("refused"), true)
+	check.call("bob points at its last line", by["refused"]["n"], 4)
+	check.call("bob counts repeats, ignoring ignored lines", by["refused"]["count"], 2)
+	check.call("bob reads the exit code", by["exit"]["means"].contains("SIGKILL"), true)
+	check.call("bob applies a custom rule", by["custom-1"]["means"], "Out of widgets.")
+	check.call("bob ranks causes above symptoms", found[found.size() - 1]["weight"], 1)
+	check.call("bob verdict names the cause", Bob.verdict(found).begins_with("Found it"), true)
+	check.call("bob verdict on a clean log", Bob.verdict(Bob.rank(Bob.review("INFO  all good\nINFO  GET / 200", "log", rules), 6)).contains("nothing jumps out"), true)
+	var ev = Bob.rank(Bob.review("Warning   Failed      Failed to pull image \"a:latset\": manifest unknown\nWarning   Failed      Error: ImagePullBackOff", "events", rules), 6)
+	check.call("bob reads a bad image from events", ev[0]["rule"] + "/" + str(ev[0]["count"]), "image/2")
+	check.call("bob config defaults", Bob.config()["log_review"], true)
+	# every setup Porter offers ships both of its files
+	for app in Apps.APPS:
+		for flavor in ["k8s", "compose"]:
+			check.call("app file %s.%s" % [app["id"], flavor], FileAccess.file_exists("res://apps/%s.%s.yaml" % [app["id"], flavor]) or FileAccess.file_exists(Apps.file_for(app["id"], flavor)), true)
+	check.call("porter offers the media suite", Apps.find("media")["sim"].size(), 10)
+	check.call("media suite has jackett", Apps.find("media")["sim"].filter(func(x): return x[1] == "jackett").size(), 1)
+	var Demo = load("res://scripts/backend_demo.gd")
+	var home = Demo.new("homelab-media").fetch()
+	var names = {}
+	for hp in home["pods"]:
+		names[hp["wname"]] = hp["health"]
+	check.call("homelab runs plex", names.has("plex"), true)
+	check.call("homelab runs sonarr and radarr", names.has("sonarr") and names.has("radarr"), true)
+	check.call("homelab runs grafana and cadvisor", names.has("grafana") and names.has("cadvisor"), true)
+	check.call("homelab has nothing failing", home["pods"].filter(func(x): return x["health"] == "bad").size(), 0)
+	check.call("demo types", Demo.DEMO_TYPES.size(), 4)
+	check.call("demo id to flavor", Demo.demo_flavor("media") + " " + Demo.demo_flavor("home-assistant") + " " + Demo.demo_flavor("nope"), "homelab-media home-assistant ")
+	for dt in Demo.DEMO_TYPES:
+		var dst = Demo.new(dt["flavor"]).fetch()
+		check.call("demo %s has pods" % dt["id"], dst["pods"].size() > 8, true)
+	var ha = {}
+	for hp in Demo.new("home-assistant").fetch()["pods"]:
+		ha[hp["wname"]] = true
+	check.call("home assistant stack", ha.has("homeassistant") and ha.has("zigbee2mqtt") and ha.has("mosquitto"), true)
+	var dv = {}
+	for hp in Demo.new("dev-containers").fetch()["pods"]:
+		dv[hp["wname"]] = true
+	check.call("dev containers stack", dv.has("devcontainer-cpp") and dv.has("buildkitd") and dv.has("gitea"), true)
 	if fails.is_empty():
 		print("ALL CHECKS PASSED")
 	else:

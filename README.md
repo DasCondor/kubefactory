@@ -47,6 +47,8 @@ from across the yard, and put it right with a belt of six tools.
 | ![Overview of a simulated cluster with an alarm beam over a failing pod](docs/overview.png) Nodes are platforms, pods are machines; red beams mark failing pods | ![Holding the Mk.4 Dismantler on a pod](docs/dismantler.png) Tiered tools: stronger actions take a longer hold |
 | ![The six handheld tools](docs/tools.png) Six tools, each its own model: scanner, datapad, build gun, wrench, dismantler, demolisher | ![The datapad showing cluster warning events as a ledger](docs/datapad.png) The datapad: pod logs, cluster events, audit trail |
 | ![Bob at his repair stand, with the fix list on the board behind him](docs/bob-stand.png) Bob's repair stand: the board lists what is broken, and he has something to say about it | ![Bob's fix list: each failing pod with a diagnosis, his advice and a fix button](docs/bob.png) Bob's fix list: what is wrong, why, and what to do |
+| ![Bob's case file: the log lines that matter on a build that ran out of memory](docs/bob-case.png) Bob 2.0 reads the log: the line that killed it, what it means, what to do | ![The demo chooser with four worlds](docs/demos.png) Four demo worlds: Kubernetes, Home Assistant, Dev containers, Media suite |
+| ![The media suite demo: Plex, the arr apps and Grafana all running](docs/demo-media.png) The media suite world: Plex, Sonarr, Radarr, Jackett and friends, all healthy | |
 | ![Porter, the Portainer dock robot](docs/porter.png) Porter builds complete app setups and installs from app lists | ![Typed confirmation before deleting a workload](docs/confirm.png) Mk.5 actions ask you to type the target's name |
 | ![Two other players shown as robot avatars](docs/multiuser.png) Other people on the cluster appear as avatars | |
 
@@ -62,6 +64,23 @@ Graphics are lighter than the desktop build (one shadow pass, fewer machine
 details). Needs a desktop browser with keyboard and mouse; click the page to
 capture the mouse. It is rebuilt and redeployed on every push to `main` by
 `.github/workflows/pages.yml`.
+
+### Four demo worlds
+
+Start the simulation (the browser demo, the Demo edition, or `--demo`) and you
+pick a world. Switch any time from the pause menu, or name one up front with
+`--demo=<id>`. In every demo you are signed in as `DasCondor`.
+
+| `--demo=` | World | What is running | What is broken |
+|---|---|---|---|
+| `kubernetes` | Kubernetes cluster | a web shop: frontend, cart, checkout, database, monitoring | checkout crash-loops; one image tag is mistyped |
+| `home-assistant` | Home Assistant | Home Assistant, Mosquitto, Zigbee2MQTT, Z-Wave JS, ESPHome, Node-RED, Frigate, voice (Whisper, Piper), MariaDB, InfluxDB, Grafana | Zigbee2MQTT cannot find its USB stick; one image tag is mistyped |
+| `dev-containers` | Dev containers | a build farm: Gitea, CI server and runners, BuildKit, registry, compile cache, and a dev container each for C++, Rust, Go, Python and Node | a heavy C++ build runs out of memory; one image tag is mistyped |
+| `media` | Media suite | Plex, Overseerr, Sonarr, Radarr, Lidarr, Bazarr, Jackett, Prowlarr, qBittorrent, Tautulli, plus Grafana, Prometheus, cAdvisor and node-exporter | nothing: this one shows it all working |
+
+The broken ones are there for Bob: ask him to read the log and he finds the
+missing `/dev/ttyUSB0` or the compiler killed for memory. The cloud-flavoured
+Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 
 ## 📥 Download
 
@@ -194,7 +213,8 @@ creates two test logins on the dev cluster so you can try it in three windows.
 Beside the HUB stands Porter, a crane-backed robot. Press E to talk. He can:
 
 - **Build a complete app setup** from his dock: Web server, Redis, PostgreSQL,
-  WordPress + MySQL. Each comes with its workloads, Services, storage and a
+  WordPress + MySQL, the **Media server suite** and the **Monitoring dashboard**
+  (both below). Each comes with its workloads, Services, storage and a
   generated password (Kubernetes Secret, or an env file for Compose). On
   Kubernetes they are applied from `apps/<id>.k8s.yaml`; on a Docker engine they
   run as a Compose project from `apps/<id>.compose.yaml`. Edit or add files there.
@@ -207,6 +227,19 @@ Beside the HUB stands Porter, a crane-backed robot. Press E to talk. He can:
 - **Install Portainer itself** (optional) and open its console. Put your
   Portainer address and an API key in `portainer.json` and its own template
   list shows up as "My Portainer server".
+
+His two big setups:
+
+| Setup | What he builds |
+|---|---|
+| **Media server suite** | Plex (watch), Overseerr (requests), Sonarr / Radarr / Lidarr / Bazarr (TV, films, music, subtitles), **Jackett** (the indexer proxy they search through) with Prowlarr as the alternative, qBittorrent (download client) and Tautulli (Plex statistics), sharing one `media` and one `downloads` volume |
+| **Monitoring dashboard** | Grafana with a ready-made *Containers* dashboard and a generated admin password, Prometheus, cAdvisor (per-container CPU, memory, network) and node-exporter (the host) |
+
+Jackett needs three things around it, and the suite brings all of them: the
+apps that search through it (Sonarr, Radarr, Lidarr), a download client
+(qBittorrent) and the shared `downloads` volume. The comments at the top of
+`apps/media.compose.yaml` walk through wiring them together on first run. The
+Kubernetes version is meant for a single-node homelab cluster.
 
 ## 👴 Bob, the pod fixer
 
@@ -233,6 +266,45 @@ He also has opinions. Walk up to him and he greets you with a zinger about your
 cluster or a Kubernetes pick-up line, with a fresh one every few seconds; each
 job on the list gets a dry remark of its own, and "Got another one, Bob?" asks
 for more. The lines are the `BOB_*` lists at the top of `scripts/kutil.gd`.
+
+### Bob 2.0: he reads the log for you
+
+Each pod on the fix list has **Read the log with me, Bob**. He fetches the
+pod's log (the previous, crashed run when there is one) and its events, and
+opens a case file:
+
+- **The verdict:** one sentence naming the most likely cause and the line it is on.
+- **The lines that matter:** the log or event line itself, its line number, what
+  it means, and what to do. Each is marked *likely cause*, *strong lead* or
+  *symptom*, and repeats are counted rather than listed.
+
+He knows the common failures: refused connections, DNS names that do not
+resolve, bad credentials, permissions, expired certificates, missing files,
+settings, Secrets and tables, out of memory, full disks, wrong architecture or
+start command, unpullable images, failed mounts and scheduling, probe failures,
+stack traces, and what exit codes 1, 2, 126, 127, 137, 139 and 143 mean.
+
+**Optional settings** live in `bob.json` next to the game. Every key is
+optional and the file can be deleted:
+
+| Key | Default | Does |
+|---|---|---|
+| `log_review` | `true` | `false` hides the log reading; the fix list stays |
+| `tail` | `200` | log lines read per container (20 to 2000) |
+| `previous` | `true` | read the crashed container's log when the pod has restarted |
+| `max_findings` | `6` | how many lines he reports per case |
+| `ignore` | `[]` | regexes; matching lines are skipped (noisy health checks, say) |
+| `rules` | `[]` | your own rules, checked before his |
+
+A rule of your own teaches him your application's errors:
+
+    {"rules": [{"match": "license (expired|invalid)", "weight": 3,
+                "means": "The licence file is out of date.",
+                "fix": "Renew it and update the app-license Secret."}]}
+
+`weight` is 3 for a cause, 2 for a strong lead, 1 for a symptom. The built-in
+rules are the `RULES` list in `scripts/bob.gd`. The original design notes are in
+[docs/bob-2.0.md](docs/bob-2.0.md).
 
 Bob only points: his buttons are the same tiered actions as your tools, so the
 cluster policy and your permissions apply to them exactly as they do elsewhere.
@@ -270,6 +342,7 @@ them in `log-providers.json`:
     scripts/hud.gd              HUD, panels, datapad, Porter's and Bob's conversations
     scripts/viewmodel.gd        the first-person tool in your hand
     scripts/kutil.gd            shared helpers, Bob's diagnoses, sign text fitting
+    scripts/bob.gd              Bob 2.0: log and event reading, its rules, bob.json
     scripts/cluster.gd          polling, actions, audit log
     scripts/backend_kubectl.gd  real clusters        scripts/backend_docker.gd   Docker engine
     scripts/backend_demo.gd     simulated clusters   scripts/log_sources.gd      log providers

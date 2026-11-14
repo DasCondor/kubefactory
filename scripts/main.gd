@@ -15,6 +15,7 @@ const World = preload("res://scripts/world.gd")
 const Player = preload("res://scripts/player.gd")
 const Hud = preload("res://scripts/hud.gd")
 const Sfx = preload("res://scripts/sfx.gd")
+const Demo = preload("res://scripts/backend_demo.gd")
 const VERSION = "1.0.1"
 
 const SKY_SHADER = """
@@ -132,6 +133,10 @@ func _ready() -> void:
 			edition = a.trim_prefix("--edition=")
 		elif a == "--demo":
 			source = "simulation"
+		elif a.begins_with("--demo="):
+			# a demo world by name: kubernetes, home-assistant, dev-containers or media
+			source = "simulation"
+			ctx = Demo.demo_flavor(a.trim_prefix("--demo="))
 		elif a == "--kubectl":
 			source = "kubernetes"
 		elif a == "--docker":
@@ -184,8 +189,12 @@ func _ready() -> void:
 		sfx.set_muted(bool(settings["muted"]))
 		if bool(settings["fullscreen"]):
 			get_window().mode = Window.MODE_FULLSCREEN
+		# on the simulation with no world named: let the player pick one of the demos
+		hud.offer_demos = source == "simulation" and ctx == ""
 		if not bool(settings["welcomed"]):
 			hud.open_welcome.call_deferred()
+		elif hud.offer_demos:
+			hud.open_demos.call_deferred()
 	cluster.start(source, ctx)
 	if shots != "" and shots != "-":
 		_run_shots(shots)
@@ -620,6 +629,32 @@ func _run_toolshots(dir: String) -> void:
 	hud.open_bob()
 	await get_tree().create_timer(1.4).timeout
 	await _shot(dir, "bob_list")
+	# Bob 2.0: his case file on each failing pod (log and events read line by line)
+	var ci = 0
+	for j in K.issues(cluster.state):
+		if j["kind"] == "pod" and ci < 3:
+			hud.open_bob_case(j["uid"])
+			await get_tree().create_timer(2.2).timeout
+			await _shot(dir, "bob_case_%d_%s" % [ci, j["status"]])
+			ci += 1
+	# the demo chooser, then each demo world: an overview, and Bob on its first failing pod
+	hud.open_demos()
+	await _shot(dir, "demo_chooser")
+	hud.close_modal()
+	for d in Demo.DEMO_TYPES.slice(1):
+		_connect_target({"source": "simulation", "context": d["flavor"], "provider": Demo.FLAVORS[d["flavor"]]["provider"]})
+		await get_tree().create_timer(16.0).timeout
+		player.flying = true
+		player.teleport(Vector3(-40, 26, 8), Vector3(0, 2, -62))
+		await _shot(dir, "demo_%s" % d["id"])
+		for j in K.issues(cluster.state):
+			if j["kind"] == "pod" and j["status"] != "ImagePullBackOff":
+				hud.open_bob_case(j["uid"])
+				await get_tree().create_timer(2.2).timeout
+				await _shot(dir, "demo_%s_bob" % d["id"])
+				hud.close_modal()
+				break
+	await get_tree().process_frame
 	get_tree().quit()
 
 func _run_shots(dir: String) -> void:
