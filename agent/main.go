@@ -98,6 +98,7 @@ func registerAll() {
 	registerForward()
 	registerBrowser()
 	registerProviders()
+	registerAI()
 }
 
 func main() {

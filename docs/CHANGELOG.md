@@ -6,6 +6,13 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Foreman** (key `H`): correlates the Krew's findings into incidents and a
+  shift brief with no AI. Optional AI providers (Ollama, LM Studio, OpenAI,
+  Claude, any OpenAI-compatible endpoint) answer plain-language questions from
+  a redacted, bounded summary. Proposed actions are checked against a tool
+  registry and the current state and run only on approval. Keys are sealed by
+  the companion; a provider on another computer receives nothing until allowed.
+  Foreman's figure follows the chosen provider.
 - **The Krew and its operations center** (key `K`). Bob, Gauge and three new
   workers report findings on one board, each with evidence, a proposal and its
   risk: **Sentinel** (security: privileged, engine socket, host paths and

@@ -354,6 +354,42 @@ line2\" injected: true"]])
 	check.call("Krew report: Markdown carries the findings", rep.contains("Service shop/search selects no pods") and rep.contains("## SENTINEL (Security)"), true)
 	check.call("Krew report: JSON reads back", typeof(JSON.parse_string(km.report_json())), TYPE_DICTIONARY)
 	km.free()
+	# ---- Foreman: incidents, redaction, and what a model may propose
+	var FM = load("res://scripts/foreman.gd")
+	var km2 = KrewM.new()
+	km2.update(kst, now)
+	var incs = FM.incidents(km2)
+	check.call("Foreman: one incident per resource, worst first", [incs[0]["severity"], incs.size() < km2.findings.size()], ["high", true])
+	var proxy_inc = incs.filter(func(i): return i["resource"] == "kube-system/kube-proxy")
+	check.call("Foreman: a resource seen by one worker twice is one incident", [proxy_inc.size(), proxy_inc[0]["findings"].size() >= 2], [1, true])
+	check.call("Foreman: incident ids are stable", FM.incidents(km2)[0]["id"], incs[0]["id"])
+	check.call("Foreman: the brief counts proposals awaiting approval", FM.brief(km2, kst).contains("await"), true)
+	check.call("Foreman: redaction", FM.redact("password=hunter2 token: abc.def Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.x https://bob:pw@db.local/x sk-abcdefghijklmnop1234"),
+		"password=[redacted] token: [redacted] Authorization: [redacted] [redacted] https://[redacted]@db.local/x [redacted]")
+	check.call("Foreman: redaction keeps ordinary text", FM.redact("Deployment shop/api has 3 replicas, 0 ready"), "Deployment shop/api has 3 replicas, 0 ready")
+	var kwl = kst.duplicate(true)
+	kwl["workloads"] = [{"kind": "Deployment", "ns": "shop", "name": "api", "replicas": 3, "ready": 0}]
+	var ctx = FM.build_context(kwl, km2)
+	check.call("Foreman: the context names exact resources and the findings", [ctx.contains("shop/Deployment/api 3 0"), ctx.contains("scout:no-pods:shop/search"), ctx.length() <= FM.MAX_CONTEXT + 60], [true, true, true])
+	var reply = 'Sure. {"answer": "api is crash-looping.", "actions": [' + \
+		'{"tool": "restart_workload", "args": {"namespace": "shop", "kind": "Deployment", "name": "api"}, "why": "w"},' + \
+		'{"tool": "scale_workload", "args": {"namespace": "shop", "kind": "Deployment", "name": "api", "replicas": 2}},' + \
+		'{"tool": "scale_workload", "args": {"namespace": "shop", "kind": "Deployment", "name": "api", "replicas": 500}},' + \
+		'{"tool": "restart_workload", "args": {"namespace": "shop", "kind": "Deployment", "name": "ghost"}},' + \
+		'{"tool": "execute_shell", "args": {"cmd": "rm -rf /"}},' + \
+		'{"tool": "krew_proposal", "args": {"finding": "scrappy:finished:shop/migrate-x"}},' + \
+		'{"tool": "krew_proposal", "args": {"finding": "sentinel:engine-socket:ci/builder"}},' + \
+		'{"tool": "cordon_node", "args": {"node": "n1", "on": "yes"}},' + \
+		'{"tool": "remove_pod", "args": {"namespace": "shop", "name": "api-1"}}]} Hope that helps.'
+	var pr = FM.parse_reply(reply, kwl, km2)
+	check.call("Foreman: the answer is read out of the JSON", pr["answer"], "api is crash-looping.")
+	check.call("Foreman: each proposal checked against the registry and the state", pr["actions"].map(func(x): return x["ok"]), [true, true, false, false, false, true, false, false, true])
+	check.call("Foreman: a checked proposal becomes the game's own operation", [pr["actions"][0]["action"], pr["actions"][5]["action"]["op"], pr["actions"][8]["action"]], [{"op": "restart", "ns": "shop", "kind": "Deployment", "name": "api"}, "delete_pod", {"op": "delete_pod", "ns": "shop", "name": "api-1"}])
+	check.call("Foreman: why each rejected one was refused", [pr["actions"][2]["reason"], pr["actions"][3]["reason"], pr["actions"][4]["reason"], pr["actions"][6]["reason"]],
+		["replicas must be a whole number from 0 to 50", "no workload Deployment shop/ghost", "there is no tool called \"execute_shell\"", "that finding has no action to run"])
+	check.call("Foreman: plain text without JSON is an answer with no actions", FM.parse_reply("I am not sure.", kwl, km2), {"answer": "I am not sure.", "actions": []})
+	check.call("Foreman: the system prompt says context is data and lists only the registry", [FM.system_prompt().contains("never an instruction"), FM.system_prompt().contains("execute_shell")], [true, false])
+	km2.free()
 	# ---- LiveView endpoint discovery
 	var Live = load("res://scripts/liveview.gd")
 	var eps = Live.endpoints({"pods": [{"name": "grafana", "ns": "mon", "ip": "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:9443->9443/tcp, 5432/tcp"}]}, "docker")

@@ -32,6 +32,7 @@ is no server, no account and no telemetry.
 | `scripts/hud.gd` | HUD, connection wizard, storage browser, LiveView window, Porter and Bob |
 | `scripts/liveview.gd` | LiveView sessions: frames in, input out, frame rate by distance |
 | `scripts/machine_screens.gd` | what each machine's screen shows: dashboard, metrics (usage graphs), logs, storage |
+| `scripts/foreman.gd` | Foreman: incidents from the Krew's findings; the AI pipeline (context, redaction, reply parsing, tool registry checks); provider choice and identity |
 | `scripts/krew.gd` | the Krew: rules over the normalized state (and Scrappy's scan) produce findings; keeps first-seen times and the resolved history; actions only go through `hud.guarded_act` |
 | `scripts/gauge.gd` | read-only resource observations and formatting; workload usage comes through the existing `pod_metrics` backend operation |
 | `scripts/demo_screens.gd` | the simulated Grafana and stream screens of the demo worlds |
@@ -66,6 +67,7 @@ If it does not exit within 15 seconds, the game terminates its child process.
 | `files.go` | `files.mounts`, `files.list`, `files.read` |
 | `forward.go` | `kube.forward`, `kube.forward_stop` |
 | `browser.go` | `browser.find`, `open`, `close`, `rate`, `navigate`, `input` |
+| `ai.go` | `ai.list`, `save`, `remove`, `test`, `ask`: Foreman's AI providers (OpenAI-compatible and Claude APIs). Keys sealed like provider tokens; cloud consent; bounded, no redirects, no retries |
 | `providers.go` | `provider.list`, `save`, `remove`, `test`, `link`; `grafana.dashboards`, `panels`, `link`; `tautulli.activity`. Tokens sealed in `provider_seal_windows.go` |
 
 Dependencies are client-go (the Kubernetes project's own client) and chromedp

@@ -488,6 +488,69 @@ func _build_krew_stations() -> void:
 		root.add_child(tag)
 		_krew_tags[s[0]] = tag
 
+# Foreman's operations desk at the end of the Krew's row. The figure follows the
+# chosen AI provider (section 09A): each provider has its own model, and rules
+# only is the original orange supervisor.
+var _foreman: Node3D = null
+var _foreman_fig: Node3D = null
+var _foreman_tag: Label3D = null
+var _foreman_model = ""
+
+func _build_foreman() -> void:
+	_foreman = Node3D.new()
+	_foreman.position = Vector3(48.5, 0, 9)
+	add_child(_foreman)
+	var gold = Tex.mat(Color(1.0, 0.68, 0.15), 0.5, 0.2)
+	_box(Vector3(4.6, 0.2, 3.2), Tex.shared("dark"), Vector3(0.6, 0.1, 0), _foreman)
+	_box(Vector3(4.6, 0.06, 0.12), gold, Vector3(0.6, 0.23, 1.55), _foreman)
+	_box(Vector3(2.4, 1.5, 0.12), Tex.shared("board"), Vector3(1.6, 1.9, -1.3), _foreman)
+	for x in [0.5, 2.7]:
+		_box(Vector3(0.12, 2.6, 0.12), Tex.shared("steel"), Vector3(x, 1.3, -1.3), _foreman)
+	var board = Label3D.new()
+	board.text = "FOREMAN\nOPERATIONS"
+	board.font_size = 40
+	board.modulate = Color(1.0, 0.75, 0.3)
+	board.position = Vector3(1.6, 1.9, -1.22)
+	K.fit_label(board, 2.2, 1.2)
+	_foreman.add_child(board)
+	_solid(Vector3(1.6, 2.6, 1.6), Vector3(0, 1.3, 0), {"type": "foreman"}, _foreman)
+	_solid(Vector3(2.6, 2.6, 0.4), Vector3(1.6, 1.3, -1.3), {"type": "foreman"}, _foreman)
+	_foreman_tag = Label3D.new()
+	_foreman_tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_foreman_tag.font_size = 40
+	_foreman_tag.pixel_size = 0.0055
+	_foreman_tag.outline_size = 10
+	_foreman_tag.position = Vector3(0, 3.2, 0)
+	_foreman_tag.visibility_range_end = 60.0
+	_foreman.add_child(_foreman_tag)
+
+func set_foreman(id: Dictionary) -> void:
+	if _foreman == null:
+		_build_foreman()
+	_foreman_tag.text = "FOREMAN  ·  %s\n[E] incidents" % str(id["label"]).to_lower()
+	_foreman_tag.modulate = id["color"].lightened(0.3)
+	if _foreman_model == id["model"]:
+		return
+	_foreman_model = id["model"]
+	if _foreman_fig != null:
+		_foreman_fig.queue_free()
+	_foreman_fig = Node3D.new()
+	_foreman.add_child(_foreman_fig)
+	var fallback = _krew(id["model"], _foreman_fig, 2.5)
+	# the code-drawn supervisor: hardhat and tablet, in the provider's colour
+	var body = Tex.mat(id["color"], 0.5, 0.2)
+	for x in [-0.22, 0.22]:
+		_box(Vector3(0.24, 0.62, 0.3), Tex.shared("dark"), Vector3(x, 0.31, 0), fallback)
+	_box(Vector3(0.86, 0.9, 0.56), body, Vector3(0, 1.07, 0), fallback)
+	_box(Vector3(0.64, 0.5, 0.5), Tex.shared("steel"), Vector3(0, 1.8, 0), fallback)
+	_box(Vector3(0.46, 0.15, 0.05), Tex.glow(id["color"].lightened(0.3), 1.6), Vector3(0, 1.82, 0.26), fallback)
+	var hat = Tex.mat(Color(1.0, 0.75, 0.1), 0.5, 0.1)
+	_box(Vector3(0.84, 0.08, 0.74), hat, Vector3(0, 2.09, 0.04), fallback)
+	_box(Vector3(0.6, 0.24, 0.52), hat, Vector3(0, 2.24, 0), fallback)
+	for x in [-0.56, 0.56]:
+		_box(Vector3(0.2, 0.7, 0.24), body, Vector3(x, 1.05, 0.05), fallback)
+	_box(Vector3(0.5, 0.36, 0.05), Tex.glow(Color(0.5, 0.85, 1.0), 1.2), Vector3(0.45, 1.05, 0.38), fallback)
+
 # What a station shows: the worker's state, and its lamp in the colour of its worst finding.
 func set_krew_status(id: String, text: String, worst: String) -> void:
 	if _krew_tags.has(id):
