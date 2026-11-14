@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0-dev (unreleased, branch `feature/kubefactory-2.0`)
+## 2.0.0-dev (unreleased)
 
 Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
@@ -47,6 +47,8 @@ against live infrastructure.
 - `docs/ARCHITECTURE.md`, `FEATURE_PARITY.md`, `KNOWN_LIMITATIONS.md`.
 
 ### Fixed
+- Clicking a machine's display now aims at the display itself instead of the
+  larger invisible machine collision box, so the screen opens with any tool.
 - Storage inspection followed a link that sat inside a volume: a linked file
   (and, on Docker, a linked folder) was read through to wherever it pointed.
   Links are now never followed. Found by the new live tests.

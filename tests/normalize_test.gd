@@ -230,6 +230,13 @@ line2\" injected: true"]])
 	check.call("home folder shown as ~ (any case, either slash)", K.tidy_path("c:/users/Someone/AppData/Roaming/x", "C:\\Users\\someone"), "~/AppData/Roaming/x")
 	check.call("a path elsewhere is left alone", K.tidy_path("D:\\clusters\\prod.yaml", "C:\\Users\\someone"), "D:\\clusters\\prod.yaml")
 	check.call("a folder that only starts the same is not the home folder", K.tidy_path("C:/Users/someone-else/x", "C:/Users/someone"), "C:/Users/someone-else/x")
+	# The machine's collision box can sit well in front of its visible screen.
+	var screen = {"pos": Vector3.ZERO, "normal": Vector3.BACK, "right": Vector3.RIGHT, "up": Vector3.UP, "size": Vector2(2, 1)}
+	check.call("screen ray: center from in front", K.ray_hits_screen(Vector3(0, 0, 4), Vector3.FORWARD, screen, 70), true)
+	check.call("screen ray: miss the edge", K.ray_hits_screen(Vector3(2, 0, 4), Vector3.FORWARD, screen, 70), false)
+	check.call("screen ray: behind the screen", K.ray_hits_screen(Vector3(0, 0, -4), Vector3.BACK, screen, 70), false)
+	check.call("screen ray: beyond reach", K.ray_hits_screen(Vector3(0, 0, 4), Vector3.FORWARD, screen, 3), false)
+	check.call("screen ray: parallel", K.ray_hits_screen(Vector3(0, 0, 4), Vector3.RIGHT, screen, 70), false)
 	# ---- tables: contains and sort by column
 	var trows = [{"n": "web", "r": 3, "i": "nginx:1.27"}, {"n": "Cart", "r": 12, "i": "shop/cart"}, {"n": "api", "r": 2, "i": "shop/api"}, {"n": "db", "r": 12, "i": "postgres:16"}]
 	var tget = {"n": func(x): return x["n"], "r": func(x): return x["r"], "i": func(x): return x["i"]}
