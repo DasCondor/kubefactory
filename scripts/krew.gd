@@ -14,12 +14,16 @@ extends Node
 #   Sentinel  security      privileged, host access, the engine's socket, root, powerful capabilities, floating tags
 #   Scout     network       Services that reach nothing, and what is exposed outside
 #   Scrappy   cleanup       finished pods, stopped containers, unused images (approved removal only)
+#   Archie    storage       stateful software with nowhere lasting to keep its data; unnamed volumes
+#   Forge     build         images in use that exist only on this machine; idle build cache (after a scan)
+#   Blueprint architect     drift: fewer replicas or containers running than the definition asks for
 #
 # A finding keeps its first-seen time while it lasts. When the condition is
 # gone it moves to the history as resolved, which is how an approved action is
 # seen to have worked: by the next state, not by the action's own answer.
 
 const K = preload("res://scripts/kutil.gd")
+const Models = preload("res://scripts/models.gd")
 
 signal changed()
 
@@ -29,7 +33,15 @@ const WORKERS = [
 	{"id": "sentinel", "name": "SENTINEL", "role": "Security", "color": Color(0.36, 0.6, 1.0)},
 	{"id": "scout", "name": "SCOUT", "role": "Network", "color": Color(0.4, 0.9, 0.5)},
 	{"id": "scrappy", "name": "SCRAPPY", "role": "Cleanup", "color": Color(1.0, 0.85, 0.25)},
+	{"id": "archie", "name": "ARCHIE", "role": "Storage", "color": Color(0.7, 0.5, 1.0)},
+	{"id": "forge", "name": "FORGE", "role": "Build", "color": Color(1.0, 0.55, 0.2)},
+	{"id": "blueprint", "name": "BLUEPRINT", "role": "Architect", "color": Color(0.84, 0.8, 1.0)},
 ]
+# software that keeps data, by the model role its image gets (models.gd ROLES)
+const STATEFUL = {"database_server": ["high", "a database"], "broker_rack": ["medium", "a message broker"], "registry_rack": ["medium", "an image registry"],
+	"monitoring_server": ["low", "a metrics or dashboard store"], "cache_server": ["low", "a cache"]}
+const DRIFT_HOLD = 120.0           # a rollout in progress is not drift: wait this long before reporting
+const BUILD_CACHE_REPORT = 1.0e9
 const SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2, "info": 3}
 # namespaces whose node agents legitimately need host access: the finding is still
 # reported, one step lower, and says why
@@ -44,6 +56,7 @@ var scan = {}           # the latest cleanup scan: {ok, msg, data, at}
 var source = ""
 var _last = -INF
 var _pending_state = null
+var _held = {}          # key -> first seen, for findings that wait (hold) before they are shown
 
 # ---- running the rules
 
@@ -66,9 +79,22 @@ func update(state: Dictionary, now: float) -> void:
 	var src = str(state.get("source", ""))
 	if src != source:
 		findings.clear()
+		_held.clear()
 		scan = {}
 		source = src
 	var fresh = analyze(state, scan, now)
+	for key in _held.keys():
+		if not fresh.has(key):
+			_held.erase(key)
+	for key in fresh.keys():
+		var hold = float(fresh[key].get("hold", 0.0))
+		if hold > 0.0 and not findings.has(key):
+			var since = float(_held.get(key, now))
+			_held[key] = since
+			if now - since < hold:
+				fresh.erase(key)
+			else:
+				fresh[key]["first_seen"] = since
 	for key in findings.keys():
 		if not fresh.has(key):
 			var f = findings[key]
@@ -91,7 +117,8 @@ func set_scan(result: Dictionary) -> void:
 static func analyze(state: Dictionary, scan_result: Dictionary, now: float) -> Dictionary:
 	var out = {}
 	var sim = str(state.get("source", "")) == "simulation"
-	for f in bob_rules(state) + gauge_rules(state) + sentinel_rules(state) + scout_rules(state) + scrappy_rules(state, scan_result, now):
+	for f in bob_rules(state) + gauge_rules(state) + sentinel_rules(state) + scout_rules(state) + scrappy_rules(state, scan_result, now) \
+			+ archie_rules(state) + forge_rules(state, scan_result) + blueprint_rules(state):
 		f["simulated"] = sim
 		f["first_seen"] = now
 		f["last_seen"] = now
@@ -310,6 +337,105 @@ static func scrappy_rules(state: Dictionary, scan_result: Dictionary, now: float
 			out.append(f)
 	return out
 
+# ---- Archie: data that has nowhere lasting to live (reports only; never touches data)
+
+static func archie_rules(state: Dictionary) -> Array:
+	var by_owner = {}
+	var docker = str(state.get("source", "")) == "docker"
+	for p in state.get("pods", []):
+		if str(p.get("phase", "")) in ["Succeeded", "Failed"]:
+			continue
+		var st = p.get("store", {})
+		if typeof(st) != TYPE_DICTIONARY or not st.get("known", false):
+			continue          # the source said nothing about storage: no guessing
+		var o = _owner(p)
+		if not by_owner.has(o):
+			by_owner[o] = {"pods": [], "store": st, "role": Models.machine_for(p), "image": str(p["containers"][0].get("image", "")) if not p.get("containers", []).is_empty() else ""}
+		by_owner[o]["pods"].append(p)
+	var out = []
+	for o in by_owner:
+		var g = by_owner[o]
+		var st: Dictionary = g["store"]
+		var uids = g["pods"].map(func(x): return str(x["uid"]))
+		if STATEFUL.has(g["role"]) and st["persistent"].is_empty() and st["binds"].is_empty():
+			var kind: Array = STATEFUL[g["role"]]
+			var f = _finding("archie", "no-persistent-storage", o, kind[0], "%s keeps its data nowhere lasting" % o)
+			f["evidence"] = ["Runs %s, %s." % [g["image"], kind[1]]]
+			if not st["anonymous"].is_empty():
+				f["evidence"].append("Its only volumes have no name: " + ", ".join(PackedStringArray(st["anonymous"])) + ".")
+			elif not st["scratch"].is_empty():
+				f["evidence"].append("Its volumes are scratch space (%s): deleted with the %s." % [", ".join(PackedStringArray(st["scratch"])), "container" if docker else "pod"])
+			else:
+				f["evidence"].append("No volume is mounted: data is written inside the %s itself." % ("container's writable layer" if docker else "pod's container"))
+			f["proposal"] = ("Mount a named volume at its data directory" if docker else "Mount a PersistentVolumeClaim at its data directory") + ", then set up a backup and test a restore."
+			f["risk"] = "Only cached data is lost, which is often fine; confirm nothing relies on it surviving." if g["role"] == "cache_server" else \
+				"Recreating, rescheduling or upgrading it loses the data. A copy of the files is not a backup until a restore has been tried."
+			f["uids"] = uids
+			out.append(f)
+		elif not st["anonymous"].is_empty():
+			var f = _finding("archie", "anonymous-volume", o, "low", "%s keeps data in a volume without a name" % o)
+			f["evidence"] = ["Unnamed volumes: " + ", ".join(PackedStringArray(st["anonymous"])) + "."]
+			f["proposal"] = "Give the volume a name (a named volume in Compose, or -v name:/path), so it is clear what holds this data."
+			f["risk"] = "Recreating the container starts with a new empty volume; removing it with -v deletes the old one."
+			f["uids"] = uids
+			out.append(f)
+	return out
+
+# ---- Forge: what was built here (after a scan)
+
+static func forge_rules(state: Dictionary, scan_result: Dictionary) -> Array:
+	var out = []
+	if not scan_result.get("ok", false):
+		return out
+	var d: Dictionary = scan_result.get("data", {})
+	for img in d.get("images", []):
+		if int(img.get("containers", 0)) <= 0 or not img.has("digests") or int(img["digests"]) > 0:
+			continue
+		var name = "%s:%s" % [img.get("repo", "<none>"), img.get("tag", "<none>")]
+		var f = _finding("forge", "local-build", "image/" + str(img.get("id", "")).trim_prefix("sha256:").left(12), "low", "Image %s runs here but exists only on this machine" % name)
+		f["evidence"] = ["It has no registry digest: it was built here and never pushed or pulled.", "Used by %d container(s)." % int(img["containers"])]
+		f["proposal"] = "Push it to your registry and run it by version, so it can be pulled again on another machine."
+		f["risk"] = "If this machine's disk is lost or the image is removed, its containers cannot be recreated without rebuilding it from source."
+		f["uids"] = state.get("pods", []).filter(func(p): return p.get("containers", []).any(func(c): return str(c.get("image", "")) == name or str(c.get("image", "")) == str(img.get("repo", "")))).map(func(p): return str(p["uid"]))
+		out.append(f)
+	var bc: Dictionary = d.get("build_cache", {})
+	if float(bc.get("reclaimable", 0.0)) >= BUILD_CACHE_REPORT:
+		var f = _finding("forge", "build-cache", "build-cache", "info", "Build cache holds %s no build is using" % K.fmt_bytes(float(bc["reclaimable"])))
+		f["evidence"] = ["%d cache entries, %d in use." % [int(bc.get("entries", 0)), int(bc.get("in_use", 0))]]
+		f["proposal"] = "Prune it when no build is running (docker builder prune). The next build of each image starts from scratch."
+		out.append(f)
+	return out
+
+# ---- Blueprint: the definition says one thing, the running state another
+
+static func blueprint_rules(state: Dictionary) -> Array:
+	var out = []
+	for w in state.get("workloads", []):
+		var kind = str(w.get("kind", ""))
+		if not kind in ["Deployment", "StatefulSet", "DaemonSet", "Compose"]:
+			continue
+		var want = int(w.get("replicas", 0))
+		var ready = int(w.get("ready", 0))
+		if want <= 0 or ready >= want:
+			continue
+		var subject = "%s/%s" % [w["ns"], w["name"]]
+		var pods = state.get("pods", []).filter(func(p): return str(p["ns"]) == str(w["ns"]) and str(p.get("wname", "")) == str(w["name"]))
+		var f
+		if kind == "Compose":
+			f = _finding("blueprint", "drift", subject, "medium" if ready == 0 else "low", "Compose service %s: %d of %d containers running" % [subject, ready, want])
+			f["proposal"] = "Start the stopped containers, or bring the project back to its definition (docker compose up -d)."
+		else:
+			f = _finding("blueprint", "drift", subject, "medium" if ready == 0 else "low", "%s %s: %d of %d replicas ready" % [kind, subject, ready, want])
+			f["proposal"] = "Find out why the missing replicas do not come up (Bob's fix list). If fewer are wanted, change the count in its definition, not by hand."
+		f["evidence"] = ["Desired %d, ready %d, for at least %d minutes." % [want, ready, int(DRIFT_HOLD / 60.0)]]
+		var notready = pods.filter(func(p): return not bool(p.get("ready", false)))
+		if not notready.is_empty():
+			f["evidence"].append("Not ready: " + ", ".join(PackedStringArray(notready.slice(0, 4).map(func(p): return "%s (%s)" % [p["name"], p["status"]]))))
+		f["uids"] = pods.map(func(p): return str(p["uid"]))
+		f["hold"] = DRIFT_HOLD
+		out.append(f)
+	return out
+
 # ---- reading the results
 
 func worker(id: String) -> Dictionary:
@@ -332,8 +458,10 @@ static func sorted(list: Array) -> Array:
 # What a worker's tag and panel say about it.
 func status_of(id: String) -> String:
 	var mine = of_worker(id)
-	if id == "scrappy" and source == "docker" and scan.is_empty():
+	if id in ["scrappy", "forge"] and source == "docker" and scan.is_empty():
 		return "images not scanned yet"
+	if id == "forge" and mine.is_empty() and str(scan.get("data", {}).get("provenance", "")) == "unrecorded":
+		return "this engine does not record where images came from"
 	if mine.is_empty():
 		return "all clear"
 	var top = mine[0]["severity"]

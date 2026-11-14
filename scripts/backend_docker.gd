@@ -54,7 +54,7 @@ func _inspect_all(rows: Array) -> void:
 			continue
 		var fin = str(i.get("State", {}).get("FinishedAt", ""))
 		var finished = 0.0 if fin == "" or fin.begins_with("0001") else Time.get_unix_time_from_datetime_string(fin.get_slice(".", 0))
-		_inspect[str(i.get("Id", ""))] = {"state": str(i.get("State", {}).get("Status", "")), "sec": K.container_security(i), "finished": finished}
+		_inspect[str(i.get("Id", ""))] = {"state": str(i.get("State", {}).get("Status", "")), "sec": K.container_security(i), "store": K.container_storage(i), "finished": finished}
 
 func fetch() -> Dictionary:
 	var r = _run(["ps", "-a", "--no-trunc", "--format", "{{json .}}"], false)
@@ -107,7 +107,8 @@ func fetch() -> Dictionary:
 				"reason": status_text, "ready": state == "running", "restarts": 0}],
 			"phase": "Running" if state == "running" else ("Succeeded" if status == "Completed" else ("Failed" if state in ["exited", "dead"] else "Pending")),
 			"finished": float(_inspect.get(str(c.get("ID", "")), {}).get("finished", 0.0)),
-			"sec": _inspect.get(str(c.get("ID", "")), {}).get("sec", K.empty_security())})
+			"sec": _inspect.get(str(c.get("ID", "")), {}).get("sec", K.empty_security()),
+			"store": _inspect.get(str(c.get("ID", "")), {}).get("store", K.empty_storage())})
 		if svc != "":
 			var key = ns + "/" + svc
 			if not wl.has(key):
@@ -296,7 +297,33 @@ func _cleanup_scan() -> Dictionary:
 	var volumes = []
 	for v in (d.get("Volumes", []) if typeof(d.get("Volumes")) == TYPE_ARRAY else []):
 		volumes.append({"name": str(v.get("Name", "")), "links": int(str(v.get("Links", "1"))) if str(v.get("Links", "")).is_valid_int() else 1, "size": _size(str(v.get("Size", "")))})
-	return {"ok": true, "msg": "", "kind": "", "data": {"images": images, "volumes": volumes, "source": "docker system df"}}
+	# Forge: has an image in use ever come from (or gone to) a registry? No repo
+	# digest means it was built here and exists nowhere else.
+	# The containerd image store (Docker Desktop's default) gives every image a
+	# digest of its own, built here or pulled, so it does not tell: say so.
+	var provenance = "recorded"
+	if JSON.stringify(_host.get("DriverStatus", [])).contains("containerd.snapshotter") or str(_host.get("Driver", "")).contains("containerd"):
+		provenance = "unrecorded"
+	var used = images.filter(func(i): return int(i["containers"]) > 0 and str(i["id"]) != "")
+	if not used.is_empty() and provenance == "recorded":
+		var ri = _run(["image", "inspect", "--format", "{{.Id}}|{{len .RepoDigests}}"] + used.map(func(i): return str(i["id"])), false)
+		var digests = {}
+		for line in ri.out.split("\n"):
+			if line.contains("|"):
+				digests[line.get_slice("|", 0).strip_edges()] = line.get_slice("|", 1).strip_edges()
+		for i in images:
+			var n = digests.get(str(i["id"]), "")
+			if str(n).is_valid_int():
+				i["digests"] = int(n)
+	var cache = {"entries": 0, "reclaimable": 0.0, "in_use": 0}
+	for b in (d.get("BuildCache", []) if typeof(d.get("BuildCache")) == TYPE_ARRAY else []):
+		cache["entries"] += 1
+		if str(b.get("InUse", "false")).to_lower() == "true":
+			cache["in_use"] += 1
+		else:
+			var sz = _size(str(b.get("Size", "")))
+			cache["reclaimable"] += sz if sz != null else 0.0
+	return {"ok": true, "msg": "", "kind": "", "data": {"images": images, "volumes": volumes, "build_cache": cache, "provenance": provenance, "source": "docker system df"}}
 
 func _app_action(a: Dictionary) -> Dictionary:
 	if a["op"] == "pod_metrics":

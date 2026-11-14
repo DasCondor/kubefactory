@@ -6,6 +6,12 @@ Not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
 against live infrastructure.
 
 ### Added
+- **Archie, Forge and Blueprint** join the Krew. Archie (storage): stateful
+  software with no lasting storage, unnamed Docker volumes. Forge (build):
+  images that exist only on this machine, idle build cache. Blueprint
+  (architect): desired versus running replicas and Compose containers, after
+  a two-minute hold. All three only report. Pods now carry storage facts from
+  the pod spec or `docker inspect`; the board's roster wraps to two rows.
 - **The Krew and its operations center** (key `K`). Bob, Gauge and three new
   workers report findings on one board, each with evidence, a proposal and its
   risk: **Sentinel** (security: privileged, engine socket, host paths and

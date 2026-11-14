@@ -447,6 +447,9 @@ const KREW_STATIONS = [
 	["sentinel", "SENTINEL", "security", Color(0.36, 0.6, 1.0), Vector3(32.5, 0, 9)],
 	["scout", "SCOUT", "network", Color(0.4, 0.9, 0.5), Vector3(37.5, 0, 9)],
 	["scrappy", "SCRAPPY", "cleanup", Color(1.0, 0.85, 0.25), Vector3(42.5, 0, 9)],
+	["archie", "ARCHIE", "storage", Color(0.7, 0.5, 1.0), Vector3(32.5, 0, 15)],
+	["forge", "FORGE", "build", Color(1.0, 0.55, 0.2), Vector3(37.5, 0, 15)],
+	["blueprint", "BLUEPRINT", "architect", Color(0.84, 0.8, 1.0), Vector3(42.5, 0, 15)],
 ]
 
 func _build_krew_stations() -> void:
@@ -547,6 +550,37 @@ func _drawn_krew(id: String, p: Node3D, accent: Material, colour: Color) -> void
 			_box(Vector3(0.06, 0.34, 0.46), steel, Vector3(0.4, 1.12, 0), p)
 			_box(Vector3(0.04, 0.12, 0.32), eyes, Vector3(0.44, 1.14, 0), p)
 			_cyl(0.32, 0.9, Tex.mat(colour.darkened(0.15), 0.8, 0.0), Vector3(0.78, 0.32, 0), p, Vector3(PI / 2, 0, 0))
+		"archie":
+			# a storage unit: a cabinet of drive bays on short legs, a face on top
+			for x in [-0.35, 0.35]:
+				_box(Vector3(0.18, 0.3, 0.5), dark, Vector3(x, 0.15, 0), p)
+			_box(Vector3(1.0, 1.2, 0.7), accent, Vector3(0, 0.9, 0), p)
+			for y in [0.55, 0.85, 1.15]:
+				_box(Vector3(0.8, 0.18, 0.04), steel, Vector3(0, y, 0.36), p)
+				_box(Vector3(0.08, 0.06, 0.03), eyes, Vector3(0.3, y, 0.39), p)
+			_box(Vector3(0.62, 0.42, 0.5), steel, Vector3(0, 1.72, 0), p)
+			_box(Vector3(0.44, 0.14, 0.05), eyes, Vector3(0, 1.74, 0.26), p)
+		"forge":
+			# a fabrication arm on a heavy base
+			_cyl(0.5, 0.36, dark, Vector3(0, 0.18, 0), p)
+			_box(Vector3(0.7, 0.5, 0.6), accent, Vector3(0, 0.6, 0), p)
+			_box(Vector3(0.5, 0.36, 0.46), steel, Vector3(0, 1.04, 0), p)
+			_box(Vector3(0.36, 0.12, 0.05), eyes, Vector3(0, 1.06, 0.24), p)
+			var arm = _box(Vector3(0.18, 0.9, 0.18), accent, Vector3(0.42, 1.45, 0.1), p)
+			arm.rotation.z = -0.6
+			var fore = _box(Vector3(0.14, 0.6, 0.14), steel, Vector3(0.82, 1.78, 0.1), p)
+			fore.rotation.z = 0.9
+			_box(Vector3(0.2, 0.2, 0.2), Tex.glow(Color(1.0, 0.6, 0.2), 2.0), Vector3(1.06, 1.6, 0.1), p)
+		"blueprint":
+			# a slim architect robot holding up a blueprint board
+			for x in [-0.18, 0.18]:
+				_box(Vector3(0.2, 0.66, 0.26), dark, Vector3(x, 0.33, 0), p)
+			_box(Vector3(0.7, 0.86, 0.46), accent, Vector3(0, 1.08, 0), p)
+			_box(Vector3(0.56, 0.48, 0.46), steel, Vector3(0, 1.8, 0), p)
+			_box(Vector3(0.42, 0.14, 0.05), eyes, Vector3(0, 1.82, 0.24), p)
+			_box(Vector3(0.9, 0.62, 0.05), Tex.glow(Color(0.3, 0.45, 1.0), 1.2), Vector3(0.0, 1.1, 0.42), p)
+			for y in [0.95, 1.1, 1.25]:
+				_box(Vector3(0.7, 0.02, 0.02), Tex.glow(Color(0.9, 0.95, 1.0), 1.6), Vector3(0, y, 0.45), p)
 			for z in [-0.4, 0.4]:
 				_box(Vector3(0.5, 0.08, 0.06), steel, Vector3(0.52, 0.55, z), p)
 

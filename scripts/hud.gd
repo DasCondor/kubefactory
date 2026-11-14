@@ -3718,7 +3718,10 @@ func open_krew(focus: String = "") -> void:
 	var compact = touch != null and touch.active
 	var body = _open_modal("krew", focus, "KREW  //  OPERATIONS", Vector2(1260, 800))
 	# the roster: every worker, what it is doing, and how many findings it holds
-	var roster = _row(8)
+	var roster = GridContainer.new()
+	roster.columns = 4
+	roster.add_theme_constant_override("h_separation", 8)
+	roster.add_theme_constant_override("v_separation", 6)
 	for w in krew.WORKERS:
 		var id = str(w["id"])
 		var pc = PanelContainer.new()
@@ -3732,7 +3735,7 @@ func open_krew(focus: String = "") -> void:
 		var b = _btn("Only " + str(w["name"]).capitalize() if _krew_focus != id else "Showing", func(): open_krew("" if _krew_focus == id else id), "normal", true)
 		v.add_child(b)
 		pc.add_child(v)
-		pc.custom_minimum_size.x = 230
+		pc.custom_minimum_size.x = 296
 		roster.add_child(pc)
 	body.add_child(roster)
 	var src = str(cluster.state.get("source", ""))

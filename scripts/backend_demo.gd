@@ -245,6 +245,30 @@ const SIM_SECURITY = {
 	"qbittorrent": {"host_ports": [6881], "all_interfaces": true},
 }
 
+# Where simulated software keeps its data. The shop's Redis runs on scratch
+# space (an emptyDir), so Archie has something true to say about it; the
+# storage door shows the same thing (_sim_mounts).
+const DATA_DIRS = {"postgres": "/var/lib/postgresql/data", "mysql": "/var/lib/mysql", "mariadb": "/var/lib/mysql", "redis": "/data", "prometheus": "/prometheus",
+	"grafana": "/var/lib/grafana", "influxdb": "/var/lib/influxdb2", "minio": "/data", "registry": "/var/lib/registry", "gitea": "/data", "plex": "/config", "homeassistant": "/config"}
+const SIM_EPHEMERAL = ["redis"]
+
+static func _data_dir(wname: String, image: String) -> String:
+	var img = image.to_lower()
+	for key in DATA_DIRS:
+		if img.contains(key) or wname.contains(key):
+			return DATA_DIRS[key]
+	return ""
+
+static func sim_storage(wname: String, containers: Array) -> Dictionary:
+	var s = K.empty_storage()
+	s["known"] = true
+	if _data_dir(wname, str(containers[0][1])) != "":
+		if wname in SIM_EPHEMERAL:
+			s["scratch"] = ["data"]
+		else:
+			s["persistent"] = ["%s-data" % wname]
+	return s
+
 static func sim_security(wname: String, containers: Array) -> Dictionary:
 	var s = K.empty_security()
 	for k in SIM_SECURITY.get(wname, {}):
@@ -407,7 +431,7 @@ func fetch() -> Dictionary:
 			"phase": {"Running": "Running", "Completed": "Succeeded", "Error": "Failed"}.get(p["st"], "Pending"),
 			# a finished Job in the demo has sat there for a while, as they do
 			"finished": float(p.get("since", 0.0)) - 5400.0 if p["st"] in ["Completed", "Error"] else 0.0,
-			"sec": sim_security(w["name"], w["containers"])})
+			"sec": sim_security(w["name"], w["containers"]), "store": sim_storage(w["name"], w["containers"])})
 	for w in _wl:
 		if w["kind"] == "Job":
 			continue
@@ -440,14 +464,12 @@ func _sim_mounts(p: Dictionary) -> Array:
 	var w = p["wl"]
 	var c = str(w["containers"][0][0])
 	var res = []
-	var img = str(w["containers"][0][1]).to_lower()
-	var data_dirs = {"postgres": "/var/lib/postgresql/data", "mysql": "/var/lib/mysql", "mariadb": "/var/lib/mysql", "redis": "/data", "prometheus": "/prometheus",
-		"grafana": "/var/lib/grafana", "influxdb": "/var/lib/influxdb2", "minio": "/data", "registry": "/var/lib/registry", "gitea": "/data", "plex": "/config", "homeassistant": "/config"}
-	for key in data_dirs:
-		if img.contains(key) or str(w["name"]).contains(key):
-			res.append({"container": c, "path": data_dirs[key], "read_only": false, "volume": "data", "type": "pvc", "claim": "%s-data" % w["name"],
-				"pv": "pvc-%s" % str(p["uid"]).md5_text().left(8), "storage_class": "standard", "capacity": "10Gi", "phase": "Bound", "readable": true, "running": p["st"] == "Running"})
-			break
+	var dd = _data_dir(str(w["name"]), str(w["containers"][0][1]))
+	if dd != "" and str(w["name"]) in SIM_EPHEMERAL:
+		res.append({"container": c, "path": dd, "read_only": false, "volume": "data", "type": "emptydir", "claim": "", "readable": true, "running": p["st"] == "Running"})
+	elif dd != "":
+		res.append({"container": c, "path": dd, "read_only": false, "volume": "data", "type": "pvc", "claim": "%s-data" % w["name"],
+			"pv": "pvc-%s" % str(p["uid"]).md5_text().left(8), "storage_class": "standard", "capacity": "10Gi", "phase": "Bound", "readable": true, "running": p["st"] == "Running"})
 	res.append({"container": c, "path": "/etc/%s" % w["name"], "read_only": true, "volume": "config", "type": "configmap", "claim": "", "readable": true, "running": p["st"] == "Running"})
 	res.append({"container": c, "path": "/var/run/secrets/kubernetes.io/serviceaccount", "read_only": true, "volume": "kube-api-access", "type": "projected", "claim": "", "readable": false, "running": p["st"] == "Running"})
 	return res
@@ -555,10 +577,12 @@ func _sim_scan() -> Dictionary:
 		for c in p["wl"]["containers"]:
 			if not seen.has(c[1]):
 				seen[c[1]] = true
+				# the release candidate was built on a node and never pushed: Forge notices
 				images.append({"id": "sha256:%012x" % (hash(c[1]) & 0xffffffffffff), "repo": str(c[1]).get_slice(":", 0), "tag": str(c[1]).get_slice(":", 1),
-					"size": 120.0e6, "unique": 40.0e6, "containers": 1, "created": "1 week ago"})
+					"size": 120.0e6, "unique": 40.0e6, "containers": 1, "created": "1 week ago", "digests": 0 if str(c[1]).ends_with("-rc1") else 1})
 	return {"ok": true, "msg": "", "kind": "", "data": {"images": images + _sim_unused, "simulated": true, "source": "simulation",
-		"volumes": [{"name": "old-catalog-backup", "links": 0, "size": 2.4e9}]}}
+		"volumes": [{"name": "old-catalog-backup", "links": 0, "size": 2.4e9}],
+		"build_cache": {"entries": 46, "reclaimable": 3.1e9, "in_use": 2}}}
 
 func run_action(a: Dictionary) -> Dictionary:
 	if a["op"] == "cleanup_scan":
