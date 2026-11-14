@@ -59,7 +59,7 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Model library
 
-- Only the 25 machines, Porter, Bob and Gauge are placed in the world. The other 12
+- Only the 25 machines, Porter, Bob, Gauge, Sentinel, Scout and Scrappy are placed in the world. The other 12
   Krew members and the 101 V2 models (network, storage, structures, props,
   displays, tools) are shipped but not used: they are below the Porter V3
   standard or belong to features that do not exist yet.
@@ -156,6 +156,14 @@ exactly that: the code exists and has not been run against the real thing.
   containers, overhead or resources outside the visible namespace. They are
   not runtime usage or a scheduling guarantee. Gauge does not forecast, perform
   right-sizing or make changes; actual Kubernetes metrics remain untested.
+- **The Krew** (Sentinel, Scout, Scrappy) reads only what the cluster state
+  already holds: pod specs, Services and, for Docker, `docker inspect`. It does
+  not read NetworkPolicies, RBAC, admission policies or image vulnerabilities.
+  Scout does not probe connectivity. Scrappy's image and volume scan works on
+  Docker only; the Kubernetes API does not say which images a node no longer
+  uses. Approved removals (finished pod, unused image) were exercised in the
+  simulation, not on live infrastructure. Findings are kept only while the game
+  runs, apart from an export.
 - **Screen views:** at most 8 machines show metrics, logs or storage at once
   (the oldest goes back to its dashboard). Logs show the last 13 lines of the
   first container. Logs and storage on a machine's screen were seen working on
@@ -183,6 +191,6 @@ exactly that: the code exists and has not been run against the real thing.
 ## Not implemented from the 2.0 handoff
 
 See `FEATURE_PARITY.md` for the full table. In short: most of the Krew workforce
-beyond Porter, Bob and the read-only Gauge desk, the AI providers and Foreman, the autonomy and policy engine,
+beyond Porter, Bob, Gauge, Sentinel, Scout and Scrappy, the AI providers and Foreman, the autonomy and policy engine,
 self-healing and scheduling, an in-game terminal, a bundled browser engine, a
 native Docker Engine client, and Linux or macOS builds.

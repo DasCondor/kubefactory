@@ -16,6 +16,7 @@ const Connections = preload("res://scripts/connections.gd")
 const Providers = preload("res://scripts/providers.gd")
 const DemoScreens = preload("res://scripts/demo_screens.gd")
 const MachineScreens = preload("res://scripts/machine_screens.gd")
+const KrewManager = preload("res://scripts/krew.gd")
 const MobileControls = preload("res://scripts/mobile_controls.gd")
 const Models = preload("res://scripts/models.gd")
 const Icons = preload("res://scripts/icons.gd")
@@ -76,6 +77,7 @@ var live: Node
 var providers: Node
 var demo_screens: Node
 var screens: Node
+var krew: Node
 var touch: CanvasLayer = null      # touch controls (browser demo only)
 var _touch_forced = false          # --touch: show them on the desktop, for testing
 var _live_rate_t = 0.0
@@ -193,6 +195,23 @@ func _ready() -> void:
 	cluster.logs_ready.connect(screens.on_logs)
 	cluster.data_ready.connect(screens.on_data)
 	cluster.source_changed.connect(func(_l, _n): screens.clear())
+	# the Krew: workers that report findings and act only when approved
+	krew = KrewManager.new()
+	add_child(krew)
+	hud.krew = krew
+	cluster.state_updated.connect(krew.observe)
+	krew.changed.connect(func():
+		for w in ["sentinel", "scout", "scrappy"]:
+			world.set_krew_status(w, krew.status_of(w), krew.worst_of(w))
+		hud.on_krew_changed())
+	cluster.data_ready.connect(func(key, r):
+		if key == "krew:scan":
+			krew.set_scan(r)
+			if not r.get("ok", false):
+				hud.notify("Scrappy: " + str(r.get("msg", "the scan failed")), "warn"))
+	cluster.action_finished.connect(func(a, _r):
+		if str(a.get("op", "")) == "remove_image":
+			cluster.act({"op": "cleanup_scan", "ns": "", "name": "", "key": "krew:scan", "quiet": true}))
 	cluster.source_changed.connect(func(_l, _n):
 		if hud._modal_kind == "gauge":
 			hud.open_gauge())
@@ -380,6 +399,7 @@ func _setup_input() -> void:
 	_key("storage", [KEY_F])
 	_key("liveview", [KEY_V])
 	_key("screen_next", [KEY_R])
+	_key("krew", [KEY_K])
 	_key("mute", [KEY_M])
 	_key("fullscreen", [KEY_F11])
 	for pair in [["fire", MOUSE_BUTTON_LEFT], ["sample", MOUSE_BUTTON_MIDDLE]]:
@@ -595,7 +615,7 @@ func _process(delta: float) -> void:
 	var type = meta.get("type", "")
 	# the screen is for reading and opening: no tool acts through it, whatever is in hand
 	var hold = {} if _on_screen(meta) else _hold_action(type, meta)
-	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc", "bob", "gauge"] else null,
+	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc", "bob", "gauge", "krew"] else null,
 		K.tier_color(hud.TOOLS[mode]["mk"]) if not hold.is_empty() else Color(0.98, 0.584, 0.286))
 	if mode == 2 and blueprint != null and type == "platform":
 		world.show_hologram(h["pos"])
@@ -665,7 +685,7 @@ func touch_action_label() -> String:
 	var hold = _hold_action(type, meta)
 	if not hold.is_empty():
 		return "HOLD\n" + str(hold["label"]).left(18).to_upper()
-	if mode == 0 and type in ["pod", "node", "service", "hub", "logs", "npc", "bob", "gauge", "cluster"]:
+	if mode == 0 and type in ["pod", "node", "service", "hub", "logs", "npc", "bob", "gauge", "krew", "cluster"]:
 		return "INSPECT"
 	if mode == 1:
 		return "LOGS"
@@ -735,6 +755,9 @@ func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 			return "BOB  ·  repair stand\n[E] fix list: what is broken, why, and what to do about it"
 		"gauge":
 			return "GAUGE  ·  resource desk\n[E] inspect requests and read workload usage"
+		"krew":
+			var kw = krew.worker(str(meta["worker"]))
+			return "%s  ·  %s\n%s\n[E] findings   ·   [K] the whole Krew" % [kw.get("name", ""), str(kw.get("role", "")).to_lower(), krew.status_of(str(meta["worker"]))]
 		"npc":
 			return "PORTER  ·  Portainer dock\n[E] talk: complete app setups, Portainer templates"
 		"logs":
@@ -788,6 +811,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		settings["muted"] = sfx.muted
 		K.save_settings(settings)
 		hud.notify("Sound %s" % ("off" if sfx.muted else "on"), "info")
+	elif ev.is_action_pressed("krew"):
+		hud.open_krew()
 	elif ev.is_action_pressed("next_problem"):
 		_next_problem()
 	elif ev.is_action_pressed("interact"):
@@ -847,6 +872,8 @@ func _interact() -> void:
 			hud.open_bob()
 		"gauge":
 			hud.open_gauge()
+		"krew":
+			hud.open_krew(str(meta["worker"]))
 		"cluster":
 			if meta["index"] < cluster.targets.size():
 				_connect_target(cluster.targets[meta["index"]])

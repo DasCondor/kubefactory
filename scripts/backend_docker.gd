@@ -7,7 +7,7 @@ const Apps = preload("res://scripts/apps.gd")
 
 var label = "docker"
 var poll_interval = 2.5
-var caps = {"scale": false, "delete_pod": true, "restart": true, "delete_workload": false,
+var caps = {"remove_image": true, "scale": false, "delete_pod": true, "restart": true, "delete_workload": false,
 	"create": true, "cordon": false, "drain": false, "logs": true, "files": true}
 var context = ""
 var log_cfg = {}
@@ -30,6 +30,32 @@ func probe() -> Dictionary:
 	context = str(d.get("Name", "docker"))
 	return {"ok": true, "msg": context}
 
+var _inspect = {}      # container id -> {state, sec, finished}: `docker inspect` is asked only for what changed
+
+func _inspect_all(rows: Array) -> void:
+	var want = []
+	var live = {}
+	for c in rows:
+		var id = str(c.get("ID", ""))
+		live[id] = true
+		if id != "" and (not _inspect.has(id) or _inspect[id]["state"] != str(c.get("State", ""))):
+			want.append(id)
+	for id in _inspect.keys():
+		if not live.has(id):
+			_inspect.erase(id)
+	if want.is_empty():
+		return
+	var r = _run(["inspect"] + want, false)
+	var arr = JSON.parse_string(r.out) if r.code == 0 else null
+	if typeof(arr) != TYPE_ARRAY:
+		return
+	for i in arr:
+		if typeof(i) != TYPE_DICTIONARY:
+			continue
+		var fin = str(i.get("State", {}).get("FinishedAt", ""))
+		var finished = 0.0 if fin == "" or fin.begins_with("0001") else Time.get_unix_time_from_datetime_string(fin.get_slice(".", 0))
+		_inspect[str(i.get("Id", ""))] = {"state": str(i.get("State", {}).get("Status", "")), "sec": K.container_security(i), "finished": finished}
+
 func fetch() -> Dictionary:
 	var r = _run(["ps", "-a", "--no-trunc", "--format", "{{json .}}"], false)
 	if r.code != 0:
@@ -40,6 +66,12 @@ func fetch() -> Dictionary:
 		"version": str(_host.get("ServerVersion", "")), "cpu": float(_host.get("NCPU", 0)),
 		"mem": float(_host.get("MemTotal", 0)), "cpu_req": 0.0, "mem_req": 0.0, "created": 0.0})
 	var wl = {}
+	var rows = []
+	for line in r.out.split("\n"):
+		var cj = JSON.parse_string(line.strip_edges()) if line.strip_edges() != "" else null
+		if typeof(cj) == TYPE_DICTIONARY:
+			rows.append(cj)
+	_inspect_all(rows)
 	for line in r.out.split("\n"):
 		line = line.strip_edges()
 		if line == "":
@@ -72,7 +104,10 @@ func fetch() -> Dictionary:
 			"wkind": "Compose" if svc != "" else "Pod", "wname": svc,
 			"ip": str(c.get("Ports", "")), "created": 0.0, "labels": labels,
 			"containers": [{"name": nm, "image": str(c.get("Image", "")), "state": "running" if state == "running" else "terminated",
-				"reason": status_text, "ready": state == "running", "restarts": 0}]})
+				"reason": status_text, "ready": state == "running", "restarts": 0}],
+			"phase": "Running" if state == "running" else ("Succeeded" if status == "Completed" else ("Failed" if state in ["exited", "dead"] else "Pending")),
+			"finished": float(_inspect.get(str(c.get("ID", "")), {}).get("finished", 0.0)),
+			"sec": _inspect.get(str(c.get("ID", "")), {}).get("sec", K.empty_security())})
 		if svc != "":
 			var key = ns + "/" + svc
 			if not wl.has(key):
@@ -245,9 +280,33 @@ func _metrics(container: String) -> Dictionary:
 		return {"ok": false, "kind": "unsupported", "msg": "This container is not running, so it is using nothing.", "data": {}}
 	return {"ok": true, "msg": "", "kind": "", "data": _usage_data(d)}
 
+# Images and volumes with their sizes and users, as `docker system df -v` reports them.
+func _cleanup_scan() -> Dictionary:
+	var r = _run(["system", "df", "-v", "--format", "{{json .}}"], false)
+	var d = JSON.parse_string(r.out.strip_edges()) if r.code == 0 else null
+	if typeof(d) != TYPE_DICTIONARY:
+		return {"ok": false, "kind": "unsupported", "msg": "The engine did not report its disk use.", "data": {}}
+	var images = []
+	for i in (d.get("Images", []) if typeof(d.get("Images")) == TYPE_ARRAY else []):
+		var size = _size(str(i.get("Size", "")))
+		var unique = _size(str(i.get("UniqueSize", "")))
+		images.append({"id": str(i.get("ID", "")), "repo": str(i.get("Repository", "<none>")), "tag": str(i.get("Tag", "<none>")),
+			"size": size if size != null else 0.0, "unique": unique if unique != null else 0.0,
+			"containers": int(str(i.get("Containers", "1"))) if str(i.get("Containers", "")).is_valid_int() else 1, "created": str(i.get("CreatedSince", ""))})
+	var volumes = []
+	for v in (d.get("Volumes", []) if typeof(d.get("Volumes")) == TYPE_ARRAY else []):
+		volumes.append({"name": str(v.get("Name", "")), "links": int(str(v.get("Links", "1"))) if str(v.get("Links", "")).is_valid_int() else 1, "size": _size(str(v.get("Size", "")))})
+	return {"ok": true, "msg": "", "kind": "", "data": {"images": images, "volumes": volumes, "source": "docker system df"}}
+
 func _app_action(a: Dictionary) -> Dictionary:
 	if a["op"] == "pod_metrics":
 		return _metrics(a["name"])
+	if a["op"] == "cleanup_scan":
+		return _cleanup_scan()
+	if a["op"] == "remove_image":
+		# no --force: the engine refuses while any container still uses it
+		var rr = _run(["image", "rm", str(a.get("id", a["name"]))])
+		return {"ok": rr.code == 0, "msg": ("Removed image " + str(a["name"])) if rr.code == 0 else _tail(rr)}
 	if a["op"] in ["file_mounts", "file_list", "file_read"]:
 		return _file_action(a)
 	match a["op"]:

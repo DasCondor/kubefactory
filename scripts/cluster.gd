@@ -26,7 +26,7 @@ const Demo = preload("res://scripts/backend_demo.gd")
 const LogSources = preload("res://scripts/log_sources.gd")
 const VIEW_OPS = ["logs", "events", "cluster_events", "templates"]
 # read-only operations that hand back data (not text): storage inspection and loopback forwards
-const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics"]
+const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan"]
 const APP_OPS = ["apply_app", "remove_app", "portainer_install", "portainer_open", "deploy_template", "remove_template"]
 
 var backend = null
@@ -175,6 +175,10 @@ static func describe(a: Dictionary) -> String:
 			return "view cluster events %s" % (a.get("ns", "") if a.get("ns", "") != "" else "(all namespaces)")
 		"file_mounts":
 			return "inspect storage of %s/%s" % [a["ns"], a["name"]]
+		"cleanup_scan":
+			return "scan images and volumes for cleanup"
+		"remove_image":
+			return "remove image %s" % a["name"]
 		"file_list":
 			return "list files %s/%s:%s%s" % [a["ns"], a["name"], a["root"], ("/" + str(a["path"])) if str(a.get("path", "")) != "" else ""]
 		"file_read":

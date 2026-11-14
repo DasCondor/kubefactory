@@ -88,6 +88,8 @@ var _bob_say_t = 0.0      # seconds until his next remark
 var _bob_near = false
 var _bob_jobs = 0
 var _gauge: Node3D
+var _krew_tags = {}       # worker id -> its Label3D
+var _krew_lamps = {}      # worker id -> its status lamp
 var _select: Node3D
 var _select_mat: StandardMaterial3D
 var _select_size = Vector3.ZERO
@@ -103,6 +105,7 @@ func _ready() -> void:
 	_build_npc()
 	_build_bob()
 	_build_gauge()
+	_build_krew_stations()
 	_belt_mm = _make_mm(Vector3.ONE, Tex.mat(Color.WHITE, 0.6, 0.4))
 	_item_mm = _make_mm(Vector3(0.5, 0.5, 0.5), Tex.mat(Color.WHITE, 0.5, 0.1))
 	_build_hologram()
@@ -438,6 +441,60 @@ func _build_gauge() -> void:
 	tag.position = Vector3(0, 3.4, 0)
 	tag.visibility_range_end = 60.0
 	_gauge.add_child(tag)
+
+# Sentinel, Scout and Scrappy: each at a small station with a status lamp.
+const KREW_STATIONS = [
+	["sentinel", "SENTINEL", "security", Color(0.36, 0.6, 1.0), Vector3(32.5, 0, 9)],
+	["scout", "SCOUT", "network", Color(0.4, 0.9, 0.5), Vector3(37.5, 0, 9)],
+	["scrappy", "SCRAPPY", "cleanup", Color(1.0, 0.85, 0.25), Vector3(42.5, 0, 9)],
+]
+
+func _build_krew_stations() -> void:
+	for s in KREW_STATIONS:
+		var root = Node3D.new()
+		root.position = s[4]
+		add_child(root)
+		var accent = Tex.mat(s[3], 0.5, 0.2)
+		_box(Vector3(3.2, 0.2, 2.6), Tex.shared("dark"), Vector3(0, 0.1, 0), root)
+		_box(Vector3(3.2, 0.06, 0.12), accent, Vector3(0, 0.23, 1.25), root)
+		_box(Vector3(0.12, 2.4, 0.12), Tex.shared("steel"), Vector3(1.3, 1.2, -1.0), root)
+		var lamp = MeshInstance3D.new()
+		var lm = SphereMesh.new()
+		lm.radius = 0.2
+		lm.height = 0.4
+		lamp.mesh = lm
+		lamp.material_override = Tex.status_glow("ok")
+		lamp.position = Vector3(1.3, 2.55, -1.0)
+		root.add_child(lamp)
+		_krew_lamps[s[0]] = lamp
+		_solid(Vector3(1.6, 2.6, 1.6), Vector3(0, 1.3, 0), {"type": "krew", "worker": s[0]}, root)
+		var figure = Node3D.new()
+		root.add_child(figure)
+		var fallback = _krew(s[0], figure, 2.3)
+		_box(Vector3(0.8, 1.0, 0.55), accent, Vector3(0, 1.1, 0), fallback)
+		_box(Vector3(0.6, 0.5, 0.5), Tex.shared("steel"), Vector3(0, 1.85, 0), fallback)
+		_box(Vector3(0.44, 0.16, 0.05), Tex.glow(s[3], 1.6), Vector3(0, 1.88, 0.27), fallback)
+		for x in [-0.22, 0.22]:
+			_box(Vector3(0.22, 0.6, 0.26), Tex.shared("dark"), Vector3(x, 0.3, 0), fallback)
+		var tag = Label3D.new()
+		tag.text = "%s  ·  %s\n[E] findings" % [s[1], s[2]]
+		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		tag.font_size = 40
+		tag.pixel_size = 0.0055
+		tag.outline_size = 10
+		tag.modulate = s[3].lightened(0.35)
+		tag.position = Vector3(0, 3.1, 0)
+		tag.visibility_range_end = 60.0
+		root.add_child(tag)
+		_krew_tags[s[0]] = tag
+
+# What a station shows: the worker's state, and its lamp in the colour of its worst finding.
+func set_krew_status(id: String, text: String, worst: String) -> void:
+	if _krew_tags.has(id):
+		var name = _krew_tags[id].text.get_slice("\n", 0)
+		_krew_tags[id].text = "%s\n%s" % [name, text]
+	if _krew_lamps.has(id):
+		_krew_lamps[id].material_override = Tex.status_glow({"high": "bad", "medium": "warn", "low": "warn"}.get(worst, "ok"))
 
 func set_gauge_visible(enabled: bool) -> void:
 	_gauge.visible = enabled

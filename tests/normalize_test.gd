@@ -279,6 +279,81 @@ line2\" injected: true"]])
 	var sorted_big = K.table_rows(big, "r", true, "", tget)
 	check.call("table: 9999 rows sort", sorted_big[0]["r"], K.TABLE_LIMIT - 2)
 	print("NOTE sorting 9999 rows took ", Time.get_ticks_msec() - t0, " ms")
+	# ---- Krew: the facts every source reports
+	check.call("floating tags", [K.floating_tag("nginx"), K.floating_tag("nginx:latest"), K.floating_tag("registry:5000/app"), K.floating_tag("nginx:1.27"), K.floating_tag("x@sha256:ab"), K.floating_tag("")], [true, true, true, false, false, false])
+	var ksec = K.pod_security({"hostNetwork": true, "securityContext": {"runAsUser": 0},
+		"volumes": [{"name": "sock", "hostPath": {"path": "/var/run/docker.sock"}}, {"name": "logs", "hostPath": {"path": "/var/log"}}, {"name": "cfg", "configMap": {"name": "x"}}],
+		"initContainers": [{"name": "init", "image": "busybox:1.36"}],
+		"containers": [{"name": "app", "image": "nginx", "securityContext": {"privileged": true, "capabilities": {"add": ["SYS_ADMIN", "CHOWN"]}}, "ports": [{"containerPort": 80, "hostPort": 8080}]},
+			{"name": "side", "image": "envoy:v1.31", "securityContext": {"runAsUser": 1000}}]})
+	check.call("pod facts: privileged, socket, host paths", [ksec["privileged"], ksec["docker_socket"], ksec["host_paths"]], [["app"], true, ["/var/run/docker.sock", "/var/log"]])
+	check.call("pod facts: pod-level root applies unless a container overrides it", ksec["root"], ["init", "app"])
+	check.call("pod facts: only powerful capabilities, floating tag, host port", [ksec["caps"], ksec["latest"], ksec["host_ports"], ksec["host_network"]], [["app: SYS_ADMIN"], ["app: nginx"], [8080], true])
+	check.call("pod facts: nothing stated, nothing recorded", K.pod_security({"containers": [{"name": "a", "image": "a:1"}]}) == K.empty_security(), true)
+	var dsec = K.container_security({"Name": "/web", "HostConfig": {"Privileged": false, "NetworkMode": "bridge", "CapAdd": ["NET_ADMIN"],
+		"PortBindings": {"80/tcp": [{"HostIp": "", "HostPort": "8099"}]}}, "Config": {"User": "root", "Image": "web:latest"},
+		"Mounts": [{"Type": "bind", "Source": "/var/run/docker.sock"}, {"Type": "volume", "Source": "/var/lib/docker/volumes/x"}]})
+	check.call("container facts", [dsec["docker_socket"], dsec["host_paths"], dsec["root"], dsec["caps"], dsec["latest"], dsec["host_ports"], dsec["all_interfaces"]],
+		[true, ["/var/run/docker.sock"], ["web"], ["web: NET_ADMIN"], ["web: web:latest"], [8099], true])
+	check.call("container facts: a port on 127.0.0.1 is not on every address",
+		K.container_security({"HostConfig": {"PortBindings": {"80/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8099"}]}}})["all_interfaces"], false)
+	# ---- Krew: the rules
+	var KrewM = load("res://scripts/krew.gd")
+	var now = 1000000.0
+	var sec_priv = K.empty_security()
+	sec_priv["privileged"] = ["proxy"]
+	sec_priv["host_network"] = true
+	var sec_sock = K.empty_security()
+	sec_sock["docker_socket"] = true
+	sec_sock["host_paths"] = ["/var/run/docker.sock"]
+	var kst = {"source": "kubernetes", "nodes": [{"name": "n1", "ready": true, "cordoned": false, "roles": "worker", "cpu": 4.0, "mem": 8e9, "cpu_req": 3.8, "mem_req": 1e9}],
+		"pods": [
+			{"uid": "u1", "name": "proxy-a", "ns": "kube-system", "wname": "kube-proxy", "wkind": "DaemonSet", "node": "n1", "status": "Running", "health": "ok", "restarts": 0, "ready": true, "labels": {"k8s-app": "kube-proxy"}, "sec": sec_priv, "phase": "Running"},
+			{"uid": "u2", "name": "proxy-b", "ns": "kube-system", "wname": "kube-proxy", "wkind": "DaemonSet", "node": "n1", "status": "Running", "health": "ok", "restarts": 0, "ready": true, "labels": {"k8s-app": "kube-proxy"}, "sec": sec_priv, "phase": "Running"},
+			{"uid": "u3", "name": "ci-1", "ns": "ci", "wname": "builder", "wkind": "Deployment", "node": "n1", "status": "Running", "health": "ok", "restarts": 0, "ready": true, "labels": {"app": "builder"}, "sec": sec_sock, "phase": "Running"},
+			{"uid": "u4", "name": "api-1", "ns": "shop", "wname": "api", "wkind": "Deployment", "node": "n1", "status": "CrashLoopBackOff", "health": "bad", "restarts": 7, "ready": false, "labels": {"app": "api"}, "sec": K.empty_security(), "phase": "Running"},
+			{"uid": "u5", "name": "migrate-x", "ns": "shop", "wname": "migrate", "wkind": "Job", "node": "n1", "status": "Completed", "health": "done", "restarts": 0, "ready": false, "labels": {}, "sec": K.empty_security(), "phase": "Succeeded", "finished": now - 7200.0},
+			{"uid": "u6", "name": "migrate-y", "ns": "shop", "wname": "migrate", "wkind": "Job", "node": "n1", "status": "Completed", "health": "done", "restarts": 0, "ready": false, "labels": {}, "sec": K.empty_security(), "phase": "Succeeded", "finished": now - 60.0}],
+		"services": [{"name": "api", "ns": "shop", "type": "ClusterIP", "ports": "80/TCP", "selector": {"app": "api"}},
+			{"name": "search", "ns": "shop", "type": "ClusterIP", "ports": "9200/TCP", "selector": {"app": "search"}},
+			{"name": "web", "ns": "shop", "type": "LoadBalancer", "ports": "443/TCP", "selector": {"app": "api"}},
+			{"name": "manual", "ns": "shop", "type": "ClusterIP", "ports": "80/TCP", "selector": {}}], "workloads": []}
+	var kf = KrewM.analyze(kst, {}, now)
+	var fk = func(k): return kf.get(k, {})
+	check.call("Sentinel: a privileged system DaemonSet is one finding, lowered, with both replicas", [fk.call("sentinel:privileged:kube-system/kube-proxy").get("severity"), fk.call("sentinel:privileged:kube-system/kube-proxy").get("uids")], ["medium", ["u1", "u2"]])
+	check.call("Sentinel: the engine socket outside the system namespaces is high", fk.call("sentinel:engine-socket:ci/builder").get("severity"), "high")
+	check.call("Sentinel: the socket is not also counted as a host path", kf.has("sentinel:host-path:ci/builder"), false)
+	check.call("Sentinel proposes, never acts", kf.values().filter(func(f): return f["worker"] == "sentinel" and not f["action"].is_empty()).size(), 0)
+	check.call("Scout: a Service selecting nothing", fk.call("scout:no-pods:shop/search").get("severity"), "medium")
+	check.call("Scout: a Service whose pods are all failing", fk.call("scout:no-ready:shop/api").get("severity"), "high")
+	check.call("Scout: exposure noted, a hand-managed Service left alone", [fk.call("scout:exposed:shop/web").get("severity"), kf.has("scout:no-pods:shop/manual")], ["info", false])
+	check.call("Bob: the crash loop", kf.has("bob:CrashLoopBackOff:shop/api-1"), true)
+	check.call("Gauge: requests at 95% of a node's CPU", fk.call("gauge:requests-cpu:node/n1").get("severity"), "medium")
+	check.call("Scrappy: a finished pod after an hour, with an approvable removal", fk.call("scrappy:finished:shop/migrate-x").get("action"), {"op": "delete_pod", "ns": "shop", "name": "migrate-x"})
+	check.call("Scrappy: one that just finished is left alone", kf.has("scrappy:finished:shop/migrate-y"), false)
+	var scan_r = {"ok": true, "data": {"images": [{"id": "sha256:aaaaaaaaaaaa1111", "repo": "old", "tag": "1", "size": 2e8, "unique": 5e7, "containers": 0},
+		{"id": "sha256:bbbbbbbbbbbb2222", "repo": "live", "tag": "2", "size": 2e8, "unique": 5e7, "containers": 1}],
+		"volumes": [{"name": "data", "links": 0, "size": 3e9}, {"name": "used", "links": 1, "size": 1e6}]}}
+	var sf = KrewM.analyze({"source": "docker", "nodes": [], "pods": [], "services": []}, scan_r, now)
+	check.call("Scrappy: an unused image, removable; a used one not reported", [sf.get("scrappy:unused-image:image/aaaaaaaaaaaa", {}).get("action", {}).get("op"), sf.has("scrappy:unused-image:image/bbbbbbbbbbbb")], ["remove_image", false])
+	check.call("Scrappy: an unattached volume is reported, never offered for removal", [sf.get("scrappy:unattached-volume:volume/data", {}).get("action"), sf.has("scrappy:unattached-volume:volume/used")], [{}, false])
+	check.call("Gauge has nothing to say about Docker requests", sf.keys().filter(func(k): return str(k).begins_with("gauge")).size(), 0)
+	# ---- Krew: the manager keeps first-seen times and records what got resolved
+	var km = KrewM.new()
+	km.update(kst, now)
+	var first = km.findings["scout:no-pods:shop/search"]["first_seen"]
+	var kst2 = kst.duplicate(true)
+	kst2["services"].remove_at(1)
+	km.update(kst2, now + 30.0)
+	check.call("Krew: a lasting finding keeps its first-seen time", km.findings["scout:no-ready:shop/api"]["first_seen"], now)
+	check.call("Krew: a finding that is gone is resolved, with its time", [km.findings.has("scout:no-pods:shop/search"), km.history[0]["key"], km.history[0]["resolved_at"]], [false, "scout:no-pods:shop/search", now + 30.0])
+	check.call("Krew: worst first", km.of_worker("")[0]["severity"], "high")
+	check.call("Krew: a changed source starts afresh", (func(): km.update({"source": "simulation", "nodes": [], "pods": [], "services": []}, now); return km.findings.size()).call(), 0)
+	km.update(kst, now)
+	var rep = km.report_markdown()
+	check.call("Krew report: Markdown carries the findings", rep.contains("Service shop/search selects no pods") and rep.contains("## SENTINEL (Security)"), true)
+	check.call("Krew report: JSON reads back", typeof(JSON.parse_string(km.report_json())), TYPE_DICTIONARY)
+	km.free()
 	# ---- LiveView endpoint discovery
 	var Live = load("res://scripts/liveview.gd")
 	var eps = Live.endpoints({"pods": [{"name": "grafana", "ns": "mon", "ip": "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:9443->9443/tcp, 5432/tcp"}]}, "docker")

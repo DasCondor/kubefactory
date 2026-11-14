@@ -280,12 +280,18 @@ static func normalize(list: Dictionary, ctx: String) -> Dictionary:
 						var rq = c.get("resources", {}).get("requests", {})
 						req_cpu[node] = req_cpu.get(node, 0.0) + K.parse_cpu(rq.get("cpu", "0"))
 						req_mem[node] = req_mem.get(node, 0.0) + K.parse_mem(rq.get("memory", "0"))
+				var finished = 0.0
+				for cs in status.get("containerStatuses", []):
+					var term = cs.get("state", {}).get("terminated", {})
+					if typeof(term) == TYPE_DICTIONARY and term.has("finishedAt"):
+						finished = maxf(finished, Time.get_unix_time_from_datetime_string(str(term["finishedAt"])))
 				st.pods.append({"uid": str(md.get("uid", ns + "/" + nm)), "name": nm, "ns": ns, "node": node,
 					"status": pstatus, "ready": all_ready and conts.size() > 0,
 					"health": K.health_of(pstatus, all_ready and conts.size() > 0),
 					"restarts": restarts, "wkind": wkind, "wname": wname,
 					"ip": str(status.get("podIP", "")), "created": created,
-					"labels": labels, "containers": conts})
+					"labels": labels, "containers": conts, "phase": phase, "finished": finished,
+					"sec": K.pod_security(spec)})
 			"Deployment", "StatefulSet":
 				st.workloads.append({"kind": kind, "name": nm, "ns": ns,
 					"replicas": int(spec.get("replicas", 1)), "ready": int(status.get("readyReplicas", 0)),
@@ -321,6 +327,8 @@ static func _first_image(spec: Dictionary) -> String:
 
 func run_action(a: Dictionary) -> Dictionary:
 	var special = _app_action(a)
+	if special.is_empty() and a["op"] in ["cleanup_scan", "remove_image"]:
+		return {"ok": false, "kind": "unsupported", "data": {}, "msg": "Images live in each node's container runtime; the Kubernetes API does not list which ones are unused."}
 	if special.is_empty() and a["op"] == "pod_metrics":
 		return {"ok": false, "kind": "unsupported", "msg": "Usage figures need the built-in Kubernetes connection, not the kubectl mode.", "data": {}}
 	if not special.is_empty():

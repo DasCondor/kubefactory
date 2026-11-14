@@ -213,6 +213,103 @@ static func tidy_text(s: String, home: String = "") -> String:
 			i = low.find(f, i + 1)
 	return out
 
+# Security facts about one pod or container, the same shape from every source:
+#   privileged    [container names]          host_network / host_pid / host_ipc  bool
+#   host_paths    [host paths mounted]       docker_socket  bool (the engine's own socket is mounted)
+#   root          [containers that explicitly run as user 0]
+#   caps          ["container: CAPABILITY"]  only the powerful ones
+#   latest        ["container: image"]       no tag, or :latest
+#   host_ports    [published host ports]     all_interfaces  bool (published on every address)
+# Only what the source states is recorded: a missing fact is left out, never guessed.
+const POWERFUL_CAPS = ["ALL", "SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "SYS_MODULE", "DAC_READ_SEARCH", "SYS_RAWIO", "BPF"]
+
+static func empty_security() -> Dictionary:
+	return {"privileged": [], "host_network": false, "host_pid": false, "host_ipc": false, "host_paths": [], "docker_socket": false,
+		"root": [], "caps": [], "latest": [], "host_ports": [], "all_interfaces": false}
+
+static func is_socket_path(p: String) -> bool:
+	var l = p.to_lower()
+	return l.ends_with("docker.sock") or l.ends_with("containerd.sock") or l.ends_with("crio.sock") or l.ends_with("podman.sock")
+
+# "nginx", "nginx:latest", "registry:5000/app" are floating; "nginx:1.27", "x@sha256:..." are pinned
+static func floating_tag(image: String) -> bool:
+	if image == "" or image.contains("@"):
+		return false
+	var last = image.get_slice("/", image.get_slice_count("/") - 1)
+	return not last.contains(":") or last.ends_with(":latest")
+
+# from a Kubernetes pod spec
+static func pod_security(spec: Dictionary) -> Dictionary:
+	var s = empty_security()
+	var psc: Dictionary = spec.get("securityContext", {}) if typeof(spec.get("securityContext")) == TYPE_DICTIONARY else {}
+	s["host_network"] = bool(spec.get("hostNetwork", false))
+	s["host_pid"] = bool(spec.get("hostPID", false))
+	s["host_ipc"] = bool(spec.get("hostIPC", false))
+	for v in spec.get("volumes", []):
+		if typeof(v) == TYPE_DICTIONARY and typeof(v.get("hostPath")) == TYPE_DICTIONARY:
+			var hp = str(v["hostPath"].get("path", ""))
+			s["host_paths"].append(hp)
+			if is_socket_path(hp):
+				s["docker_socket"] = true
+	for c in spec.get("initContainers", []) + spec.get("containers", []):
+		if typeof(c) != TYPE_DICTIONARY:
+			continue
+		var cn = str(c.get("name", ""))
+		var csc: Dictionary = c.get("securityContext", {}) if typeof(c.get("securityContext")) == TYPE_DICTIONARY else {}
+		if bool(csc.get("privileged", false)):
+			s["privileged"].append(cn)
+		var user = csc.get("runAsUser", psc.get("runAsUser", null))
+		if user != null and int(user) == 0:
+			s["root"].append(cn)
+		var caps = csc.get("capabilities", {})
+		if typeof(caps) == TYPE_DICTIONARY:
+			for cap in caps.get("add", []):
+				var cu = str(cap).to_upper().trim_prefix("CAP_")
+				if cu in POWERFUL_CAPS:
+					s["caps"].append("%s: %s" % [cn, cu])
+		if floating_tag(str(c.get("image", ""))):
+			s["latest"].append("%s: %s" % [cn, str(c.get("image", ""))])
+		for p in c.get("ports", []):
+			if typeof(p) == TYPE_DICTIONARY and int(p.get("hostPort", 0)) > 0:
+				s["host_ports"].append(int(p["hostPort"]))
+	return s
+
+# from `docker inspect` of one container
+static func container_security(i: Dictionary) -> Dictionary:
+	var s = empty_security()
+	var hc: Dictionary = i.get("HostConfig", {}) if typeof(i.get("HostConfig")) == TYPE_DICTIONARY else {}
+	var cfg: Dictionary = i.get("Config", {}) if typeof(i.get("Config")) == TYPE_DICTIONARY else {}
+	var name = str(i.get("Name", "")).trim_prefix("/")
+	if bool(hc.get("Privileged", false)):
+		s["privileged"].append(name)
+	s["host_network"] = str(hc.get("NetworkMode", "")) == "host"
+	s["host_pid"] = str(hc.get("PidMode", "")) == "host"
+	s["host_ipc"] = str(hc.get("IpcMode", "")) == "host"
+	for m in (i.get("Mounts", []) if typeof(i.get("Mounts")) == TYPE_ARRAY else []):
+		if typeof(m) == TYPE_DICTIONARY and str(m.get("Type", "")) == "bind":
+			var src = str(m.get("Source", ""))
+			s["host_paths"].append(src)
+			if is_socket_path(src):
+				s["docker_socket"] = true
+	var user = str(cfg.get("User", "")).strip_edges()
+	if user == "0" or user == "root" or user.begins_with("0:") or user.begins_with("root:"):
+		s["root"].append(name)
+	for cap in (hc.get("CapAdd", []) if typeof(hc.get("CapAdd")) == TYPE_ARRAY else []):
+		var cu = str(cap).to_upper().trim_prefix("CAP_")
+		if cu in POWERFUL_CAPS:
+			s["caps"].append("%s: %s" % [name, cu])
+	if floating_tag(str(cfg.get("Image", ""))):
+		s["latest"].append("%s: %s" % [name, str(cfg.get("Image", ""))])
+	var pb = hc.get("PortBindings", {})
+	if typeof(pb) == TYPE_DICTIONARY:
+		for k in pb:
+			for b in (pb[k] if typeof(pb[k]) == TYPE_ARRAY else []):
+				if typeof(b) == TYPE_DICTIONARY and str(b.get("HostPort", "")) != "":
+					s["host_ports"].append(int(str(b["HostPort"])))
+					if str(b.get("HostIp", "")) in ["", "0.0.0.0", "::"]:
+						s["all_interfaces"] = true
+	return s
+
 # Tables: keep the rows that contain `filter` in any column, then order them by
 # one column. getters: {column id: Callable(row) -> value}. Numbers sort as
 # numbers, everything else as text without regard to case; rows that compare
@@ -422,7 +519,7 @@ static func selects(selector: Dictionary, labels: Dictionary) -> bool:
 # How dangerous an action is (1 safe .. 5 critical). Matches the tool tiers.
 static func tier_of(a: Dictionary, state: Dictionary) -> int:
 	match a["op"]:
-		"logs", "events", "cluster_events", "templates", "portainer_open", "file_mounts", "file_list", "file_read", "forward":
+		"logs", "events", "cluster_events", "templates", "portainer_open", "file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan":
 			return 1
 		"create", "apply_app", "deploy_template", "portainer_install":
 			return 2
@@ -435,7 +532,7 @@ static func tier_of(a: Dictionary, state: Dictionary) -> int:
 			return 3 if a.get("on", true) else 2
 		"restart":
 			return 3
-		"delete_pod":
+		"delete_pod", "remove_image":
 			return 4
 	return 5
 
