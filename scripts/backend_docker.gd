@@ -203,13 +203,36 @@ func _file_action(a: Dictionary) -> Dictionary:
 		"data": Marshalls.utf8_to_base64(text), "text_only": true}}
 
 # "12.5MiB", "1.2kB", "3GB" -> bytes (docker stats mixes binary and decimal units)
-static func _size(s: String) -> float:
+static func _size(s: String) -> Variant:
 	var t = s.strip_edges()
 	var units = {"kib": 1024.0, "mib": 1048576.0, "gib": 1073741824.0, "tib": 1099511627776.0, "kb": 1000.0, "mb": 1000000.0, "gb": 1000000000.0, "tb": 1000000000000.0, "b": 1.0}
+	var multiplier = 1.0
 	for u in units:
 		if t.to_lower().ends_with(u):
-			return t.left(t.length() - u.length()).to_float() * units[u]
-	return t.to_float()
+			t = t.left(t.length() - u.length()).strip_edges()
+			multiplier = units[u]
+			break
+	if not t.is_valid_float() or t.to_float() < 0.0:
+		return null
+	return t.to_float() * multiplier
+
+static func _usage_data(d: Dictionary) -> Dictionary:
+	var data = {"at": Time.get_datetime_string_from_system(true) + "Z", "source": "docker stats"}
+	var cpu = str(d.get("CPUPerc", "")).strip_edges().trim_suffix("%").strip_edges()
+	if cpu.is_valid_float() and cpu.to_float() >= 0.0:
+		data["cpu_cores"] = cpu.to_float() / 100.0
+	var mem = _size(str(d.get("MemUsage", "")).get_slice("/", 0))
+	if mem != null:
+		data["mem_bytes"] = mem
+	for field in [["NetIO", "net_rx_bytes", "net_tx_bytes"], ["BlockIO", "disk_read_bytes", "disk_write_bytes"]]:
+		var pair = str(d.get(field[0], "")).split("/")
+		if pair.size() != 2:
+			continue
+		for i in 2:
+			var value = _size(pair[i])
+			if value != null:
+				data[field[i + 1]] = value
+	return data
 
 # What a container is using right now, as the engine itself reports it.
 func _metrics(container: String) -> Dictionary:
@@ -220,18 +243,7 @@ func _metrics(container: String) -> Dictionary:
 	# a container that is not running is reported by the engine as all zeros: that is not a measurement
 	if str(d.get("PIDs", "")) == "0" or str(d.get("MemUsage", "")).replace(" ", "").begins_with("0B/0B"):
 		return {"ok": false, "kind": "unsupported", "msg": "This container is not running, so it is using nothing.", "data": {}}
-	var net = str(d.get("NetIO", "")).split("/")
-	var blk = str(d.get("BlockIO", "")).split("/")
-	var data = {"cpu_cores": str(d.get("CPUPerc", "0")).trim_suffix("%").to_float() / 100.0,
-		"mem_bytes": _size(str(d.get("MemUsage", "0")).get_slice("/", 0)),
-		"at": Time.get_datetime_string_from_system(true) + "Z", "source": "docker stats"}
-	if net.size() == 2:
-		data["net_rx_bytes"] = _size(net[0])
-		data["net_tx_bytes"] = _size(net[1])
-	if blk.size() == 2:
-		data["disk_read_bytes"] = _size(blk[0])
-		data["disk_write_bytes"] = _size(blk[1])
-	return {"ok": true, "msg": "", "kind": "", "data": data}
+	return {"ok": true, "msg": "", "kind": "", "data": _usage_data(d)}
 
 func _app_action(a: Dictionary) -> Dictionary:
 	if a["op"] == "pod_metrics":

@@ -77,7 +77,8 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Tautulli: real stream counts and bandwidth; the panel pinned to a machine | verified in simulation (stand-in server); needs a Plex server to test live |
 | | Tautulli: history, home stats, libraries; control-room wall; Datapad pin | unsupported |
 | 06-08 Krew | Porter and Bob with V3 models | verified in simulation |
-| | The other Krew roles, shared framework, operations center, incident coordination | unsupported |
+| | Gauge: optional world model, read-only node request and capacity table, on-demand workload usage | UI verified in simulation; Docker usage verified live on a disposable container. Kubernetes metrics API figures not tested live |
+| | Gauge forecasts and right-sizing; other Krew roles, shared framework, operations center, incident coordination | unsupported |
 | 09 AI | Providers, action pipeline, tool registry, natural-language workflows | unsupported |
 | 09A Foreman | Provider-specific characters | unsupported (models shipped, not placed) |
 | 10 Autonomy | Policy engine, self-healing, scheduling | unsupported |

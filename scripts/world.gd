@@ -87,6 +87,7 @@ var _bob_tag: Label3D
 var _bob_say_t = 0.0      # seconds until his next remark
 var _bob_near = false
 var _bob_jobs = 0
+var _gauge: Node3D
 var _select: Node3D
 var _select_mat: StandardMaterial3D
 var _select_size = Vector3.ZERO
@@ -101,6 +102,7 @@ func _ready() -> void:
 	_build_log_station()
 	_build_npc()
 	_build_bob()
+	_build_gauge()
 	_belt_mm = _make_mm(Vector3.ONE, Tex.mat(Color.WHITE, 0.6, 0.4))
 	_item_mm = _make_mm(Vector3(0.5, 0.5, 0.5), Tex.mat(Color.WHITE, 0.5, 0.1))
 	_build_hologram()
@@ -398,8 +400,50 @@ func _krew(id: String, body: Node3D, height: float) -> Node3D:
 	holder.visible = false
 	body.add_child(holder)
 	return holder
-# Porter, the Portainer dock worker: a little crane-backed robot beside a
-# stack of shipping containers. Talk to him to get complete app setups built.
+# Gauge's resource desk keeps observation separate from infrastructure actions.
+func _build_gauge() -> void:
+	_gauge = Node3D.new()
+	_gauge.position = Vector3(24, 0, 9)
+	add_child(_gauge)
+	var dark = Tex.shared("dark")
+	var cyan = Tex.mat(Color(0.16, 0.75, 0.8), 0.5, 0.2)
+	_box(Vector3(5.4, 0.2, 3.0), dark, Vector3(1.8, 0.1, -0.5), _gauge)
+	_box(Vector3(3.3, 2.0, 0.15), Tex.shared("board"), Vector3(2.8, 2.2, -1.2), _gauge)
+	for x in [1.35, 4.25]:
+		_box(Vector3(0.14, 2.8, 0.14), Tex.shared("steel"), Vector3(x, 1.4, -1.2), _gauge)
+	var label = Label3D.new()
+	label.text = "GAUGE\nRESOURCE DESK"
+	label.font_size = 44
+	label.modulate = Color(0.4, 0.95, 1.0)
+	label.position = Vector3(2.8, 2.2, -1.1)
+	K.fit_label(label, 3.0, 1.5)
+	_gauge.add_child(label)
+	_solid(Vector3(3.6, 2.8, 0.4), Vector3(2.8, 1.4, -1.2), {"type": "gauge"}, _gauge)
+	_solid(Vector3(1.4, 2.6, 1.4), Vector3(0, 1.3, 0), {"type": "gauge"}, _gauge)
+	var figure = Node3D.new()
+	_gauge.add_child(figure)
+	var fallback = _krew("gauge", figure, 2.6)
+	_box(Vector3(0.9, 1.2, 0.6), cyan, Vector3(0, 1.25, 0), fallback)
+	_box(Vector3(0.68, 0.58, 0.55), Tex.shared("steel"), Vector3(0, 2.1, 0), fallback)
+	_box(Vector3(0.52, 0.2, 0.05), Tex.glow(Color(0.3, 0.95, 1.0), 1.5), Vector3(0, 2.1, 0.3), fallback)
+	for x in [-0.28, 0.28]:
+		_box(Vector3(0.25, 0.65, 0.3), dark, Vector3(x, 0.33, 0), fallback)
+	var tag = Label3D.new()
+	tag.text = "GAUGE\n[E] resource desk"
+	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	tag.font_size = 40
+	tag.pixel_size = 0.0055
+	tag.outline_size = 10
+	tag.modulate = Color(0.6, 0.95, 1.0)
+	tag.position = Vector3(0, 3.4, 0)
+	tag.visibility_range_end = 60.0
+	_gauge.add_child(tag)
+
+func set_gauge_visible(enabled: bool) -> void:
+	_gauge.visible = enabled
+	_gauge.process_mode = Node.PROCESS_MODE_INHERIT if enabled else Node.PROCESS_MODE_DISABLED
+
+# Porter, the Portainer dock worker beside the shipping containers.
 func _build_npc() -> void:
 	var blue = Tex.mat(Color(0.075, 0.745, 0.976), 0.5, 0.2)
 	var dark = Tex.shared("dark")

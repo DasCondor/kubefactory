@@ -10,6 +10,7 @@ signal storage_requested(uid)        # open this machine's service door and its 
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
 const Bob = preload("res://scripts/bob.gd")
+const Gauge = preload("res://scripts/gauge.gd")
 const DemoSim = preload("res://scripts/backend_demo.gd")
 const Gfx = preload("res://scripts/gfx.gd")
 const Models = preload("res://scripts/models.gd")
@@ -81,6 +82,14 @@ var _ls_raw = ""
 var _ls_timer = 0.0
 var offer_demos = false   # started on the simulation without naming a world: offer the chooser
 var _case = {}            # Bob's open case file: pod uid, config, fetched log and events
+var _gauge = {"seq": 0, "key": "", "signature": ""}
+var _gauge_rows: VBoxContainer
+var _gauge_readout: Label
+var _gauge_pick: OptionButton
+var _gauge_scroll: ScrollContainer
+var _gauge_table: VBoxContainer
+var _gauge_head: Control
+var _gauge_over_limit = false
 var _talk = {"screen": "main", "app": "web", "tpl": {}, "search": "", "cat": {}}
 var _lists = {}          # list url -> {source, templates, skipped}, or an error string
 var _tpl_key = ""
@@ -389,14 +398,16 @@ func _table_state(key: String) -> Dictionary:
 	return _tables[key]
 
 # cols: [[id, title, width]]   refill: called when the sort or the filter changes
-func _table_head(key: String, cols: Array, refill: Callable, count: int = 0) -> Control:
+func _table_head(key: String, cols: Array, refill: Callable, count: int = 0, font_size: int = 12) -> Control:
 	var st = _table_state(key)
 	var v = _col(4)
 	var fr = _row(8)
-	fr.add_child(_lbl("CONTAINS", 12, DIM))
+	fr.add_child(_lbl("CONTAINS", font_size, DIM))
 	var e = LineEdit.new()
 	e.text = st["filter"]
 	e.placeholder_text = "show only rows containing..."
+	if font_size != 12:
+		e.add_theme_font_size_override("font_size", font_size)
 	e.custom_minimum_size.x = 300
 	e.clear_button_enabled = true
 	fr.add_child(e)
@@ -415,7 +426,7 @@ func _table_head(key: String, cols: Array, refill: Callable, count: int = 0) -> 
 		b.flat = true
 		b.focus_mode = Control.FOCUS_NONE
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.add_theme_font_size_override("font_size", 12)
+		b.add_theme_font_size_override("font_size", font_size)
 		b.tooltip_text = "Sort by this column"
 		b.disabled = count >= K.TABLE_LIMIT
 		b.pressed.connect(func():
@@ -618,6 +629,8 @@ func _refresh_modal() -> void:
 			_fill_service()
 		"bob":
 			_fill_bob()
+		"gauge":
+			_fill_gauge()
 
 func _kv(grid: GridContainer, k: String, v: String, color: Color = TXT) -> void:
 	grid.add_child(_fixed(_lbl(k, 13, DIM), 110))
@@ -1161,6 +1174,10 @@ func _store_file(path: String, page: int) -> void:
 
 # Answers to the storage requests (and, further down, LiveView's).
 func on_data(key: String, r: Dictionary) -> void:
+	if key.begins_with("gauge:"):
+		if _modal_kind == "gauge" and key == _gauge["key"]:
+			_gauge_readout.text = str(_gauge["target"]) + "\n" + Gauge.reading(r)
+		return
 	if key.begins_with("live:"):
 		_on_live_data(key, r)
 		return
@@ -2197,6 +2214,159 @@ func on_action(a: Dictionary, r: Dictionary) -> void:
 
 const BOB_COL = Color(1.0, 0.8, 0.45)
 
+# Gauge observes current state and fetches one workload's usage on request.
+func open_gauge() -> void:
+	_gauge["key"] = ""
+	_gauge["signature"] = ""
+	var compact = touch != null and touch.active
+	var wide_touch = compact and get_viewport().get_visible_rect().size.x > get_viewport().get_visible_rect().size.y
+	var dialog_size = Vector2(850, 500) if wide_touch else (Vector2(500, 800) if compact else Vector2(1160, 720))
+	var body = _open_modal("gauge", null, "GAUGE  //  RESOURCE DESK", dialog_size)
+	if compact:
+		var head = body.get_parent().get_child(0)
+		head.get_child(0).add_theme_font_size_override("font_size", 24)
+		var close: Button = head.get_child(head.get_child_count() - 1)
+		close.custom_minimum_size = Vector2(70, 60)
+		close.add_theme_font_size_override("font_size", 22)
+		_gauge_scroll = ScrollContainer.new()
+		_gauge_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_gauge_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		body.add_child(_gauge_scroll)
+		var flow = _col(10)
+		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_gauge_scroll.add_child(flow)
+		body = flow
+	else:
+		_gauge_scroll = null
+	var top = _row(16)
+	var portrait = null if compact else _krew_portrait("gauge", Color(0.04, 0.1, 0.12), false)
+	if portrait != null:
+		top.add_child(portrait)
+	var info = _col(7)
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_child(_lbl("GAUGE  ·  OBSERVER", 22 if compact else 18, Color(0.45, 0.95, 1.0)))
+	if cluster.state.get("source", "") == "simulation":
+		info.add_child(_lbl("SIMULATED DATA", 18 if compact else 13, K.health_color("warn")))
+	var explanation = "Capacity is reported by the Docker host; container requests are unavailable." if cluster.state.get("source", "") == "docker" else "Capacity is allocatable; requests cover visible regular containers. Init containers and overhead may be omitted."
+	if str(cluster.state.get("scoped_ns", "")) != "":
+		explanation += " Only namespace %s is visible." % str(cluster.state["scoped_ns"])
+	var note = _lbl(explanation + " Requests are not actual usage. Check sustained usage and workload requirements before changing resources. Gauge makes no changes.", 18 if compact else 13, DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = (770 if wide_touch else 430) if compact else (800 if portrait == null else 720)
+	info.add_child(note)
+	var stacked = compact and not wide_touch
+	var controls = _col(6) if stacked else _row(8)
+	_gauge_pick = OptionButton.new()
+	_gauge_pick.custom_minimum_size = Vector2(300 if wide_touch else 200, 60) if compact else Vector2(430, 0)
+	if compact:
+		_gauge_pick.add_theme_font_size_override("font_size", 18)
+	for p in cluster.state.get("pods", []):
+		_gauge_pick.add_item("%s / %s" % [p["ns"], p["name"]])
+		_gauge_pick.set_item_metadata(_gauge_pick.item_count - 1, str(p["uid"]))
+	controls.add_child(_gauge_pick)
+	var buttons = _row(8) if stacked else controls
+	var read_button = _btn("Read usage", _gauge_request, "primary", _gauge_pick.item_count > 0)
+	var open_button = _btn("Open machine", func():
+		if _gauge_pick.selected >= 0:
+			open_pod(str(_gauge_pick.get_item_metadata(_gauge_pick.selected))), "normal", _gauge_pick.item_count > 0)
+	for button in [read_button, open_button]:
+		if compact:
+			button.custom_minimum_size.y = 60
+			button.add_theme_font_size_override("font_size", 18)
+		buttons.add_child(button)
+	if stacked:
+		controls.add_child(buttons)
+	info.add_child(controls)
+	_gauge_readout = _lbl("Choose a workload to read its current usage.", 17 if compact else 13, DIM)
+	_gauge_readout.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_gauge_readout.custom_minimum_size.x = (770 if wide_touch else 430) if compact else 720
+	info.add_child(_gauge_readout)
+	top.add_child(info)
+	body.add_child(top)
+	if compact:
+		body.add_child(_lbl("Swipe the table sideways for more columns.", 17, DIM))
+	var rows = Gauge.node_rows(cluster.state)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if compact:
+		sc.custom_minimum_size.y = 220
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_gauge_table = _col(4)
+	_gauge_table.custom_minimum_size.x = 960
+	_gauge_over_limit = rows.size() >= K.TABLE_LIMIT
+	_gauge_head = _gauge_table_head(rows.size())
+	_gauge_table.add_child(_gauge_head)
+	_gauge_rows = _col(4)
+	_gauge_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_gauge_table.add_child(_gauge_rows)
+	sc.add_child(_gauge_table)
+	body.add_child(sc)
+	_fill_gauge(true)
+
+func _gauge_table_head(count: int) -> Control:
+	return _table_head("gauge-nodes", [["name", "NODE", 210], ["cpu_requested", "CPU REQUEST", 145], ["cpu", "CPU CAPACITY", 145],
+		["memory_requested", "MEM REQUEST", 145], ["memory", "MEM CAPACITY", 145], ["ready", "STATE", 100]],
+		func(): _fill_gauge(true), count, 17 if touch != null and touch.active else 12)
+
+func _gauge_sync_head(count: int) -> void:
+	var over_limit = count >= K.TABLE_LIMIT
+	if over_limit == _gauge_over_limit:
+		return
+	_gauge_over_limit = over_limit
+	_gauge_table.remove_child(_gauge_head)
+	_gauge_head.queue_free()
+	_gauge_head = _gauge_table_head(count)
+	_gauge_table.add_child(_gauge_head)
+	_gauge_table.move_child(_gauge_head, 0)
+
+func _gauge_request() -> void:
+	if cluster.detecting or cluster.backend == null:
+		_gauge_readout.text = "The data source is connecting. Try again when it is ready."
+		return
+	if _gauge_pick.selected < 0:
+		return
+	var uid = str(_gauge_pick.get_item_metadata(_gauge_pick.selected))
+	var pod = K.find_pod(cluster.state, uid)
+	if pod == null:
+		_gauge_readout.text = "That workload is no longer present."
+		return
+	_gauge["seq"] += 1
+	_gauge["key"] = "gauge:%d" % _gauge["seq"]
+	_gauge["target"] = "%s / %s" % [pod["ns"], pod["name"]]
+	_gauge_readout.text = "Reading %s / %s..." % [pod["ns"], pod["name"]]
+	cluster.act({"op": "pod_metrics", "ns": pod["ns"], "name": pod["name"], "key": _gauge["key"]})
+
+func _fill_gauge(force: bool = false) -> void:
+	if _modal_kind != "gauge" or not is_instance_valid(_gauge_rows):
+		return
+	var rows = Gauge.node_rows(cluster.state)
+	_gauge_sync_head(rows.size())
+	var signature = JSON.stringify(rows) + str(cluster.state.get("error", ""))
+	if not force and signature == _gauge["signature"]:
+		return
+	_gauge["signature"] = signature
+	_clear(_gauge_rows)
+	if str(cluster.state.get("error", "")) != "":
+		_gauge_rows.add_child(_lbl("Last state may be stale: " + str(cluster.state["error"]), 13, RED))
+	if rows.is_empty():
+		_gauge_rows.add_child(_lbl("No node capacity data is available.", 13, DIM))
+	var getters = {"name": func(n): return n["name"], "cpu_requested": func(n): return n["cpu_requested"], "cpu": func(n): return n["cpu"],
+		"memory_requested": func(n): return n["memory_requested"], "memory": func(n): return n["memory"], "ready": func(n): return Gauge.readiness(n["ready"])}
+	var table = _table_state("gauge-nodes")
+	var filtered = rows if rows.size() >= K.TABLE_LIMIT else rows.filter(func(n): return Gauge.node_matches(n, table["filter"]))
+	var text_size = 17 if touch != null and touch.active else 13
+	for n in K.table_rows(filtered, table["col"], table["desc"], "", getters):
+		var row = _row(10)
+		row.add_child(_fixed(_lbl(n["name"], text_size), 210))
+		row.add_child(_fixed(_lbl(Gauge.cpu(n["cpu_requested"]), text_size), 145))
+		row.add_child(_fixed(_lbl(Gauge.cpu(n["cpu"]), text_size), 145))
+		row.add_child(_fixed(_lbl(Gauge.memory(n["memory_requested"]), text_size), 145))
+		row.add_child(_fixed(_lbl(Gauge.memory(n["memory"]), text_size), 145))
+		var health = "warn" if n["ready"] == null else ("ok" if n["ready"] else "bad")
+		row.add_child(_fixed(_lbl(Gauge.readiness(n["ready"]), text_size, K.health_color(health)), 100))
+		_gauge_rows.add_child(row)
+
 # A Krew member's portrait as they now are: their own model from the library,
 # lit and slowly turning in a little viewport of its own. Returns null where the
 # library is not used (the browser build), and the drawn portrait is shown instead.
@@ -2991,6 +3161,12 @@ func open_pause() -> void:
 	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
 	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
+	body.add_child(_btn("Gauge  (resource desk)", open_gauge))
+	body.add_child(_btn("Gauge in the world:  %s" % ("ON" if world._gauge.visible else "OFF"), func():
+		var show = not world._gauge.visible
+		world.set_gauge_visible(show)
+		_save_setting("gauge_visible", show)
+		open_pause()))
 	body.add_child(_btn("Logging station  (L)", func(): open_logs()))
 	body.add_child(_btn("LiveView: applications on screens  (V)", open_liveview))
 	body.add_child(_btn("Read-only mode:  %s" % ("ON" if cluster.read_only else "OFF"), func():
