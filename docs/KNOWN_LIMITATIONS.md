@@ -131,6 +131,12 @@ exactly that: the code exists and has not been run against the real thing.
   Grafana or Tautulli pages: clicking one opens it full size with two views to
   switch between, not a web page. On a real cluster or Docker engine these
   screens stay neutral until a real page or provider is put on them.
+- **Browser High graphics** were checked in the exported web build served
+  locally (all 40 models fetched and checked, the library in use) and rendered
+  on the desktop Compatibility renderer the browser uses. Not tested on the
+  deployed site, on a phone, or for frame rate in a browser; on a phone the
+  13 MB download and the extra detail may be slow, which is why it is opt-in.
+  Global illumination and reflections are not available in the browser.
 - **The exported browser build was run**: it loads, the world chooser works,
   the media world loads, and the browser console shows no errors. The tool
   used to drive it could not send keys or capture the mouse, so walking up to

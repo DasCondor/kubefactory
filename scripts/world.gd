@@ -389,8 +389,6 @@ func _build_hub() -> void:
 # build, or a copy without assets), otherwise a hidden holder, so the parts the
 # idle animation moves still exist.
 func _krew(id: String, body: Node3D, height: float) -> Node3D:
-	if Gfx.lite():
-		return body
 	var m = Models.instance(id)
 	if m == null:
 		return body

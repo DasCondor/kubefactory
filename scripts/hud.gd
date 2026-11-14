@@ -3095,7 +3095,43 @@ func open_welcome() -> void:
 # ----- graphics presets (scripts/gfx.gd). They change how the world is drawn,
 # never what you can do in it.
 
+# The browser demo's own choice: Standard (drawn in code) or High (the model
+# library from the site). Choosing reloads the page with ?gfx=..., which is
+# also a link that can be shared.
+func _open_web_graphics() -> void:
+	var body = _open_modal("graphics", null, "GRAPHICS", Vector2(820, 440))
+	var intro = _lbl("Two presets in the browser. Every tool, panel and action works the same on both; switching reloads the demo.", 14, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = 780
+	body.add_child(intro)
+	for i in 2:
+		var active = (i == 1) == Gfx.web_high
+		var pc = PanelContainer.new()
+		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if active else Color(0, 0, 0, 0), 1 if active else 0, 10))
+		var r = _row(12)
+		var v = _col(2)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(_lbl(Gfx.WEB_NAMES[i].to_upper(), 17, ORANGE if active else TXT))
+		var bl = _lbl(Gfx.WEB_BLURB[i], 13, DIM)
+		bl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		bl.custom_minimum_size.x = 600
+		v.add_child(bl)
+		r.add_child(v)
+		if active:
+			r.add_child(_lbl("IN USE   ", 14, K.health_color("ok")))
+		else:
+			r.add_child(_btn("Use", func(): graphics_requested.emit("high" if i == 1 else "standard"), "primary"))
+		pc.add_child(r)
+		body.add_child(pc)
+	var back = _row(10)
+	back.add_child(_spacer())
+	back.add_child(_btn("Back", open_pause))
+	body.add_child(back)
+
 func open_graphics() -> void:
+	if Gfx.web():
+		_open_web_graphics()
+		return
 	var body = _open_modal("graphics", null, "GRAPHICS", Vector2(820, 520))
 	var rec = Gfx.recommend()
 	var intro = _lbl("Three presets on the same world. Every tool, panel and action works identically on all of them; Standard is the look the game has always had and nothing is ever drawn below it.", 14, DIM)
@@ -3177,7 +3213,9 @@ func open_pause() -> void:
 		cluster.read_only = not cluster.read_only
 		on_state(cluster.state)
 		open_pause()))
-	if not Gfx.lite():
+	if Gfx.web():
+		body.add_child(_btn("Graphics  (%s)" % Gfx.WEB_NAMES[1 if Gfx.web_high else 0], open_graphics))
+	elif not Gfx.lite():
 		body.add_child(_btn("Graphics  (%s)" % (Gfx.NAMES[Gfx.level] + (", automatic" if Gfx.chosen == "auto" else "")), open_graphics))
 	body.add_child(_btn("Conveyor belts:  %s" % ("ON" if world.show_belts else "OFF"), func():
 		world.show_belts = not world.show_belts

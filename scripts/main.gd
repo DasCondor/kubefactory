@@ -17,6 +17,7 @@ const Providers = preload("res://scripts/providers.gd")
 const DemoScreens = preload("res://scripts/demo_screens.gd")
 const MachineScreens = preload("res://scripts/machine_screens.gd")
 const KrewManager = preload("res://scripts/krew.gd")
+const WebAssets = preload("res://scripts/web_assets.gd")
 const ForemanNode = preload("res://scripts/foreman.gd")
 const MobileControls = preload("res://scripts/mobile_controls.gd")
 const Models = preload("res://scripts/models.gd")
@@ -84,6 +85,7 @@ var touch: CanvasLayer = null      # touch controls (browser demo only)
 var _touch_forced = false          # --touch: show them on the desktop, for testing
 var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
+var _web_note = ""       # browser: why High could not be used, shown once the HUD is up
 
 func _exit_tree() -> void:
 	Agent.shutdown()
@@ -94,6 +96,13 @@ func _ready() -> void:
 	settings = K.load_settings()
 	Gfx.setup(str(settings.get("graphics", "auto")), OS.get_cmdline_user_args())
 	_setup_environment()
+	if Gfx.web() and _web_choice() == "high":
+		set_process(false)
+		set_process_unhandled_input(false)
+		await _load_web_models()
+		set_process(true)
+		set_process_unhandled_input(true)
+		Gfx.apply(_env, world_sun, get_viewport(), _gfx_base)
 	cluster = Cluster.new()
 	add_child(cluster)
 	world = World.new()
@@ -365,6 +374,8 @@ func _ready() -> void:
 			hud.open_welcome.call_deferred()
 		elif hud.offer_demos:
 			hud.open_demos.call_deferred()
+	if _web_note != "":
+		hud.notify.call_deferred(_web_note, "warn")
 	cluster.start(source, ctx, "cli" if kubeconfig != "" else "")
 	if shots != "" and shots != "-":
 		_run_shots(shots)
@@ -509,12 +520,56 @@ func _setup_environment() -> void:
 # Switch graphics preset while playing: renderer settings first, then the world
 # rebuilds its scenery and machines at the new detail level.
 func set_graphics(id: String) -> void:
+	if Gfx.web():
+		# the browser's two presets: the page reloads so every model, character
+		# included, is built once from what is loaded; the link carries the choice
+		var want = "high" if id == "high" else "standard"
+		settings["graphics_web"] = want
+		K.save_settings(settings)
+		hud.notify("Switching to %s graphics..." % want.capitalize(), "info")
+		await get_tree().create_timer(0.6).timeout     # let the setting reach the browser's storage
+		JavaScriptBridge.eval("var u = new URL(location.href); u.searchParams.set('gfx', '%s'); location.replace(u.href);" % want)
+		return
 	settings["graphics"] = id
 	K.save_settings(settings)
 	Gfx.setup(id, OS.get_cmdline_user_args() if id == "auto" else [])
 	Gfx.apply(_env, world_sun, get_viewport(), _gfx_base)
 	world.rebuild_graphics(cluster.state)
 	hud.notify("Graphics: %s" % Gfx.NAMES[Gfx.level], "info")
+
+# The browser's preset: a ?gfx= link wins, then the saved choice; Standard by default.
+func _web_choice() -> String:
+	var q = str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('gfx') || ''", true)).to_lower()
+	if q in ["high", "standard"]:
+		return q
+	return str(settings.get("graphics_web", "standard"))
+
+func _load_web_models() -> void:
+	var layer = CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+	var bg = ColorRect.new()
+	bg.color = Color(0.06, 0.07, 0.08)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var lbl = Label.new()
+	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.text = "KUBEFACTORY  ·  High graphics\n\nLoading the model library..."
+	layer.add_child(lbl)
+	var wa = WebAssets.new()
+	add_child(wa)
+	wa.progress.connect(func(done, total):
+		lbl.text = "KUBEFACTORY  ·  High graphics\n\nLoading the model library...  %.1f / %.1f MB" % [done / 1048576.0, total / 1048576.0])
+	wa.fetch()
+	var res = await wa.finished
+	Gfx.web_high = res[0]
+	print("High graphics: ", res[1], "  library in use: ", Models.available())
+	_web_note = "" if res[0] else "High graphics could not load the model library (%s), so the world is drawn in code." % res[1]
+	wa.queue_free()
+	layer.queue_free()
 
 func _set_mode(m: int) -> void:
 	if m != mode:
