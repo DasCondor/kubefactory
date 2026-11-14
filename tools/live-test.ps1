@@ -4,6 +4,12 @@
 # for what it can and cannot prove.
 #
 #   powershell -ExecutionPolicy Bypass -File tools\live-test.ps1
+#   powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Grafana
+#
+# -Grafana instead runs the Grafana provider against a real Grafana OSS 11.2.0: it is
+# downloaded (checksum-verified) into .toolchain\, started on 127.0.0.1 with a throw-away
+# data folder and a random admin password, and removed again. See tests\live\grafana_test.py.
+param([switch]$Grafana)
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "..")).Path
 $tc = Join-Path $root ".toolchain"
@@ -14,6 +20,20 @@ if (-not $go) {
     $env:GOROOT = Join-Path $tc "go"; $env:GOPATH = Join-Path $tc "gopath"; $env:GOTOOLCHAIN = "local"
 }
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "tools\build-agent.ps1") | Select-Object -Last 1
+if ($Grafana) {
+    $gh = Join-Path $tc "grafana"
+    if (-not (Test-Path (Join-Path $gh "bin\grafana.exe"))) {
+        $z = Join-Path $tc "grafana.zip"; $u = "https://dl.grafana.com/oss/release/grafana-11.2.0.windows-amd64.zip"
+        curl.exe -fsSL -o $z $u
+        $want = (curl.exe -fsSL "$u.sha256").Trim().Split(" ")[0]
+        if ((Get-FileHash $z -Algorithm SHA256).Hash.ToLower() -ne $want) { throw "checksum mismatch for the Grafana download" }
+        Expand-Archive $z (Join-Path $tc "grafana_x") -Force
+        Move-Item (Get-ChildItem (Join-Path $tc "grafana_x") -Directory | Select-Object -First 1).FullName $gh
+        Remove-Item (Join-Path $tc "grafana_x") -Recurse -Force; Remove-Item $z
+    }
+    python (Join-Path $root "tests\live\grafana_test.py") $root (Join-Path $root "agent\bin\kf-agent.exe") $gh
+    exit $LASTEXITCODE
+}
 $srv = Join-Path $tc "bin\kf-test-apiserver.exe"
 Push-Location (Join-Path $root "tests\live\apiserver")
 try {

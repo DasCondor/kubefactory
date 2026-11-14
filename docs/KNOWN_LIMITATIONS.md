@@ -65,9 +65,22 @@ exactly that: the code exists and has not been run against the real thing.
   The Deployment, StatefulSet, DaemonSet, ReplicaSet, Job and Compose models
   are therefore not placed: the world has no object for the workload itself
   yet. Fewer distinct silhouettes is the cost of the plates being true.
-- **V8's Grafana and Tautulli providers are not implemented.** The Go starter
-  adapters that came with it are not in the repository. LiveView opens those
-  applications as ordinary pages, like any other.
+- **Grafana and Tautulli providers are verified against stand-in servers
+  only.** The companion has 7 tests against fake servers, and the game's
+  panels were run against `tests/live/mock_providers.py`. A test against a real
+  Grafana 11.2.0 is written (`tools\live-test.ps1 -Grafana`) but **has not been
+  run**: starting it was not permitted in the session that wrote it. No real
+  Tautulli was available. Until those run, treat both as not tested live.
+- Provider gaps against the V8 note: the newer Grafana dashboard API and
+  layouts are not read (such a dashboard opens whole; its panels are not
+  listed, and none are invented); no native charts from Prometheus; nothing
+  on a control-room wall or the Datapad; a Grafana page put on a machine is
+  not remembered between runs (a pinned Tautulli summary is); only
+  `get_activity` is used; a provider needs an address that stays put, so a
+  cluster Service reached only by port-forward has to be exposed or typed in;
+  tokens can be stored on Windows only; private CAs are trusted only if
+  Windows already trusts them. Grafana sign-in is asked every time, because
+  LiveView's browser keeps nothing.
 - From the V7 notes, not done: new silhouettes per kind, sliding or split
   doors for narrow aisles, removing the floating name labels, and distinct
   LiveView states (no endpoint, loading, sign-in needed) on the machine glass:

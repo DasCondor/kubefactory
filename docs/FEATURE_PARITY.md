@@ -63,6 +63,11 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Port-forward for cluster Services | not tested |
 | | Host allowlist, isolated profile, no stand-in pictures | verified in simulation |
 | | Bundled browser engine (CEF), display builder, audio | unsupported: uses installed Edge or Chrome |
+| V8 providers | Provider registry (Grafana, Tautulli), protected token storage, test connection | verified in simulation (fake servers); **not tested live** |
+| | Grafana: dashboard search, panel list, time range, variables, credential-free links, sub-path | verified in simulation; real-Grafana test written, not run |
+| | Grafana: newer dashboard API and layouts, native charts from a data source | unsupported |
+| | Tautulli: aggregate activity panel, pinned to a machine, missing values shown as unavailable | verified in simulation; **not tested live** |
+| | Tautulli: history, home stats, libraries; control-room wall; Datapad pin | unsupported |
 | 06-08 Krew | Porter and Bob with V3 models | verified in simulation |
 | | The other Krew roles, shared framework, operations center, incident coordination | unsupported |
 | 09 AI | Providers, action pipeline, tool registry, natural-language workflows | unsupported |

@@ -161,6 +161,23 @@ line2\" injected: true"]])
 	check.call("no kubeconfig named", Conn.cli_kubeconfig(["--demo", "--gfx=ultra"]), "")
 	check.call("a bare file that exists (dropped on the exe)", Conn.cli_kubeconfig([ProjectSettings.globalize_path("res://tests/fixture.json")]).get_file(), "fixture.json")
 	check.call("a bare name that is not a file is ignored", Conn.cli_kubeconfig(["nothing-here.yaml"]), "")
+	# ---- LiveView providers
+	var Prov = load("res://scripts/providers.gd")
+	var pst = {"pods": [
+		{"name": "grafana-1", "ns": "mon", "uid": "u1", "ip": "0.0.0.0:3001->3000/tcp", "containers": [{"image": "grafana/grafana:11.2.0"}]},
+		{"name": "web", "ns": "shop", "uid": "u2", "ip": "0.0.0.0:3000->3000/tcp", "containers": [{"image": "example/web:1"}]},
+		{"name": "tautulli-1", "ns": "media", "uid": "u3", "ip": "", "containers": [{"image": "ghcr.io/tautulli/tautulli:v2.14"}]},
+		{"name": "plex-1", "ns": "media", "uid": "u4", "ip": "", "containers": [{"image": "plexinc/pms-docker:latest"}]}]}
+	var cands = Prov.candidates(pst, "docker")
+	check.call("candidates by image, never by port 3000", cands.size(), 2)
+	check.call("docker candidate address from its published port", cands[0]["type"] + " " + cands[0]["url"], "grafana http://127.0.0.1:3001")
+	check.call("no address is guessed for a cluster pod", Prov.candidates(pst, "kubernetes")[0]["url"], "")
+	check.call("media machines", Prov.media_machines(pst).size(), 2)
+	var lines = Prov.summary_lines({"streams": 3.0, "transcode": 0.0, "total_kbps": 18250.0, "lan_kbps": 640.0})
+	check.call("a count", lines[0][1], "3")
+	check.call("zero is zero", lines[3][1], "0")
+	check.call("a missing count is unavailable, not zero", lines[1][1], "unavailable")
+	check.call("bandwidth", lines[4][1] + " / " + lines[5][1] + " / " + lines[6][1], "18.3 Mbps / 640 kbps / unavailable")
 	# ---- LiveView endpoint discovery
 	var Live = load("res://scripts/liveview.gd")
 	var eps = Live.endpoints({"pods": [{"name": "grafana", "ns": "mon", "ip": "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:9443->9443/tcp, 5432/tcp"}]}, "docker")

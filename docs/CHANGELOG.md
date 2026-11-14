@@ -22,6 +22,9 @@ against live infrastructure.
 - **V6 handheld tools** in first person: each tool's own display faces you and
   shows the tool, its target and what the trigger would do.
 - **Asset reviewer** at `model-viewer/` on the Pages site (after merge).
+- **Grafana and Tautulli providers** for LiveView: pick a dashboard or panel;
+  see Plex activity as totals and pin it to a machine. Tokens are sealed by
+  Windows and never reach the game.
 - `tools/model_audit.gd` and `docs/MODEL_AUDIT.md`.
 - `tools/live-test.ps1`: runs the companion against a real, disposable
   kube-apiserver without Docker.

@@ -97,6 +97,7 @@ func registerAll() {
 	registerFiles()
 	registerForward()
 	registerBrowser()
+	registerProviders()
 }
 
 func main() {

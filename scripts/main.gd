@@ -12,6 +12,7 @@ extends Node3D
 const K = preload("res://scripts/kutil.gd")
 const Cluster = preload("res://scripts/cluster.gd")
 const Connections = preload("res://scripts/connections.gd")
+const Providers = preload("res://scripts/providers.gd")
 const World = preload("res://scripts/world.gd")
 const Player = preload("res://scripts/player.gd")
 const Hud = preload("res://scripts/hud.gd")
@@ -66,6 +67,7 @@ var _gfx_base = {}
 var _shots_running = false
 var _storage_uid = ""        # the machine whose service door is open
 var live: Node
+var providers: Node
 var _live_rate_t = 0.0
 var _charge_test = 0.0   # dev: forces the tool's wind-up pose for --toolshots
 
@@ -138,6 +140,14 @@ func _ready() -> void:
 	live = LiveView.new()
 	add_child(live)
 	hud.live = live
+	providers = Providers.new()
+	providers.live = live
+	providers.world = world
+	providers.cluster = cluster
+	add_child(providers)
+	hud.providers = providers
+	cluster.source_changed.connect(func(_l, _n): providers.clear())
+	cluster.state_updated.connect(func(st): providers.restore(st))
 	live.changed.connect(_on_live_changed)
 	cluster.agent_event.connect(live.on_agent_event)
 	cluster.source_changed.connect(func(_l, _n): live.close_all())
@@ -208,6 +218,10 @@ func _ready() -> void:
 		elif a.begins_with("--krewshots="):
 			shots = "-"
 			_run_krewshots(a.trim_prefix("--krewshots="))
+		elif a.begins_with("--providershots="):
+			# --providershots=<dir>,<base url of tests/live/mock_providers.py>
+			shots = "-"
+			_run_providershots(a.trim_prefix("--providershots=").get_slice(",", 0), a.trim_prefix("--providershots=").get_slice(",", 1))
 		elif a.begins_with("--connectshots="):
 			shots = "-"
 			_run_connectshots(a.trim_prefix("--connectshots="))
@@ -861,6 +875,74 @@ func _run_krewshots(dir: String) -> void:
 			await _shot(dir, "m_" + m.model_id + "_open")
 			m.set_door(false)
 	print("krew: machine models in this world: ", seen.keys())
+	get_tree().quit()
+
+# The provider panels against tests/live/mock_providers.py (or a real server at
+# the same paths): set up, list, open, read, pin. `token` values are the mock's.
+func _run_providershots(dir: String, base: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	await get_tree().create_timer(5.0).timeout
+	var got = [{}]
+	var ask = func(op: String, args: Dictionary) -> Dictionary:
+		got[0] = {}
+		providers.ask(op, args, func(r): got[0] = r)
+		while got[0].is_empty():
+			await get_tree().process_frame
+		return got[0]
+	var g = await ask.call("provider.save", {"type": "grafana", "name": "Lab Grafana", "base_url": base + "/grafana", "token": OS.get_environment("KF_TEST_GRAFANA_TOKEN")})
+	var t = await ask.call("provider.save", {"type": "tautulli", "name": "Living room", "base_url": base + "/tautulli", "token": OS.get_environment("KF_TEST_TAUTULLI_KEY")})
+	print("prov: saved grafana=", g["ok"], " tautulli=", t["ok"], "  token returned to the game: ", JSON.stringify([g, t]).contains(OS.get_environment("KF_TEST_GRAFANA_TOKEN")))
+	var r = await ask.call("provider.test", {"id": g["data"]["id"]})
+	print("prov: grafana test -> ", r["data"] if r["ok"] else r["msg"])
+	hud.open_providers()
+	await get_tree().create_timer(1.5).timeout
+	await _shot(dir, "prov_1_list")
+	hud.open_grafana(g["data"])
+	await get_tree().create_timer(2.0).timeout
+	await _shot(dir, "prov_2_dashboards")
+	hud.open_grafana_panels(g["data"], {"uid": "containers", "title": "Containers"})
+	await get_tree().create_timer(2.0).timeout
+	await _shot(dir, "prov_3_panels")
+	r = await ask.call("grafana.link", {"id": g["data"]["id"], "uid": "containers", "panel": 3, "from": "now-6h", "to": "now", "vars": {"namespace": "shop"}})
+	print("prov: panel link -> ", r["data"]["url"] if r["ok"] else r["msg"])
+	hud._grafana_open(g["data"], {"uid": "containers", "title": "Containers"}, 3, "now-6h", {"namespace": "shop"})
+	await get_tree().create_timer(5.0).timeout
+	print("prov: liveview session -> ", hud._lv.get("state"), " ", hud._lv.get("url"))
+	await _shot(dir, "prov_4_panel_live")
+	if hud._lv.has("sid"):
+		live.close(hud._lv)
+	hud.open_tautulli(t["data"])
+	await get_tree().create_timer(2.5).timeout
+	await _shot(dir, "prov_5_tautulli")
+	r = await ask.call("tautulli.activity", {"id": t["data"]["id"]})
+	print("prov: activity -> ", r["data"] if r["ok"] else r["msg"])
+	# pin it on a media machine and look at the screen
+	var media = providers.media_machines(cluster.state)
+	print("prov: media machines here: ", media.size())
+	if not media.is_empty():
+		var m = world.machines[media[0]["uid"]]
+		print("prov: pinned=", providers.pin(m.uid, t["data"]))
+		hud.close_modal()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		await get_tree().create_timer(3.0).timeout
+		var sr = m.screen_rect()
+		player.flying = true
+		player.teleport(sr["pos"] + sr["normal"] * 3.2 + Vector3(0.4, -1.5, 0), sr["pos"])
+		await _shot(dir, "prov_6_pinned")
+		print("prov: saved pins file has no key: ", not FileAccess.get_file_as_string(providers._pin_file()).contains(OS.get_environment("KF_TEST_TAUTULLI_KEY")))
+		providers.unpin(m.uid)
+	# failures are named
+	var bad = await ask.call("provider.save", {"type": "grafana", "name": "Wrong token", "base_url": base + "/grafana", "token": "glsa_wrong"})
+	r = await ask.call("grafana.dashboards", {"id": bad["data"]["id"]})
+	print("prov: wrong token -> ", r["kind"], ": ", r["msg"])
+	for p in [g, t, bad]:
+		await ask.call("provider.remove", {"id": p["data"]["id"]})
+	r = await ask.call("provider.list", {})
+	print("prov: left after removal: ", r["data"]["providers"].size())
 	get_tree().quit()
 
 func _run_storageshots(dir: String) -> void:
