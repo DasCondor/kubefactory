@@ -155,6 +155,7 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 | Backend plugins | [PLUGINS](docs/PLUGINS.md) · [example plugin](examples/plugins/static-world) |
 | Contributing | [CONTRIBUTING](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) |
 | Releases and what changed | [CHANGELOG](docs/CHANGELOG.md) · [Releases](https://github.com/DasCondor/kubefactory/releases) |
+| What is tested, what is not, what is left for 2.0.0 | [KNOWN_LIMITATIONS](docs/KNOWN_LIMITATIONS.md) · [FEATURE_PARITY](docs/FEATURE_PARITY.md) · [GO_LIVE_2.0](docs/GO_LIVE_2.0.md) |
 
 ## 📥 Download
 
@@ -218,13 +219,15 @@ for troubleshooting. `check-requirements.ps1` checks for the optional cloud CLIs
 ## 🔌 Connecting to a cluster (no kubectl needed)
 
 > **2.0 is in beta.** Connecting, managing and storage inspection are verified
-> on a real cluster with running containers (kind) and on a real Docker engine.
-> Not yet tried: any cloud provider, LiveView on a real application through a
+> on a real cluster with running containers (kind) and on a real Docker engine;
+> a user reports k3s working. Not yet tried: any cloud provider, a real AI
+> provider behind Foreman, LiveView on a real application through a
 > port-forward, playing the game against a real Komodo, a physical
 > controller, and a server reached from another machine. On a Mac (Apple
 > Silicon) the game starts and the companion answers; it has not been played
 > there, and an Intel Mac is untried. See
-> [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+> [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md), and
+> [docs/GO_LIVE_2.0.md](docs/GO_LIVE_2.0.md) for what is left before 2.0.0.
 
 The short version:
 
@@ -821,7 +824,8 @@ Want to help? Start with **[CONTRIBUTING](CONTRIBUTING.md)**: setup, where thing
 
 Design and status documents: [ARCHITECTURE](docs/ARCHITECTURE.md),
 [FEATURE_PARITY](docs/FEATURE_PARITY.md), [KNOWN_LIMITATIONS](docs/KNOWN_LIMITATIONS.md),
-[MODEL_AUDIT](docs/MODEL_AUDIT.md), [CHANGELOG](docs/CHANGELOG.md).
+[MODEL_AUDIT](docs/MODEL_AUDIT.md), [CHANGELOG](docs/CHANGELOG.md),
+[GO_LIVE_2.0](docs/GO_LIVE_2.0.md).
 
 `play.bat --demo --shots=<folder>` runs an automated screenshot tour (dev aid).
 Against a real context or Docker engine it also deploys and removes throwaway

@@ -21,6 +21,9 @@
   behaviour) and **Cancel**. Nothing changes until you choose.
 
 ### Added
+- **`docs/GO_LIVE_2.0.md`:** what is left before 2.0.0, split into release
+  blockers, verification that can ship as a known limitation, and what is out
+  of reach.
 - **Unbind** (×) beside every action in Settings, and a line naming any action
   left without a key. An unbound action stays unbound after a restart.
 

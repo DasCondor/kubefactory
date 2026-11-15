@@ -1,7 +1,8 @@
-# Known limitations (2.0.0-beta.1)
+# Known limitations (2.0)
 
 Stated plainly so nobody has to find them the hard way. "Not tested" means
 exactly that: the code exists and has not been run against the real thing.
+What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
 
 ## Not verified against live infrastructure
 
@@ -13,8 +14,9 @@ exactly that: the code exists and has not been run against the real thing.
   pod replaced, draining a worker that has pods on it, and deleting a pod.
   The game itself was then run on that cluster. The control-plane-only test
   (`tools\live-test.ps1`, 40 of 40) still covers apply, RBAC refusal and
-  presence. **Not tested:** any cloud provider (EKS, AKS, GKE), Rancher, k3s
-  or OpenShift, and a sign-in helper actually signing in.
+  presence. **Not tested:** any cloud provider (EKS, AKS, GKE), Rancher or
+  OpenShift, and a sign-in helper actually signing in. k3s has been reported
+  working by a user; it was not tested here.
 - **Storage inspection is verified live** on that cluster and on a real Docker
   container (`tests/live/docker_backend_test.gd`, 19 of 19): real folder
   listings and file contents, `..` refused, the service-account token never
@@ -63,11 +65,14 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Komodo
 
-- **The three requests were checked against a real Komodo Core 2.3.4** (four
-  servers, 119 containers): the answers match what the game reads. The game
-  itself has not been played against it yet; the tests use a stand-in built
-  from the published `komodo_client` source. Komodo versions with a different
-  API may not connect.
+- **A contributor checked the read requests against a real Komodo Core
+  2.3.4** (four servers, 119 containers): the answers match what the game
+  reads. That was with the old container request name. The game now asks with
+  the 2.3 name, `ListAllContainers`, and falls back to
+  `ListAllDockerContainers` when a Core rejects it (HTTP 400, 404 or 422); the
+  new name and the fallback were tested only against stand-ins built from the
+  published `komodo_client` source. The game itself has not been played
+  against a real Core. Komodo versions with a different API may not connect.
 - Read-only by design: no restart, deploy or removal through KubeFactory.
 - Shown per server, not per Compose stack (container labels are not in
   Komodo's list); logs, capacity figures and storage doors are not available
@@ -129,10 +134,12 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Model library
 
-- Only the 25 machines, Porter, Bob, Gauge, Sentinel, Scout and Scrappy are placed in the world. The other 12
-  Krew members and the 101 V2 models (network, storage, structures, props,
-  displays, tools) are shipped but not used: they are below the Porter V3
-  standard or belong to features that do not exist yet.
+- Placed in the world: the 25 machines, Porter, Bob, Gauge, Foreman (one
+  model per provider) and the six workers at their stations (Sentinel, Scout,
+  Scrappy, Archie, Forge, Blueprint). The Krew HQ model and the 101 V2 models
+  (network, storage, structures, props, displays, tools) are shipped but not
+  used: they are below the Porter V3 standard or belong to features that do
+  not exist yet.
 - The library is V8 (the V7 readability patch: repaired lettering and neutral
   display planes on 249 files; V8 changed no models). Its own notes say what it
   is not: no model is approved for release, 50 designs are still V2 legacy
@@ -273,9 +280,10 @@ exactly that: the code exists and has not been run against the real thing.
   applications' own logos, and an image it does not recognise gets a plain
   block.
 - The asset reviewer that came with the library is added to the Pages build at
-  `model-viewer/`. It was checked locally (loads, no external requests, no
-  console errors); it goes live only when this branch is merged and Pages
-  deploys. It adds the whole library (about 72 MB) to the site. Not tested on a
+  `model-viewer/` and is live at
+  https://dascondor.github.io/kubefactory/model-viewer/. It was checked
+  locally (loads, no external requests, no console errors). It adds the whole
+  library (about 72 MB) to the site. Not tested on a
   phone. Reviews stay in the browser that made them unless exported.
 - The audit cannot detect two solid parts pushed into each other unless one of
   them is a display.
