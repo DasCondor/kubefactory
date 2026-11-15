@@ -171,6 +171,8 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 
 | Topic | Read |
 |---|---|
+| Text editor: themes, line numbers, Standard / Vim / Nano keys | [Text editor](#-text-editor-esc--text-editor) |
+| VPN tunnels: both sides, recognised VPN images | [VPN gateways](#vpn-gateways-both-sides-of-the-tunnel) · [limitations](docs/KNOWN_LIMITATIONS.md#vpn-gateways) |
 | The Krew: Bob, Gauge, Sentinel, Scout, Scrappy, Archie, Forge, Blueprint | [The Krew](#the-krew-operations-center-key-k) · [Gauge](#gauge-the-resource-desk) · [Bob 2.0](docs/bob-2.0.md) |
 | Foreman and AI providers (Ollama, LM Studio, OpenAI, Claude, custom) | [Foreman](#foreman-incidents-and-plain-language-questions-key-h) · [Security](docs/SECURITY.md) |
 | Docker hosts, read-only and without root | [DOCKER_HOSTS](docs/DOCKER_HOSTS.md) · [limitations](docs/KNOWN_LIMITATIONS.md#docker-hosts) |
@@ -489,19 +491,36 @@ changes to that provider's model.
 
 ### VPN gateways: both sides of the tunnel
 
-A VPN container (Gluetun) shows what it changes. A tunnel rises from its
-machine with two signs: **INSIDE**, by the machine, its addresses on your
-network and the containers whose traffic it carries; **OUTSIDE**, at the top
-of the tunnel, the address the internet sees, with the provider, the VPN type
-and the server countries. On Docker every container that uses Gluetun's
-network (`network_mode: service:gluetun`) gets a line into it, and its panel
-says it has no network of its own. The same two sides are in the machine's
-panel under **NETWORK**.
+A VPN container shows what it changes. A tunnel rises from it with two
+signs: **INSIDE**, by the machine, its addresses on your network and what it
+carries; **OUTSIDE**, at the top of the tunnel, the address the internet sees,
+with the product, provider, VPN type and server countries.
 
-The outside address is the one Gluetun records itself (`/tmp/gluetun/ip`),
-read with the container's own `head` at most once a minute: KubeFactory makes
-no call to the internet to find it. Of Gluetun's settings only the provider,
-type and countries are read; its keys and passwords never are.
+- **Docker:** every container that uses a VPN container's network
+  (`network_mode: service:gluetun`) gets a direct pipe straight to it, and its
+  panel says it has no network of its own.
+- **Kubernetes sidecar** (and the demo): the VPN is drawn as its own unit on
+  the pod's roof, piped straight into the machine it carries.
+- **An image with the VPN built in** (transmission-openvpn, binhex's `*vpn`
+  images): the tunnel rises from the machine itself.
+
+**Esc > VPN tunnels** lists every VPN with both sides, **Check now**, **Go
+there**, and any downloader (qBittorrent, Deluge, Transmission, SABnzbd...) that
+is **not** behind a VPN. The machine's own panel shows the same under
+**NETWORK**.
+
+Recognised images: Gluetun, the PIA client, transmission-openvpn, binhex `*vpn`
+images (with `VPN_ENABLED=yes`), hotio images (with `VPN_ENABLED=true`), the
+OpenVPN client, LinuxServer WireGuard, NordLynx and the NordVPN clients, the
+ExpressVPN, Surfshark, PIA WireGuard and Proton VPN clients, and Cloudflare
+WARP (`VPN_REGISTRY` in `scripts/kutil.gd`). Only the provider, type and
+countries settings each image documents are read: never keys or passwords.
+
+The outside address: Gluetun records it itself (`/tmp/gluetun/ip`), read with
+the container's own `head` at most once a minute, with no call to the
+internet. For any other VPN, **Check now** asks `ipinfo.io` from **inside** the
+container (so through its tunnel), with its own `wget` or `curl`, only when you
+press it; it is written to the audit log.
 
 ### Tables
 
@@ -509,6 +528,34 @@ Lists with columns (workloads, clusters, files in a volume, Grafana dashboards
 and panels) have a **CONTAINS** box and clickable headings: click once to sort,
 again to reverse, a third time to go back to the original order. Sorting and
 filtering work on tables with fewer than 10,000 rows.
+
+## 📝 Text editor (Esc > Text editor)
+
+A plain editor for KubeFactory's own settings files (`policy.json`,
+`catalogs.json`, `log-providers.json`, `bob.json` and Porter's app setups), and
+a read-only viewer for a container's file (**Open in editor** in the storage
+browser).
+
+- **Theme:** System (the default: follows your computer's light or dark mode),
+  Light or Dark.
+- **View:** line numbers on or off, word wrap, font size.
+- **Tools:** find and replace, go to line, and in **Edit**: duplicate, delete
+  or move a line, UPPERCASE / lowercase, trim trailing spaces, sort lines,
+  toggle a `#` comment, undo and redo.
+- **Keys:** *Standard* (Ctrl+S save, Ctrl+F find, Ctrl+H replace, Ctrl+G go to
+  line, Ctrl+D duplicate, Ctrl+Shift+K delete line, Alt+Up/Down move, Ctrl+/
+  comment, Ctrl+= / Ctrl+- size), *Vim* (normal and insert modes; `h j k l w b
+  0 ^ $ gg G x dd yy p P u` Ctrl+R, `i a A I o O`, `/` search with `n N`, and
+  `:w :q :q! :wq :x :<line> :set nu / nonu / wrap / nowrap`) or *Nano* (^O
+  write out, ^X exit, ^W where is, ^\ replace, ^K cut, ^U paste, ^_ go to line,
+  M-U / M-E undo / redo, with its help line along the bottom).
+- **Safety:** JSON is checked before it is saved; the previous version is kept
+  as `.bak`; closing with unsaved changes asks first. A container's file is
+  never written: storage inspection stays read-only. Files that hold
+  credentials (`portainer.json`, `apps/vpn.env`) are not offered, so a key is
+  never on screen: edit those outside the game.
+
+The choices are kept in Settings (**Text editor**) and in the editor's own bar.
 
 ## 📺 LiveView: the application's own page (key `V`)
 

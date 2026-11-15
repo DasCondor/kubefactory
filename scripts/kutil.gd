@@ -365,35 +365,87 @@ static func container_security(i: Dictionary) -> Dictionary:
 #   addrs    ["172.18.0.4 (media_default)"]   its own addresses on the inside
 #   via      container id whose network it shares (Docker `container:<id>`,
 #            which is what Compose's `service:gluetun` becomes); "" if its own
-#   vpn      {} or, for a VPN gateway (Gluetun): provider, type, countries
-#            (only those three settings are read: never keys or passwords),
-#            exit_ip (the address the internet sees, "" until read), exit_note,
-#            through [the names whose traffic goes through it]
+#   vpn      {} or, for a container that is a VPN: product, role ("gateway":
+#            others share its network; "built-in": the VPN and an app in one
+#            image), provider, type, countries (only the settings the
+#            registry names: never keys or passwords), exit_ip (the address
+#            the internet sees, "" until known), exit_note, can_check (whether
+#            the address can be asked for), through [what goes through it]
 # Only what the source states is recorded.
-const VPN_IMAGES = ["gluetun"]
-const VPN_SETTINGS = {"VPN_SERVICE_PROVIDER": "provider", "VPN_TYPE": "type", "SERVER_COUNTRIES": "countries"}
+#
+# The VPN images people run, recognised by every word in `match` appearing in
+# the image name. `env` maps the settings worth showing; `need` is a setting
+# that must hold for the image to be a VPN at all (images where the VPN is an
+# option); `ip_file` is where the image writes its own outside address.
+const VPN_REGISTRY = [
+	{"match": ["gluetun"], "product": "Gluetun", "role": "gateway", "ip_file": "/tmp/gluetun/ip", "type": "openvpn",
+		"env": {"VPN_SERVICE_PROVIDER": "provider", "VPN_TYPE": "type", "SERVER_COUNTRIES": "countries", "SERVER_REGIONS": "countries"}},
+	{"match": ["qmcgaw/private-internet-access"], "product": "PIA client (Gluetun's former image)", "role": "gateway", "provider": "Private Internet Access", "type": "openvpn",
+		"env": {"REGION": "countries"}},
+	{"match": ["transmission-openvpn"], "product": "Transmission + OpenVPN", "role": "built-in", "type": "openvpn",
+		"env": {"OPENVPN_PROVIDER": "provider", "OPENVPN_CONFIG": "countries"}},
+	{"match": ["binhex/arch-", "vpn"], "product": "binhex VPN image", "role": "built-in", "need": ["VPN_ENABLED", "yes"],
+		"env": {"VPN_PROV": "provider", "VPN_CLIENT": "type"}},
+	{"match": ["hotio/"], "product": "hotio image with its VPN on", "role": "built-in", "need": ["VPN_ENABLED", "true"], "type": "wireguard",
+		"env": {"VPN_PROVIDER": "provider"}},
+	{"match": ["dperson/openvpn-client"], "product": "OpenVPN client", "role": "gateway", "type": "openvpn", "env": {}},
+	{"match": ["linuxserver/wireguard"], "product": "WireGuard (LinuxServer)", "role": "gateway", "type": "wireguard", "env": {}},
+	{"match": ["nordlynx"], "product": "NordLynx", "role": "gateway", "provider": "NordVPN", "type": "NordLynx (WireGuard)", "env": {"QUERY": "countries"}},
+	{"match": ["nordvpn"], "product": "NordVPN client", "role": "gateway", "provider": "NordVPN",
+		"env": {"COUNTRY": "countries", "CONNECT": "countries", "TECHNOLOGY": "type"}},
+	{"match": ["expressvpn"], "product": "ExpressVPN client", "role": "gateway", "provider": "ExpressVPN", "env": {"SERVER": "countries"}},
+	{"match": ["surfshark"], "product": "Surfshark client", "role": "gateway", "provider": "Surfshark",
+		"env": {"SURFSHARK_COUNTRY": "countries", "CONNECTION_TYPE": "type"}},
+	{"match": ["wireguard-pia"], "product": "PIA WireGuard client", "role": "gateway", "provider": "Private Internet Access", "type": "wireguard", "env": {"LOC": "countries"}},
+	{"match": ["protonvpn"], "product": "Proton VPN client", "role": "gateway", "provider": "Proton VPN", "env": {"PROTONVPN_SERVER": "countries", "PROTONVPN_COUNTRY": "countries"}},
+	{"match": ["warp"], "product": "Cloudflare WARP", "role": "gateway", "provider": "Cloudflare WARP", "type": "WireGuard (WARP)", "env": {}},
+]
+# Downloaders that people usually keep behind a VPN (the VPN panel lists any that are not).
+const DOWNLOADERS = ["qbittorrent", "deluge", "transmission", "sabnzbd", "nzbget", "rtorrent", "rutorrent", "aria2", "jdownloader"]
 
 static func empty_net() -> Dictionary:
 	return {"addrs": [], "via": "", "vpn": {}}
 
-static func is_vpn_image(image: String) -> bool:
-	var l = image.to_lower()
-	return VPN_IMAGES.any(func(v): return l.contains(v))
-
-# The three VPN settings worth showing, from "KEY=value" lines; everything
-# else in the environment (keys, passwords, tokens) is never looked at.
-static func vpn_settings(env: Array) -> Dictionary:
-	var v = {"provider": "", "type": "", "countries": "", "exit_ip": "", "exit_note": "", "through": []}
+static func _env_map(env: Array) -> Dictionary:
+	var m = {}
 	for e in env:
 		var s = str(e)
 		var i = s.find("=")
-		if i <= 0:
-			continue
-		var k = s.substr(0, i)
-		if VPN_SETTINGS.has(k):
-			v[VPN_SETTINGS[k]] = s.substr(i + 1).strip_edges().left(80)
-	if v["type"] == "":
-		v["type"] = "openvpn"      # Gluetun's own default when VPN_TYPE is unset
+		if i > 0:
+			m[s.substr(0, i)] = s.substr(i + 1)
+	return m
+
+# The registry entry for an image, or {}; `env` is only asked about the entry's
+# `need` setting. The entry decides which other settings are ever looked at.
+static func vpn_entry(image: String, env: Array = []) -> Dictionary:
+	var l = image.to_lower()
+	for e in VPN_REGISTRY:
+		if e["match"].all(func(w): return l.contains(w)):
+			if e.has("need"):
+				var m = _env_map(env)
+				if str(m.get(e["need"][0], "")).to_lower() != e["need"][1]:
+					return {}
+			return e
+	return {}
+
+static func is_vpn_image(image: String, env: Array = []) -> bool:
+	return not vpn_entry(image, env).is_empty()
+
+static func is_downloader(image: String) -> bool:
+	var l = image.to_lower()
+	return DOWNLOADERS.any(func(d): return l.contains(d))
+
+# What is shown about one VPN container: the registry's settings and nothing
+# else from its environment (keys, passwords, tokens are never looked at).
+static func vpn_settings(env: Array, entry: Dictionary = {}) -> Dictionary:
+	if entry.is_empty():
+		entry = VPN_REGISTRY[0]
+	var v = {"product": entry["product"], "role": entry["role"], "provider": str(entry.get("provider", "")), "type": str(entry.get("type", "")),
+		"countries": "", "exit_ip": "", "exit_note": "", "can_check": false, "ip_file": str(entry.get("ip_file", "")), "through": []}
+	var m = _env_map(env)
+	for k in entry["env"]:
+		if m.has(k) and str(m[k]).strip_edges() != "":
+			v[entry["env"][k]] = str(m[k]).strip_edges().left(80)
 	return v
 
 # from `docker inspect` of one container
@@ -411,11 +463,15 @@ static func container_net(i: Dictionary) -> Dictionary:
 			var ip = str(nets[name].get("IPAddress", "")) if typeof(nets[name]) == TYPE_DICTIONARY else ""
 			if ip != "":
 				n["addrs"].append("%s (%s)" % [ip, name])
-	if is_vpn_image(str(cfg.get("Image", ""))):
-		n["vpn"] = vpn_settings(cfg.get("Env", []) if typeof(cfg.get("Env")) == TYPE_ARRAY else [])
+	var env: Array = cfg.get("Env", []) if typeof(cfg.get("Env")) == TYPE_ARRAY else []
+	var entry = vpn_entry(str(cfg.get("Image", "")), env)
+	if not entry.is_empty():
+		n["vpn"] = vpn_settings(env, entry)
+		if entry["role"] == "built-in":
+			n["vpn"]["through"] = [str(i.get("Name", "")).trim_prefix("/")]     # the app in the same image
 	return n
 
-# from a Kubernetes pod: a Gluetun sidecar carries the whole pod's traffic,
+# from a Kubernetes pod: a VPN sidecar carries the whole pod's traffic,
 # since the containers of a pod share one network
 static func pod_net(spec: Dictionary, status: Dictionary) -> Dictionary:
 	var n = empty_net()
@@ -427,12 +483,14 @@ static func pod_net(spec: Dictionary, status: Dictionary) -> Dictionary:
 	for c in spec.get("initContainers", []) + spec.get("containers", []):
 		if typeof(c) != TYPE_DICTIONARY:
 			continue
-		if is_vpn_image(str(c.get("image", ""))) and vpn.is_empty():
-			var env = []
-			for e in c.get("env", []):
-				if typeof(e) == TYPE_DICTIONARY and e.has("value"):     # a value from a Secret is never fetched
-					env.append("%s=%s" % [str(e.get("name", "")), str(e["value"])])
-			vpn = vpn_settings(env)
+		var env = []
+		for e in c.get("env", []):
+			if typeof(e) == TYPE_DICTIONARY and e.has("value"):     # a value from a Secret is never fetched
+				env.append("%s=%s" % [str(e.get("name", "")), str(e["value"])])
+		var entry = vpn_entry(str(c.get("image", "")), env)
+		if not entry.is_empty() and vpn.is_empty():
+			vpn = vpn_settings(env, entry)
+			vpn["sidecar"] = str(c.get("name", ""))
 			vpn["exit_note"] = "not read on Kubernetes yet"
 		else:
 			others.append(str(c.get("name", "")))
@@ -457,7 +515,7 @@ static func vpn_outside_text(p: Dictionary) -> String:
 	var v: Dictionary = p["net"]["vpn"]
 	var lines = ["OUTSIDE  ·  what the internet sees"]
 	lines.append(str(v["exit_ip"]) if str(v.get("exit_ip", "")) != "" else "address unknown")
-	var how = PackedStringArray([str(v.get("provider", "")), str(v.get("type", "")), str(v.get("countries", ""))].filter(func(s): return s != ""))
+	var how = PackedStringArray([str(v.get("product", "")), str(v.get("provider", "")), str(v.get("type", "")), str(v.get("countries", ""))].filter(func(s): return s != ""))
 	if not how.is_empty():
 		lines.append("  ·  ".join(how))
 	if str(v.get("exit_note", "")) != "":
@@ -686,7 +744,7 @@ static func selects(selector: Dictionary, labels: Dictionary) -> bool:
 # How dangerous an action is (1 safe .. 5 critical). Matches the tool tiers.
 static func tier_of(a: Dictionary, state: Dictionary) -> int:
 	match a["op"]:
-		"logs", "events", "cluster_events", "templates", "portainer_open", "file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan":
+		"logs", "events", "cluster_events", "templates", "portainer_open", "file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan", "vpn_check":
 			return 1
 		"create", "apply_app", "deploy_template", "portainer_install":
 			return 2
@@ -757,7 +815,8 @@ static func read_json(path: String) -> Variant:
 # ---- per-user settings (kept in the user folder, survive upgrades)
 static func load_settings() -> Dictionary:
 	var s = {"fullscreen": false, "muted": false, "sensitivity": 1.0, "welcomed": false, "belts": true, "graphics": "auto",
-		"fov": 80.0, "ui_scale": 1.0, "palette": "standard", "invert_y": false, "pad_look": 1.0, "keys": {}}
+		"fov": 80.0, "ui_scale": 1.0, "palette": "standard", "invert_y": false, "pad_look": 1.0, "keys": {},
+		"editor_theme": "system", "editor_keys": "standard", "editor_lines": true, "editor_wrap": false, "editor_font": 15}
 	var d = read_json(OS.get_user_data_dir().path_join("settings.json"))
 	if typeof(d) == TYPE_DICTIONARY:
 		for k in d:

@@ -542,6 +542,20 @@ line2\" injected: true"]])
 	var gp = {"name": "media-gluetun-1", "net": gn}
 	check.call("the inside sign shows the inside address", KN.vpn_inside_text(gp).contains("172.18.0.4"), true)
 	check.call("the outside sign shows the exit address", KN.vpn_outside_text(gp).contains("203.0.113.7"), true)
+	# the registry of VPN images
+	var reg = func(img, env = []):
+		var e = KN.vpn_entry(img, env)
+		return "" if e.is_empty() else str(e["product"]) + "/" + str(e["role"])
+	check.call("registry: Gluetun", reg.call("qmcgaw/gluetun:v3"), "Gluetun/gateway")
+	check.call("registry: transmission-openvpn has its VPN built in", reg.call("haugene/transmission-openvpn:5.3"), "Transmission + OpenVPN/built-in")
+	check.call("registry: a binhex *vpn image is a VPN only when its VPN is on", [reg.call("binhex/arch-delugevpn", ["VPN_ENABLED=yes"]), reg.call("binhex/arch-delugevpn", ["VPN_ENABLED=no"])], ["binhex VPN image/built-in", ""])
+	check.call("registry: hotio only with VPN_ENABLED=true", [reg.call("ghcr.io/hotio/qbittorrent", ["VPN_ENABLED=true"]), reg.call("ghcr.io/hotio/qbittorrent")], ["hotio image with its VPN on/built-in", ""])
+	check.call("registry: provider clients", [reg.call("bubuntux/nordlynx"), reg.call("ilteoood/docker-surfshark"), reg.call("polkaned/expressvpn"), reg.call("thrnz/docker-wireguard-pia"), reg.call("caomingjun/warp")],
+		["NordLynx/gateway", "Surfshark client/gateway", "ExpressVPN client/gateway", "PIA WireGuard client/gateway", "Cloudflare WARP/gateway"])
+	check.call("registry: an ordinary image is not a VPN", reg.call("lscr.io/linuxserver/deluge:latest"), "")
+	var bx = KN.vpn_settings(["VPN_ENABLED=yes", "VPN_PROV=airvpn", "VPN_CLIENT=wireguard", "VPN_PASS=" + secret], KN.vpn_entry("binhex/arch-qbittorrentvpn", ["VPN_ENABLED=yes"]))
+	check.call("registry: a built-in VPN's provider and type, and never its password", [bx["provider"], bx["type"], JSON.stringify(bx).contains(secret)], ["airvpn", "wireguard", false])
+	check.call("downloaders are recognised", [KN.is_downloader("lscr.io/linuxserver/qbittorrent"), KN.is_downloader("lscr.io/linuxserver/sonarr")], [true, false])
 	check.call("an exit address is checked before it is shown", [KN.valid_ip("203.0.113.7"), KN.valid_ip("2001:db8::1"), KN.valid_ip("<html>")], [true, true, false])
 	if fails.is_empty():
 		print("ALL CHECKS PASSED")

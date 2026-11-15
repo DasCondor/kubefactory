@@ -102,8 +102,17 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
 
 ## VPN gateways
 
-- **Gluetun only.** A container is a VPN gateway when its image is Gluetun's;
-  other VPN clients are not recognised.
+- **Recognised by image name.** The registry (`VPN_REGISTRY` in
+  `scripts/kutil.gd`) knows Gluetun, transmission-openvpn, binhex `*vpn` and
+  hotio images (when their VPN is on), the OpenVPN, WireGuard, NordVPN,
+  ExpressVPN, Surfshark, PIA and Proton VPN clients and Cloudflare WARP. An
+  image under another name is not recognised. Only Gluetun and a binhex-style
+  stand-in were tested (on throw-away containers); the settings names for the
+  other clients come from their documentation, not from running them.
+- **Check now** asks `ipinfo.io` from inside the VPN container: it needs `wget`
+  or `curl` in the image, it is the one call to the internet KubeFactory makes
+  for this, and only when pressed. Not tested against a real VPN (it would
+  contact ipinfo.io from the test machine).
 - **The outside address** is what Gluetun recorded in `/tmp/gluetun/ip`, read
   at most once a minute: verified live on a throw-away stand-in container
   (`tests/live/vpn_docker_test.gd`), not against a real VPN provider. Through
@@ -116,6 +125,24 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
   work); separate pods cannot share one gateway.
 - The Porter setup was checked with `docker compose config` and a YAML parse;
   it has not been run with a real VPN account.
+
+## Text editor
+
+- A plain editor, not an IDE: no tabs of several files at once, no plugins,
+  no project search. Syntax colours are simple (strings, numbers, `#`
+  comments).
+- Vim and Nano are the everyday subsets listed in the README: no counts
+  (`3dd`), no visual mode, no registers beyond one, no macros, no `.vimrc`.
+  Nano's ^G toggles its help line rather than opening help.
+- The System theme follows the operating system where Godot can read it
+  (Windows, macOS); elsewhere it falls back to dark.
+- JSON is checked before saving; YAML and other files are saved as typed,
+  unchecked.
+- In the browser demo there are no settings files to edit; a container's file
+  still opens read-only.
+- Tested with real key events in the game (`tests/live/editor_test.gd`), not
+  by hand on every keyboard layout: ^_ (go to line in Nano) is Ctrl+Shift+minus
+  on a US layout.
 
 ## Server mode and plugins
 
