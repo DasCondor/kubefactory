@@ -94,13 +94,14 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Multiplayer beyond 1.0.1 presence | unsupported |
 | 12 Verification | Unit tests (GDScript, Go), model audit, screenshot runs | done; see the PR description for results |
 | | Live acceptance tests, large-scale benchmarks | kind and Docker tests completed; clean-machine, cloud and large-scale tests not completed |
-| 13 Distribution | Windows zips with companion and models | built locally; not published |
-| | Linux / macOS builds, signing | unsupported |
+| 13 Distribution | Windows, Linux and macOS packages with companion and models | published in [2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1); packages have SHA-256 checksums and build-provenance attestations |
+| | Platform code signing | macOS is ad-hoc signed; publisher signing and macOS notarization are unavailable |
 
-## What has to happen before this is called a release
+## Remaining verification before a stable release
 
 1. Test a cloud provider and its sign-in helper. The native path has been run
    against kind with running containers, including logs and drain with pods.
-2. Open a storage door on a real pod with a volume; try a distroless image.
+2. Try storage inspection on a distroless image. Live inspection of a pod
+   with a volume has been verified on kind.
 3. Open Grafana through LiveView on Docker and through a port-forward.
 4. Install the zip on a Windows machine that has never had kubectl or Go.
