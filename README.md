@@ -20,7 +20,7 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 [![License: MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20browser-8b949e)
 
-![Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service belts and a failing pod's alarm](docs/flythrough.gif)
+![Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service belts and a failing pod's alarm](docs/flythrough.webp)
 
 [Play](#-play-in-the-browser-sandbox-demo) ·
 [Download](#-download) ·
@@ -61,17 +61,17 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 
 | | |
 |---|---|
-| ![Overview of a simulated cluster with an alarm beam over a failing pod](docs/overview.png) Nodes are platforms, pods are machines; red beams mark failing pods | ![A database machine: type plate, the pod's real name with its icon, and its screen](docs/machines.png) Every machine says what it is: a type plate, the real pod name with an icon for what it runs, and a screen |
-| ![One screen stepping through dashboard, metrics, logs and storage](docs/screens.png) One screen, four views: dashboard, metrics, logs, storage. `R` steps through them | ![A machine's log opened full size](docs/screen-window.png) Click a screen to open it full size and switch views there |
-| ![A machine with its storage door open and the file browser beside it](docs/storage.png) Open a machine's door (`F`) to browse its volumes, read-only | ![The demo's simulated Grafana dashboard, opened full size](docs/demo-grafana.png) The demo's Grafana and media screens show simulated content, marked as such |
-| ![The six handheld tools, each with its own display](docs/tools.png) Six tools; each one's display shows what it is pointed at and what the trigger would do | ![Holding the Mk.4 Dismantler on a pod](docs/dismantler.png) Hold to act: stronger tools take longer |
-| ![The connection wizard listing kubeconfig contexts](docs/connect.png) Connect with a kubeconfig, no kubectl: `KubeFactory.exe --kubeconfig <file>` | ![The datapad showing cluster warning events as a ledger](docs/datapad.png) The datapad: logs, events and the audit ledger |
-| ![Bob at his repair stand, with the fix list on the board behind him](docs/bob-stand.png) Bob's repair stand: the board lists what is broken, and he has something to say about it | ![Bob's fix list](docs/bob.png) His fix list: what is broken, why, and what to do |
-| ![Bob's case file: the log lines that matter on a build that ran out of memory](docs/bob-case.png) Bob 2.0 reads the log: the line that killed it, what it means, what to do | ![The demo chooser](docs/demos.png) Four demo worlds to try everything safely |
-| ![The media suite demo: Plex, the arr apps and Grafana all running](docs/demo-media.png) The media suite world: Plex, Sonarr, Radarr, Jackett and friends, all healthy | ![Porter, the Portainer dock robot](docs/porter.png) Porter builds complete app setups and installs from app lists |
-| ![Typed confirmation before deleting a workload](docs/confirm.png) Mk.5 actions make you type the target's name | ![Two other players shown as robot avatars](docs/multiuser.png) Other people on the cluster appear as avatars |
-| ![The Krew's operations board with Sentinel's findings](docs/krew-panel.png) The Krew's board: every finding with its evidence, a proposed fix and its risk | ![Foreman's answer with one checked proposal and one refused](docs/foreman-answer.png) Foreman: ask in plain words; proposals are checked and need your approval |
-| ![The settings menu with every key rebindable](docs/settings.png) Settings: keys, controller, field of view, interface size, colour palettes | ![The minimap in the bottom-left corner](docs/minimap.png) The minimap turns with you; failing machines pulse |
+| ![Overview of a simulated cluster with an alarm beam over a failing pod](docs/overview.webp) Nodes are platforms, pods are machines; red beams mark failing pods | ![A database machine: type plate, the pod's real name with its icon, and its screen](docs/machines.webp) Every machine says what it is: a type plate, the real pod name with an icon for what it runs, and a screen |
+| ![One screen stepping through dashboard, metrics, logs and storage](docs/screens.webp) One screen, four views: dashboard, metrics, logs, storage. `R` steps through them | ![A machine's log opened full size](docs/screen-window.webp) Click a screen to open it full size and switch views there |
+| ![A machine with its storage door open and the file browser beside it](docs/storage.webp) Open a machine's door (`F`) to browse its volumes, read-only | ![The demo's simulated Grafana dashboard, opened full size](docs/demo-grafana.webp) The demo's Grafana and media screens show simulated content, marked as such |
+| ![The six handheld tools, each with its own display](docs/tools.webp) Six tools; each one's display shows what it is pointed at and what the trigger would do | ![Holding the Mk.4 Dismantler on a pod](docs/dismantler.webp) Hold to act: stronger tools take longer |
+| ![The connection wizard listing kubeconfig contexts](docs/connect.webp) Connect with a kubeconfig, no kubectl: `KubeFactory.exe --kubeconfig <file>` | ![The datapad showing cluster warning events as a ledger](docs/datapad.webp) The datapad: logs, events and the audit ledger |
+| ![Bob at his repair stand, with the fix list on the board behind him](docs/bob-stand.webp) Bob's repair stand: the board lists what is broken, and he has something to say about it | ![Bob's fix list](docs/bob.webp) His fix list: what is broken, why, and what to do |
+| ![Bob's case file: the log lines that matter on a build that ran out of memory](docs/bob-case.webp) Bob 2.0 reads the log: the line that killed it, what it means, what to do | ![The demo chooser](docs/demos.webp) Four demo worlds to try everything safely |
+| ![The media suite demo: Plex, the arr apps and Grafana all running](docs/demo-media.webp) The media suite world: Plex, Sonarr, Radarr, Jackett and friends, all healthy | ![Porter, the Portainer dock robot](docs/porter.webp) Porter builds complete app setups and installs from app lists |
+| ![Typed confirmation before deleting a workload](docs/confirm.webp) Mk.5 actions make you type the target's name | ![Two other players shown as robot avatars](docs/multiuser.webp) Other people on the cluster appear as avatars |
+| ![The Krew's operations board with Sentinel's findings](docs/krew-panel.webp) The Krew's board: every finding with its evidence, a proposed fix and its risk | ![Foreman's answer with one checked proposal and one refused](docs/foreman-answer.webp) Foreman: ask in plain words; proposals are checked and need your approval |
+| ![The settings menu with every key rebindable](docs/settings.webp) Settings: keys, controller, field of view, interface size, colour palettes | ![The minimap in the bottom-left corner](docs/minimap.webp) The minimap turns with you; failing machines pulse |
 
 ## 📱 On a phone or tablet (browser demo)
 
@@ -94,7 +94,7 @@ Add `?touch=1` to the address to force the controls on, `?touch=0` to keep
 them off on a laptop with a touch screen. The browser demo is the simulation
 only, and says so on screen the whole time.
 
-![Touch controls in landscape and portrait, and a machine's screen opened full size](docs/mobile.png)
+![Touch controls in landscape and portrait, and a machine's screen opened full size](docs/mobile.webp)
 
 Not yet tried on a real iPhone or Android phone: see
 [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
@@ -339,8 +339,8 @@ read-only and makes no changes; use sustained measurements and workload context
 before adjusting resource settings. You can hide Gauge in the world from the
 pause menu.
 
-![Gauge at the resource desk](docs/gauge-station.png)
-![Gauge's read-only resource panel](docs/gauge-panel.png)
+![Gauge at the resource desk](docs/gauge-station.webp)
+![Gauge's read-only resource panel](docs/gauge-panel.webp)
 
 ### The Krew: operations center (key `K`)
 
@@ -376,13 +376,13 @@ shows the condition is gone. Findings in system namespaces are lowered one
 level. The board exports to Markdown or JSON in the log folder. Demo findings
 are marked **SIMULATED**.
 
-![The Krew's stations](docs/krew-stations.png)
-![The same stations as the browser build draws them](docs/krew-stations-browser.png)
-![The browser's High preset: the library models on the same renderer](docs/web-high.png)
-![Sentinel's findings in the operations center](docs/krew-panel.png)
-![Scrappy's cleanup awaiting approval](docs/krew-scrappy.png)
-![Archie, Forge and Blueprint in the second row](docs/krew-second-row.png)
-![All eight workers on the board](docs/krew-roster.png)
+![The Krew's stations](docs/krew-stations.webp)
+![The same stations as the browser build draws them](docs/krew-stations-browser.webp)
+![The browser's High preset: the library models on the same renderer](docs/web-high.webp)
+![Sentinel's findings in the operations center](docs/krew-panel.webp)
+![Scrappy's cleanup awaiting approval](docs/krew-scrappy.webp)
+![Archie, Forge and Blueprint in the second row](docs/krew-second-row.webp)
+![All eight workers on the board](docs/krew-roster.webp)
 
 ### Foreman: incidents and plain-language questions (key `H`)
 
@@ -412,9 +412,9 @@ changes to that provider's model.
   the game's files or logs. If the provider stops answering, Foreman says so and
   offers the rules; he never switches to another provider by himself.
 
-![Foreman's desk; his figure follows the chosen provider](docs/foreman-station.png)
-![An answer with one checked proposal and one refused (test provider, simulated world)](docs/foreman-answer.png)
-![Adding an AI provider](docs/foreman-providers.png)
+![Foreman's desk; his figure follows the chosen provider](docs/foreman-station.webp)
+![An answer with one checked proposal and one refused (test provider, simulated world)](docs/foreman-answer.webp)
+![Adding an AI provider](docs/foreman-providers.webp)
 
 ### Tables
 
@@ -522,7 +522,7 @@ up): node platforms, every machine as a dot in its health colour (failing
 ones pulse), the HUB, the cluster gates, Bob, Porter, Gauge, Foreman and the
 Krew's stations. `N` or the pause menu shows and hides it.
 
-![The minimap, bottom left](docs/minimap.png)
+![The minimap, bottom left](docs/minimap.webp)
 
 | In the game | In the cluster |
 |---|---|
@@ -581,7 +581,7 @@ Everything is set in the game and saved as you change it; no files to edit.
   colour blindness (Okabe-Ito colours) and a high-contrast one. They change
   lamps, alarm beams, findings and tool tiers; every status is also written.
 
-![Settings: every key rebindable](docs/settings.png)
+![Settings: every key rebindable](docs/settings.webp)
 
 ## 🎨 Graphics presets
 
@@ -617,10 +617,10 @@ How the recommendation is made: the GPU's name and type, memory and CPU threads
 mid-range discrete GPUs Enhanced, high-end ones Ultra, stepping down a level
 under 16 GB of memory or 8 threads.
 
-![Standard, Enhanced and Ultra side by side: spawn, overview, a platform, and the same panel on each](docs/presets.png)
+![Standard, Enhanced and Ultra side by side: spawn, overview, a platform, and the same panel on each](docs/presets.webp)
 
 Close-ups of machines, the yard and the skyline are in
-[docs/presets-detail.png](docs/presets-detail.png).
+[docs/presets-detail.webp](docs/presets-detail.webp).
 
 Measured against the last release in [docs/BENCHMARK.md](docs/BENCHMARK.md);
 `tools\bench.ps1` reruns it on your machine.

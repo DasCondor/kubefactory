@@ -1,13 +1,18 @@
-"""Turns fly-through frames into the README gif.
+"""Turns fly-through frames into the README animation (animated WebP).
 
     play.bat --demo --flythrough=<frames dir>
-    python tools/make_gif.py <frames dir> docs/flythrough.gif
+    python tools/make_gif.py <frames dir> docs/flythrough.webp
+
+A .gif output name still writes a GIF (128 colours), about six times larger.
 """
 import glob, sys
 from PIL import Image
 
 frames = [Image.open(f).convert("RGB") for f in sorted(glob.glob(sys.argv[1] + "/f*.png"))]
-pal = frames[len(frames) // 2].quantize(colors=128, method=Image.Quantize.MEDIANCUT)
-out = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
-out[0].save(sys.argv[2], save_all=True, append_images=out[1:], duration=90, loop=0, optimize=True)
-print(len(out), "frames ->", sys.argv[2])
+if sys.argv[2].lower().endswith(".gif"):
+    pal = frames[len(frames) // 2].quantize(colors=128, method=Image.Quantize.MEDIANCUT)
+    frames = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
+    frames[0].save(sys.argv[2], save_all=True, append_images=frames[1:], duration=90, loop=0, optimize=True)
+else:
+    frames[0].save(sys.argv[2], save_all=True, append_images=frames[1:], duration=90, loop=0, quality=80, method=6)
+print(len(frames), "frames ->", sys.argv[2])
