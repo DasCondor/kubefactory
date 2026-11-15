@@ -5,7 +5,7 @@
 A backend plugin adds a new kind of source to KubeFactory: a hypervisor, a
 NAS, a home-automation hub, a cloud API, anything that has "machines". The
 game draws whatever the plugin reports as platforms (nodes), machines (pods),
-workloads and belts (services), and the Krew reads it like any other source.
+workloads and Service pipelines, and the Krew reads it like any other source.
 
 A plugin is a separate program, in any language, that talks to the game over
 its standard input and output. It never runs inside the game, and it never

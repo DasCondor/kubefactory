@@ -21,7 +21,7 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 [![License: MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20browser-8b949e)
 
-<img src="docs/flythrough.webp" width="100%" alt="Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service belts and a failing pod's alarm">
+<img src="docs/flythrough.webp" width="100%" alt="Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service lines and a failing pod's alarm">
 
 [Play](#-play-in-the-browser-sandbox-demo) ·
 [Download](#-download) ·
@@ -629,7 +629,7 @@ tier colours mark every button in the panels.
 
 Other keys: WASD, Shift sprint, Space jump (double-tap for hoverpack, Ctrl to
 descend), E inspect, MMB copy a machine as blueprint, Tab cluster codex,
-L datapad, G jump to next problem, B belts, F open a machine's storage door,
+L datapad, G jump to next problem, B pipelines (belts), F open a machine's storage door,
 V open a machine's screen (or the LiveView list), R next view on a machine's
 screen, F11 fullscreen, Esc menu.
 
@@ -881,6 +881,7 @@ assets/                     the model library (141 models x 3 tiers) and its cat
 scripts/backend_native.gd   real clusters through kf-agent (default)
 scripts/agent.gd            starts and talks to kf-agent      scripts/connections.gd  saved kubeconfig profiles
 scripts/models.gd           model library loading, doors, screens
+scripts/pipes.gd            Service pipelines from the library's pipe kit
 scripts/liveview.gd         LiveView sessions
 scripts/backend_kubectl.gd  real clusters via kubectl (--kubectl-cli)   scripts/backend_docker.gd   Docker engine
 scripts/backend_demo.gd     simulated clusters   scripts/log_sources.gd      log providers

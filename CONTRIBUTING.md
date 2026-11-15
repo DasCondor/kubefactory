@@ -50,7 +50,7 @@ short version:
 
 | You want to change | Look in |
 |---|---|
-| what a cluster looks like in the world | `scripts/world.gd`, `scripts/machine.gd`, `scripts/platform.gd` |
+| what a cluster looks like in the world | `scripts/world.gd`, `scripts/machine.gd`, `scripts/platform.gd`, `scripts/pipes.gd` |
 | panels, menus, the HUD | `scripts/hud.gd` |
 | keys, tools, the game loop | `scripts/main.gd` |
 | where data comes from | `scripts/backend_*.gd` (native, kubectl, docker, demo); `scripts/cluster.gd` runs them |
