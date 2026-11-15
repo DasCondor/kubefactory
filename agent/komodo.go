@@ -30,7 +30,9 @@ import (
 	"time"
 )
 
-var komodoReads = map[string]bool{"GetVersion": true, "ListServers": true, "ListAllDockerContainers": true}
+// ListAllContainers is the 2.3 name of ListAllDockerContainers; older Cores
+// know only the old one, so komodo.state falls back to it.
+var komodoReads = map[string]bool{"GetVersion": true, "ListServers": true, "ListAllContainers": true, "ListAllDockerContainers": true}
 
 type komodoConn struct {
 	ID        string `json:"id"`
@@ -154,19 +156,37 @@ func komodoRead(c komodoConn, typ string, params map[string]any, out any) error 
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
 		return fail("unsupported", "%s answered with a redirect: check the address", c.Name)
 	case resp.StatusCode == 404:
-		return fail("unsupported", "%s has no Komodo API at this address (HTTP 404)", c.Name)
+		e := fail("unsupported", "%s has no Komodo API at this address (HTTP 404)", c.Name)
+		e.Extra = map[string]any{"http": 404}
+		return e
 	case resp.StatusCode < 200 || resp.StatusCode >= 300:
 		detail := strings.Join(strings.Fields(string(data)), " ")
 		if len(detail) > 200 {
 			detail = detail[:200] + "..."
 		}
 		detail = strings.ReplaceAll(strings.ReplaceAll(detail, ks.K, "[key]"), ks.S, "[secret]")
-		return fail("other", "%s answered HTTP %d: %s", c.Name, resp.StatusCode, detail)
+		e := fail("other", "%s answered HTTP %d: %s", c.Name, resp.StatusCode, detail)
+		e.Extra = map[string]any{"http": resp.StatusCode}
+		return e
 	}
 	if json.Unmarshal(data, out) != nil {
 		return fail("unsupported", "%s did not answer with JSON: this may not be Komodo Core", c.Name)
 	}
 	return nil
+}
+
+// komodoUnknownRequest: the Core answered, but rejected the request itself
+// (400, 404 or 422), as one does for a request type it does not know.
+func komodoUnknownRequest(err error) bool {
+	var e *opError
+	if !errors.As(err, &e) || e.Extra == nil {
+		return false
+	}
+	switch e.Extra["http"] {
+	case 400, 404, 422:
+		return true
+	}
+	return false
 }
 
 func registerKomodo() {
@@ -315,8 +335,16 @@ func registerKomodo() {
 		// Komodo 2.3 pages this list (Core's default_pagination_limit, 30 unless
 		// configured) and returns only the first page when no limit is given.
 		// limit 0 asks for every container; older Cores ignore the field.
+		// The request is ListAllContainers from 2.3 on; a Core that does not
+		// know that name rejects it as a bad request, and gets the old name.
 		var containers []json.RawMessage
-		if err := komodoRead(c, "ListAllDockerContainers", map[string]any{"limit": 0}, &containers); err != nil {
+		params := map[string]any{"limit": 0}
+		err = komodoRead(c, "ListAllContainers", params, &containers)
+		if komodoUnknownRequest(err) {
+			containers = nil
+			err = komodoRead(c, "ListAllDockerContainers", params, &containers)
+		}
+		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"servers": servers, "containers": containers}, nil

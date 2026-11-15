@@ -65,7 +65,7 @@ func _run() -> void:
 			root.get_texture().get_image().save_png(dir.path_join("komodo.png"))
 	var rec = FileAccess.get_file_as_string(OS.get_environment("KF_MOCK_KOMODO_RECORD"))
 	var lines = Array(rec.split("\n", false)).map(func(l): return JSON.parse_string(l))
-	_check("only /read was ever called, with the three read requests", lines.all(func(l): return l["path"] == "/read" and l["type"] in ["GetVersion", "ListServers", "ListAllDockerContainers"]), lines.size())
+	_check("only /read was ever called, with the read requests only", lines.all(func(l): return l["path"] == "/read" and l["type"] in ["GetVersion", "ListServers", "ListAllContainers", "ListAllDockerContainers"]), lines.size())
 	game.queue_free()
 	await process_frame
 	print("KOMODO PASSED" if _fails.is_empty() else "KOMODO FAILED: " + ", ".join(_fails))

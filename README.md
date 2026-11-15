@@ -268,7 +268,7 @@ Using [Komodo](https://komo.do) for your Docker hosts? Esc > Switch cluster >
 Settings > API keys; a read-only key is enough). Every server becomes a
 platform and every container a machine, and the Krew reads them. KubeFactory
 sends Komodo only read requests (`GetVersion`, `ListServers`,
-`ListAllDockerContainers`), never `/write` or `/execute`, and offers no
+`ListAllContainers`, or `ListAllDockerContainers` on a Core older than 2.3), never `/write` or `/execute`, and offers no
 actions on a Komodo connection: changes stay in Komodo. The key and secret are
 sealed by the companion and never shown again.
 

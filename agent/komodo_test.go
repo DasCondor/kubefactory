@@ -18,7 +18,9 @@ const (
 
 // A fake Komodo Core: POST /read only, the request shape and headers of
 // komodo_client's request.rs, and the list shapes of its entities.
-func fakeKomodo(t *testing.T, seen *[]string) *httptest.Server {
+// newNames: answer the 2.3 request name ListAllContainers; otherwise only the
+// old ListAllDockerContainers, rejecting the new one as unknown (422).
+func fakeKomodo(t *testing.T, seen *[]string, newNames bool) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/read", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.Header.Get("content-type") != "application/json" {
@@ -43,7 +45,12 @@ func fakeKomodo(t *testing.T, seen *[]string) *httptest.Server {
 		case "ListServers":
 			w.Write([]byte(`[{"id":"s1","name":"pve-docker-1","tags":[],"info":{"state":"Ok","region":"","address":"https://10.0.0.11:8120"}},
 				{"id":"s2","name":"nas","tags":[],"info":{"state":"NotOk","region":""}}]`))
-		case "ListAllDockerContainers":
+		case "ListAllContainers", "ListAllDockerContainers":
+			if (req.Type == "ListAllContainers") != newNames {
+				w.WriteHeader(422)
+				w.Write([]byte(`{"error":"unknown variant"}`))
+				return
+			}
 			// Komodo 2.3 pages this list: without "limit": 0 only the first page
 			// (default_pagination_limit, here 1) comes back.
 			all := []string{`{"server_id":"s1","name":"immich-server","id":"abc","image":"ghcr.io/immich-app/immich-server:release","state":"running","status":"Up 3 days","ports":[{"IP":"0.0.0.0","PrivatePort":2283,"PublicPort":2283,"Type":"tcp"}],"networks":["immich"]}`,
@@ -68,7 +75,7 @@ func TestKomodo(t *testing.T) {
 	ops = map[string]handler{}
 	registerAll()
 	var seen []string
-	f := fakeKomodo(t, &seen)
+	f := fakeKomodo(t, &seen, false)
 	if !canSeal() {
 		// no protected storage here (Linux, macOS today): a key must be refused, never kept in the clear
 		if _, e := call(t, "komodo.save", map[string]any{"base_url": f.URL, "key": testKomodoKey, "secret": testKomodoSecret}); e == nil || e.Kind != "unsupported" {
@@ -104,9 +111,22 @@ func TestKomodo(t *testing.T) {
 			t.Fatal("something other than /read was called")
 		}
 	}
-	if strings.Join(seen, ",") != "GetVersion,ListServers,ListAllDockerContainers" {
+	// an older Core: the new name is refused, the old one answers
+	if strings.Join(seen, ",") != "GetVersion,ListServers,ListAllContainers,ListAllDockerContainers" {
 		t.Fatalf("requests: %v", seen)
 	}
+	// a 2.3 Core: the new name answers and the old one is not sent
+	var seen23 []string
+	f23 := fakeKomodo(t, &seen23, true)
+	c23, e := call(t, "komodo.save", map[string]any{"name": "Komodo 2.3", "base_url": f23.URL, "key": testKomodoKey, "secret": testKomodoSecret})
+	if e != nil {
+		t.Fatal(e)
+	}
+	st, e = call(t, "komodo.state", map[string]any{"id": c23["id"]})
+	if e != nil || len(st["containers"].([]any)) != 2 || strings.Join(seen23, ",") != "ListServers,ListAllContainers" {
+		t.Fatalf("2.3 state: %v %v %v", st, e, seen23)
+	}
+	call(t, "komodo.remove", map[string]any{"id": c23["id"]})
 	// the whitelist holds even inside the package
 	cc, _ := komodoFind(c["id"].(string))
 	var x any
