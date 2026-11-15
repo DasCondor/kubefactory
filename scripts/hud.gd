@@ -565,19 +565,48 @@ func on_state(st: Dictionary) -> void:
 func modal_open() -> bool:
 	return _modal != null
 
-# On a touch screen a dialog is scaled to use the screen it has, so its buttons are as large as they can be.
-func _fit_modal(center: Control, panel: Control) -> void:
-	if not is_instance_valid(panel) or not is_instance_valid(center):
+# On a touch screen a dialog fills the screen's width and scrolls if it is
+# taller, rather than shrinking until it fits: desktop dialogs shrunk onto a
+# phone had 4-6 px text. A phone held upright gets the dialog sideways, along
+# its long edge, so the text is as large as in landscape; turning the phone
+# (or not, with rotation lock on) reads it.
+#
+# The enlargement is the window's interface scale (content_scale_factor), not
+# a scaled picture of the dialog, so text is drawn sharp at its new size. It
+# goes back to the player's own interface size when the dialog closes.
+var _fit_cb = Callable()
+
+func _fit_modal(modal: Control, scroll: ScrollContainer, center: Control, panel: Control) -> void:
+	if modal != _modal or not is_instance_valid(panel) or not is_instance_valid(scroll):
+		return                                   # a dialog that has closed
+	var root = get_tree().root
+	var unscaled = get_viewport().get_visible_rect().size * root.content_scale_factor
+	var sideways = unscaled.y > unscaled.x * 1.6
+	var long_edge = unscaled.y if sideways else unscaled.x
+	var f = clampf(long_edge * 0.98 / maxf(panel.size.x, 1.0), 0.5, 4.0)
+	if absf(root.content_scale_factor - f) > 0.01:
+		root.content_scale_factor = f            # size_changed brings us back here
 		return
 	var vp = get_viewport().get_visible_rect().size
-	var s = minf(vp.x * 0.98 / maxf(panel.size.x, 1.0), vp.y * 0.97 / maxf(panel.size.y, 1.0))
-	center.pivot_offset = center.size * 0.5
-	center.scale = Vector2(s, s)
+	var frame = Vector2(vp.y, vp.x) if sideways else vp
+	scroll.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	scroll.rotation = PI / 2.0 if sideways else 0.0
+	scroll.position = Vector2(vp.x, 0) if sideways else Vector2.ZERO
+	scroll.size = frame
+	center.custom_minimum_size = Vector2(frame.x, maxf(frame.y, panel.size.y + 8.0))
+
+func _player_ui_scale() -> void:
+	get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
 
 func close_modal(recapture: bool = true) -> void:
 	if _modal != null:
 		_modal.queue_free()
 		_modal = null
+		if _fit_cb.is_valid():
+			if get_viewport().size_changed.is_connected(_fit_cb):
+				get_viewport().size_changed.disconnect(_fit_cb)
+			_fit_cb = Callable()
+			_player_ui_scale()           # a touch dialog enlarged the interface
 	_modal_kind = ""
 	_dyn = null
 	_dyn_sig = ""
@@ -600,8 +629,18 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_modal.add_child(dim)
 	var center = CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_modal.add_child(center)
+	var fit = touch_u > 0.0 and kind != "screen"
+	var scroll: ScrollContainer = null
+	if fit:
+		# a scrolling frame, for a dialog taller than the screen
+		scroll = ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_modal.add_child(scroll)
+		scroll.add_child(center)
+	else:
+		center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_modal.add_child(center)
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = size
 	var psb = _sb(BG, ORANGE, 0, 18)
@@ -628,7 +667,10 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	head.add_child(_lbl(title, 22, ORANGE))
 	head.add_child(_spacer())
 	var xb = _btn("  X  ", close_modal)
-	if touch_u > 0.0:
+	if fit:
+		xb.custom_minimum_size = Vector2(64, 52)       # enlarged with the dialog
+		xb.add_theme_font_size_override("font_size", 22)
+	elif touch_u > 0.0:
 		xb.custom_minimum_size = Vector2(touch_u * 1.1, touch_u * 0.9)
 		xb.add_theme_font_size_override("font_size", int(touch_u * 0.3))
 	head.add_child(xb)
@@ -637,8 +679,12 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(body)
 	add_child(_modal)
-	if touch_u > 0.0 and kind != "screen":
-		_fit_modal.call_deferred(center, panel)
+	if fit:
+		# a bound method, not a lambda: Godot 4.3 crashed calling a deferred lambda
+		_fit_cb = _fit_modal.bind(_modal, scroll, center, panel)
+		panel.resized.connect(_fit_cb)                # content grew or shrank
+		get_viewport().size_changed.connect(_fit_cb, CONNECT_DEFERRED)
+		_fit_cb.call_deferred()
 	if sfx != null and not (pad and was_pad):
 		sfx.play("pad" if pad else "click", -12.0)
 	player.enabled = false
@@ -3969,11 +4015,13 @@ func open_krew(focus: String = "") -> void:
 		return
 	_krew_focus = focus
 	_krew_sig = ""
+	# on a touch screen: a narrow layout (two lines a finding), so the dialog
+	# can be enlarged until its text is readable on a phone
 	var compact = touch != null and touch.active
-	var body = _open_modal("krew", focus, "KREW  //  OPERATIONS", Vector2(1260, 800))
+	var body = _open_modal("krew", focus, "KREW  //  OPERATIONS", Vector2(760, 800) if compact else Vector2(1260, 800))
 	# the roster: every worker, what it is doing, and how many findings it holds
 	var roster = GridContainer.new()
-	roster.columns = 4
+	roster.columns = 2 if compact else 4
 	roster.add_theme_constant_override("h_separation", 8)
 	roster.add_theme_constant_override("v_separation", 6)
 	for w in krew.WORKERS:
@@ -3989,14 +4037,18 @@ func open_krew(focus: String = "") -> void:
 		var b = _btn("Only " + str(w["name"]).capitalize() if _krew_focus != id else "Showing", func(): open_krew("" if _krew_focus == id else id), "normal", true)
 		v.add_child(b)
 		pc.add_child(v)
-		pc.custom_minimum_size.x = 296
+		pc.custom_minimum_size.x = 364 if compact else 296
 		roster.add_child(pc)
 	body.add_child(roster)
 	var src = str(cluster.state.get("source", ""))
 	var bar = _row(8)
+	var info = bar
+	if compact:                     # the note on its own line, the buttons below it
+		info = _row(8)
+		body.add_child(info)
 	if src == "simulation":
-		bar.add_child(_lbl("SIMULATED", 13, K.health_color("warn")))
-	bar.add_child(_lbl("Nothing here changes by itself: a proposed action runs only when you approve it.", 12, DIM))
+		info.add_child(_lbl("SIMULATED", 13, K.health_color("warn")))
+	info.add_child(_lbl("Nothing changes by itself: a proposed action runs only when you approve it." if compact else "Nothing here changes by itself: a proposed action runs only when you approve it.", 12, DIM))
 	bar.add_child(_spacer())
 	if src in ["docker", "simulation"]:
 		bar.add_child(_btn("Scan images and volumes", func():
@@ -4008,8 +4060,9 @@ func open_krew(focus: String = "") -> void:
 	bar.add_child(_btn("Export Markdown", func(): _krew_export("md")))
 	bar.add_child(_btn("Export JSON", func(): _krew_export("json")))
 	body.add_child(bar)
-	body.add_child(_table_head("krew", [["sev", "SEVERITY", 100], ["worker", "WORKER", 110], ["title", "FINDING", 560], ["resource", "RESOURCE", 260], ["age", "SEEN FOR", 110]],
-		func(): _fill_krew(true), krew.findings.size(), 17 if compact else 12))
+	var cols = [["sev", "SEVERITY", 90], ["worker", "WORKER", 100], ["title", "FINDING", 300], ["age", "SEEN FOR", 100]] if compact else \
+		[["sev", "SEVERITY", 100], ["worker", "WORKER", 110], ["title", "FINDING", 560], ["resource", "RESOURCE", 260], ["age", "SEEN FOR", 110]]
+	body.add_child(_table_head("krew", cols, func(): _fill_krew(true), krew.findings.size()))
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -4051,17 +4104,27 @@ func _krew_row(f: Dictionary) -> Control:
 	pc.add_theme_stylebox_override("panel", sb)
 	var v = _col(4)
 	pc.add_child(v)
+	var narrow = touch_u > 0.0          # touch: two lines, the finding wrapped under its heading
+	var tw = 700 if narrow else 1150     # width of wrapped text
 	var r = _row(10)
-	r.add_child(_fixed(_lbl(str(f["severity"]).to_upper(), 13, SEV_COLORS.get(f["severity"], DIM)), 100))
-	r.add_child(_fixed(_lbl(krew.worker(f["worker"]).get("name", f["worker"]), 13, krew.worker(f["worker"]).get("color", TXT)), 110))
+	r.add_child(_fixed(_lbl(str(f["severity"]).to_upper(), 13, SEV_COLORS.get(f["severity"], DIM)), 90 if narrow else 100))
+	r.add_child(_fixed(_lbl(krew.worker(f["worker"]).get("name", f["worker"]), 13, krew.worker(f["worker"]).get("color", TXT)), 100 if narrow else 110))
 	var t = _lbl(str(f["title"]), 14)
-	t.clip_text = true
-	r.add_child(_fixed(t, 560))
 	var res = _lbl(str(f["resource"]), 12, DIM)
 	res.clip_text = true
-	r.add_child(_fixed(res, 260))
 	var when = float(f.get("resolved_at", f["first_seen"]))
-	r.add_child(_fixed(_lbl(("resolved " if f.has("resolved_at") else "") + K.fmt_age(when), 12, DIM), 110))
+	var age = _lbl(("resolved " if f.has("resolved_at") else "") + K.fmt_age(when), 12, DIM)
+	if narrow:
+		r.add_child(_fixed(res, 300))
+		r.add_child(age)
+		r.add_child(_spacer())
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		t.custom_minimum_size.x = tw
+	else:
+		t.clip_text = true
+		r.add_child(_fixed(t, 560))
+		r.add_child(_fixed(res, 260))
+		r.add_child(_fixed(age, 110))
 	var key = str(f["key"])
 	r.add_child(_btn("Hide" if _krew_open.has(key) else "Details", func():
 		if _krew_open.has(key):
@@ -4070,22 +4133,24 @@ func _krew_row(f: Dictionary) -> Control:
 			_krew_open[key] = true
 		_fill_krew(true)))
 	v.add_child(r)
+	if narrow:
+		v.add_child(t)
 	if not _krew_open.has(key):
 		return pc
 	for e in f["evidence"]:
 		var el = _lbl("·  " + str(e), 13, TXT)
 		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		el.custom_minimum_size.x = 1150
+		el.custom_minimum_size.x = tw
 		v.add_child(el)
 	if str(f["proposal"]) != "":
 		var pl = _lbl("Proposed:  " + str(f["proposal"]), 13, Color(0.6, 0.9, 1.0))
 		pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		pl.custom_minimum_size.x = 1150
+		pl.custom_minimum_size.x = tw
 		v.add_child(pl)
 	if str(f["risk"]) != "":
 		var rl = _lbl("Risk:  " + str(f["risk"]), 13, K.health_color("warn"))
 		rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rl.custom_minimum_size.x = 1150
+		rl.custom_minimum_size.x = tw
 		v.add_child(rl)
 	var acts = _row(8)
 	var uids: Array = f.get("uids", []).filter(func(u): return world.machines.has(str(u)))
@@ -4141,13 +4206,15 @@ func open_foreman() -> void:
 	var sc_keep = 0.0
 	if _modal_kind == "foreman" and is_instance_valid(_fm_scroll):
 		sc_keep = _fm_scroll.scroll_vertical
-	var body = _open_modal("foreman", "", "FOREMAN  //  OPERATIONS", Vector2(1260, 820))
+	var narrow = touch_u > 0.0          # touch: a narrow layout, enlarged until readable
+	var tw = 720 if narrow else 1180     # width of wrapped text
+	var body = _open_modal("foreman", "", "FOREMAN  //  OPERATIONS", Vector2(760, 820) if narrow else Vector2(1260, 820))
 	var idn = foreman.identity()
 	var head = _row(10)
 	head.add_child(_lbl(str(idn["label"]).to_upper(), 16, idn["color"]))
 	var st = _lbl(foreman.status_line(), 13, K.health_color("bad") if foreman.status in ["offline", "unavailable"] else DIM)
 	st.clip_text = true
-	head.add_child(_fixed(st, 640))
+	head.add_child(_fixed(st, 300 if narrow else 640))
 	head.add_child(_spacer())
 	if foreman.available():
 		var names = ["Rules only"]
@@ -4176,7 +4243,7 @@ func open_foreman() -> void:
 	body.add_child(head)
 	var brief = _lbl(foreman.brief(krew, cluster.state), 15, TXT)
 	brief.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	brief.custom_minimum_size.x = 1180
+	brief.custom_minimum_size.x = tw
 	body.add_child(brief)
 	if foreman.status in ["offline", "unavailable"]:
 		var off = _row(8)
@@ -4214,7 +4281,7 @@ func open_foreman() -> void:
 			var te = TextEdit.new()
 			te.text = ctx
 			te.editable = false
-			te.custom_minimum_size = Vector2(1180, 160)
+			te.custom_minimum_size = Vector2(tw, 160)
 			body.add_child(te)
 	elif foreman.available():
 		body.add_child(_lbl("To ask in plain words, add an AI provider (a local Ollama or LM Studio, OpenAI, Claude, or your own endpoint). The incidents below need no AI.", 12, DIM))
@@ -4249,7 +4316,8 @@ func _foreman_answer(last: Dictionary) -> Control:
 	pc.add_child(v)
 	var ql = _lbl("You asked:  " + str(last["question"]), 13, DIM)
 	ql.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ql.custom_minimum_size.x = 1140
+	var aw = 700 if touch_u > 0.0 else 1140
+	ql.custom_minimum_size.x = aw
 	v.add_child(ql)
 	if foreman.status == "asking":
 		v.add_child(_lbl("%s is thinking..." % last.get("provider", "The provider"), 14, DIM))
@@ -4257,12 +4325,12 @@ func _foreman_answer(last: Dictionary) -> Control:
 	if last.has("error"):
 		var el = _lbl(str(last["error"]), 14, K.health_color("bad"))
 		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		el.custom_minimum_size.x = 1140
+		el.custom_minimum_size.x = aw
 		v.add_child(el)
 		return pc
 	var al = _lbl(str(last["answer"]) if str(last["answer"]) != "" else "(no answer)", 15, TXT)
 	al.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	al.custom_minimum_size.x = 1140
+	al.custom_minimum_size.x = aw
 	v.add_child(al)
 	v.add_child(_lbl("%s · %s · %.1f s%s. An AI can be wrong: check before you approve." % [last.get("provider", ""), last.get("model", ""), float(last.get("ms", 0)) / 1000.0,
 		" · SIMULATED world" if str(cluster.state.get("source", "")) == "simulation" else ""], 11, DIM))
@@ -4282,7 +4350,7 @@ func _foreman_answer(last: Dictionary) -> Control:
 		if why != "":
 			var wl = _lbl(why, 12, DIM)
 			wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			wl.custom_minimum_size.x = 1120
+			wl.custom_minimum_size.x = aw - 20
 			v.add_child(wl)
 	return pc
 
@@ -4291,17 +4359,29 @@ func _foreman_incident(inc: Dictionary) -> Control:
 	var sb = _sb(BG2, SEV_COLORS.get(inc["severity"], DIM), 0, 8)
 	sb.border_width_left = 4
 	pc.add_theme_stylebox_override("panel", sb)
+	var narrow = touch_u > 0.0          # touch: two lines, the finding wrapped under its heading
+	var v = _col(4)
+	pc.add_child(v)
 	var r = _row(10)
-	pc.add_child(r)
+	v.add_child(r)
 	r.add_child(_fixed(_lbl(str(inc["severity"]).to_upper(), 13, SEV_COLORS.get(inc["severity"], DIM)), 80))
-	r.add_child(_fixed(_lbl(str(inc["id"]), 12, DIM), 100))
+	if not narrow:
+		r.add_child(_fixed(_lbl(str(inc["id"]), 12, DIM), 100))
 	var res = _lbl(str(inc["resource"]), 13)
 	res.clip_text = true
 	r.add_child(_fixed(res, 280))
 	var t = _lbl(str(inc["findings"][0]["title"]) + ("  (+%d more)" % (inc["findings"].size() - 1) if inc["findings"].size() > 1 else ""), 13)
-	t.clip_text = true
-	r.add_child(_fixed(t, 470))
-	r.add_child(_fixed(_lbl(", ".join(PackedStringArray(inc["workers"].map(func(w): return str(w).capitalize()))), 12, DIM), 150))
+	var workers = _lbl(", ".join(PackedStringArray(inc["workers"].map(func(w): return str(w).capitalize()))), 12, DIM)
+	if narrow:
+		r.add_child(workers)
+		r.add_child(_spacer())
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		t.custom_minimum_size.x = 700
+		v.add_child(t)
+	else:
+		t.clip_text = true
+		r.add_child(_fixed(t, 470))
+		r.add_child(_fixed(workers, 150))
 	r.add_child(_btn("%d proposal%s" % [inc["proposals"].size(), "" if inc["proposals"].size() == 1 else "s"] if not inc["proposals"].is_empty() else "Details", func():
 		for f in inc["findings"]:
 			_krew_open[str(f["key"])] = true
