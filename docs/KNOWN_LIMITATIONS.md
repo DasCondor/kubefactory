@@ -100,6 +100,23 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
 - The helper scripts (install, dev cluster, packaging) are PowerShell on
   Windows; Linux and macOS have `tools/package.sh` only.
 
+## VPN gateways
+
+- **Gluetun only.** A container is a VPN gateway when its image is Gluetun's;
+  other VPN clients are not recognised.
+- **The outside address** is what Gluetun recorded in `/tmp/gluetun/ip`, read
+  at most once a minute: verified live on a throw-away stand-in container
+  (`tests/live/vpn_docker_test.gd`), not against a real VPN provider. Through
+  the read-only Docker proxy (no `exec`) and on Kubernetes it is shown as not
+  read. Country and city of the exit are not shown: Gluetun does not write
+  them to that file.
+- **Inside** shows the addresses Docker or Kubernetes reports. Whether the
+  tunnel is really up is Gluetun's to say; KubeFactory does not test for leaks.
+- On Kubernetes a Gluetun sidecar carries its whole pod (that is how pods
+  work); separate pods cannot share one gateway.
+- The Porter setup was checked with `docker compose config` and a YAML parse;
+  it has not been run with a real VPN account.
+
 ## Server mode and plugins
 
 - **Server mode** was tested with a headless server and client games on this

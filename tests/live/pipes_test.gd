@@ -34,7 +34,7 @@ func _run() -> void:
 		_check("the belts are pipes", w._pipe_mode and w._pipes != null and w._pipes.count() > 0, w._pipes.count() if w._pipes != null else 0)
 		_check("the code-drawn tracks are hidden", not w._belt_mm.visible)
 		var valves = w._pipes._sets["valve"][0].instance_count
-		var drops = w._paths.size()
+		var drops = w._paths.filter(func(pa): return pa.get("valve", true)).size()     # a VPN tunnel rises out of a machine: no valve
 		_check("one valve on every drop into a machine", valves == drops, "%d valves, %d drops" % [valves, drops])
 		_check("corners have junctions", w._pipes._sets["joint"][0].instance_count > 0, w._pipes._sets["joint"][0].instance_count)
 		_check("what flows is a collar on the pipe", w._item_mm.multimesh.mesh is CylinderMesh)

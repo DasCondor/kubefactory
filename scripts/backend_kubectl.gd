@@ -291,7 +291,7 @@ static func normalize(list: Dictionary, ctx: String) -> Dictionary:
 					"restarts": restarts, "wkind": wkind, "wname": wname,
 					"ip": str(status.get("podIP", "")), "created": created,
 					"labels": labels, "containers": conts, "phase": phase, "finished": finished,
-					"sec": K.pod_security(spec), "store": K.pod_storage(spec)})
+					"sec": K.pod_security(spec), "store": K.pod_storage(spec), "net": K.pod_net(spec, status)})
 			"Deployment", "StatefulSet":
 				st.workloads.append({"kind": kind, "name": nm, "ns": ns,
 					"replicas": int(spec.get("replicas", 1)), "ready": int(status.get("readyReplicas", 0)),

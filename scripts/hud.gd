@@ -817,6 +817,37 @@ func on_logs(key: String, text: String) -> void:
 		_logs.text = text
 		_logs.scroll_vertical = _logs.get_line_count()
 
+# Its network: its own addresses, the VPN gateway it goes through, or, for a
+# gateway, both sides of the tunnel.
+func _pod_network(p: Dictionary) -> void:
+	var net: Dictionary = p.get("net", {})
+	if net.is_empty():
+		return
+	var v: Dictionary = net.get("vpn", {})
+	var via = str(net.get("via", ""))
+	if v.is_empty() and via == "" and net.get("addrs", []).is_empty():
+		return
+	_dyn.add_child(_lbl("NETWORK", 13, DIM))
+	if via != "":
+		var gw = K.find_pod(cluster.state, via)
+		var gname = str(gw["name"]) if gw != null else via.left(12)
+		var behind = gw != null and not gw.get("net", {}).get("vpn", {}).is_empty()
+		_dyn.add_child(_lbl("Has no network of its own: uses %s's%s. Everything it sends leaves through %s." % [gname, " VPN tunnel" if behind else " network", gname],
+			14, Color(0.75, 0.6, 1.0) if behind else TXT))
+		if behind:
+			_dyn.add_child(_lbl("Outside, the internet sees:  " + (str(gw["net"]["vpn"]["exit_ip"]) if str(gw["net"]["vpn"].get("exit_ip", "")) != "" else "(unknown: " + str(gw["net"]["vpn"].get("exit_note", "")) + ")"), 14, Color(0.95, 0.75, 0.3)))
+	elif not v.is_empty():
+		var inside = _lbl(K.vpn_inside_text(p).replace("\n", "     "), 14, Color(0.75, 0.6, 1.0))
+		inside.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		inside.custom_minimum_size.x = 820
+		_dyn.add_child(inside)
+		var outside = _lbl(K.vpn_outside_text(p).replace("\n", "     "), 14, Color(0.95, 0.75, 0.3))
+		outside.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		outside.custom_minimum_size.x = 820
+		_dyn.add_child(outside)
+	else:
+		_dyn.add_child(_lbl("Addresses:  " + ", ".join(PackedStringArray(net.get("addrs", []))), 14))
+
 func _fill_pod() -> void:
 	var st = cluster.state
 	var p = K.find_pod(st, _modal_arg)
@@ -854,6 +885,7 @@ func _fill_pod() -> void:
 		r.add_child(_fixed(_lbl(c["image"], 14), 440))
 		r.add_child(_fixed(_lbl(c["state"] + ("  (" + c["reason"] + ")" if c["reason"] != "" else ""), 14, DIM), 220))
 		_dyn.add_child(r)
+	_pod_network(p)
 	var b = _row()
 	if w != null and w["kind"] != "DaemonSet" and cluster.cap("scale"):
 		b.add_child(_lbl("SCALE", 13, DIM))

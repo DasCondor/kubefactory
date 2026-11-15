@@ -1314,9 +1314,85 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 					Vector3(mp.x, h, lz), Vector3(mp.x, h, mp.z), Vector3(mp.x, mp.y + 4.3, mp.z)]
 				paths.append({"pts": pts, "color": col})
 				bsig += str(pts[0]) + str(pts[4]) + str(h)
+		# VPN gateways: a feed from every container that uses the gateway's
+		# network (Docker), and the tunnel rising from the gateway to where the
+		# internet sees it. Below the Service pipelines, then up through them.
+		for p in pods:
+			var gw = machines.get(str(p.get("net", {}).get("via", "")))
+			var m = machines.get(p["uid"])
+			if gw != null and m != null and gw != m and not gw.pod.get("net", {}).get("vpn", {}).is_empty():
+				var a = _vpn_anchor(m)
+				var b = _vpn_anchor(gw)
+				var pts = [a, Vector3(a.x, VPN_FEED_H, a.z), Vector3(b.x, VPN_FEED_H, a.z), Vector3(b.x, VPN_FEED_H, b.z), b]
+				paths.append({"pts": pts, "color": VPN_FEED_COL})
+				bsig += "feed" + str(a) + str(b)
+			if m != null and not p.get("net", {}).get("vpn", {}).is_empty():
+				var b = _vpn_anchor(m)
+				var pts = [b, Vector3(b.x, VPN_TUNNEL_H, b.z)]
+				paths.append({"pts": pts, "color": VPN_TUNNEL_COL, "valve": false})
+				bsig += "tunnel" + str(b)
 	if bsig != _belt_sig:
 		_belt_sig = bsig
 		_rebuild_belts(paths)
+	_update_vpn_signs(pods)
+
+# ---- VPN gateways (Gluetun): the two sides of the tunnel, as signs
+#
+# INSIDE, by the gateway: its addresses on your network and what goes through
+# it. OUTSIDE, at the top of the tunnel: the address the internet sees. The
+# signs show whether or not the pipelines are (B only hides the pipes).
+const VPN_FEED_H = 8.0
+const VPN_TUNNEL_H = 26.0
+const VPN_FEED_COL = Color(0.62, 0.42, 0.95)
+const VPN_TUNNEL_COL = Color(0.95, 0.72, 0.22)
+var _vpn_signs = {}      # gateway uid -> {inside, outside, sig}
+
+# where a VPN line leaves a machine: the top, clear of the Service drops
+func _vpn_anchor(m: Node3D) -> Vector3:
+	var top = float(m.get("_top")) if m.get("_top") != null and float(m.get("_top")) > 0.5 else 4.3
+	return m.get_parent().position + m.position + Vector3(1.4, top, -0.9)
+
+func _vpn_sign(col: Color) -> Label3D:
+	var l = Label3D.new()
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.font_size = 64
+	l.pixel_size = 0.011
+	l.outline_size = 16
+	l.outline_modulate = Color(0.02, 0.02, 0.04, 0.95)
+	l.modulate = col
+	l.visibility_range_end = 160.0
+	# drawn over the pipes around it: the addresses are what the sign is for
+	l.no_depth_test = true
+	l.render_priority = 10
+	l.outline_render_priority = 9
+	add_child(l)
+	return l
+
+func _update_vpn_signs(pods: Array) -> void:
+	var seen = {}
+	for p in pods:
+		var m = machines.get(p["uid"])
+		if m == null or p.get("net", {}).get("vpn", {}).is_empty():
+			continue
+		seen[p["uid"]] = true
+		var s = _vpn_signs.get(p["uid"])
+		if s == null:
+			s = {"inside": _vpn_sign(VPN_FEED_COL.lightened(0.35)), "outside": _vpn_sign(VPN_TUNNEL_COL.lightened(0.2)), "sig": ""}
+			_vpn_signs[p["uid"]] = s
+		var b = _vpn_anchor(m)
+		s["inside"].position = b + Vector3(0, 3.2, 0)
+		s["outside"].position = Vector3(b.x, VPN_TUNNEL_H + 2.6, b.z)
+		var inside = K.vpn_inside_text(p)
+		var outside = K.vpn_outside_text(p)
+		if inside + outside != s["sig"]:
+			s["sig"] = inside + outside
+			s["inside"].text = inside
+			s["outside"].text = outside
+	for uid in _vpn_signs.keys():
+		if not seen.has(uid):
+			_vpn_signs[uid]["inside"].queue_free()
+			_vpn_signs[uid]["outside"].queue_free()
+			_vpn_signs.erase(uid)
 
 func _rebuild_belts(paths: Array) -> void:
 	_paths = paths
@@ -1334,7 +1410,7 @@ func _rebuild_belts(paths: Array) -> void:
 				continue
 			var key = str(a) + str(b)
 			if not segs.has(key):
-				segs[key] = [a, b, path["color"], i == pts.size() - 1]     # the last one drops into the machine
+				segs[key] = [a, b, path["color"], i == pts.size() - 1 and path.get("valve", true)]     # the last one drops into the machine
 			if i < pts.size() - 1:
 				joints[str(b)] = [b, path["color"]]                      # a corner
 		path["cum"] = cum
