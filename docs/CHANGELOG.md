@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Fixed
+- **Browser High graphics load on the published site.** GitHub Pages sends
+  the model library gzipped; the browser unpacked it and Godot tried to unpack
+  it again, so High stopped with "the model library's catalog could not be
+  read (HTTP 200)" and the world was drawn in code. Checked with a local
+  server that gzips like Pages.
 - **Komodo: every container, not the first page.** Komodo Core 2.3 pages
   `ListAllDockerContainers`; without a limit only the first page (30 by
   default) came back and the rest of the containers were missing without an

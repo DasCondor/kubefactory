@@ -80,6 +80,11 @@ func _next() -> void:
 func _http_get(url: String, done: Callable) -> void:
 	var r = HTTPRequest.new()
 	r.max_redirects = 0
+	# In the browser, fetch() has already unpacked a gzipped answer (GitHub
+	# Pages gzips JSON and .glb) but the Content-Encoding header is still
+	# there, so Godot would inflate it a second time and get nothing: the
+	# catalog failed with HTTP 200. The browser negotiates compression itself.
+	r.accept_gzip = false
 	add_child(r)
 	r.request_completed.connect(func(_result, code, _headers, body):
 		r.queue_free()
