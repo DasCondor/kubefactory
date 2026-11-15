@@ -33,7 +33,8 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 [Bob](#-bob-the-pod-fixer) ·
 [Server](#a-kubefactory-server-play-like-a-game-client) ·
 [Plugins](#backend-plugins) ·
-[Contributing](CONTRIBUTING.md)
+[Contributing](CONTRIBUTING.md) ·
+[All docs](#-docs-by-topic)
 
 </div>
 
@@ -137,6 +138,23 @@ in a demo; Porter's bundled app setups remain available.
 The broken ones are there for Bob: ask him to read the log and he finds the
 missing `/dev/ttyUSB0` or the compiler killed for memory. The cloud-flavoured
 Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
+
+## 📚 Docs by topic
+
+| Topic | Read |
+|---|---|
+| The Krew: Bob, Gauge, Sentinel, Scout, Scrappy, Archie, Forge, Blueprint | [The Krew](#the-krew-operations-center-key-k) · [Gauge](#gauge-the-resource-desk) · [Bob 2.0](docs/bob-2.0.md) |
+| Foreman and AI providers (Ollama, LM Studio, OpenAI, Claude, custom) | [Foreman](#foreman-incidents-and-plain-language-questions-key-h) · [Security](docs/SECURITY.md) |
+| Docker hosts, read-only and without root | [DOCKER_HOSTS](docs/DOCKER_HOSTS.md) · [limitations](docs/KNOWN_LIMITATIONS.md#docker-hosts) |
+| Komodo (read-only) | [Komodo](#komodo-read-only) · [limitations](docs/KNOWN_LIMITATIONS.md#komodo) |
+| Settings: key remapping, controller, field of view, palettes, interface size | [Settings](#-settings-esc--settings) · [limitations](docs/KNOWN_LIMITATIONS.md#settings-and-controller) |
+| Minimap | [What you see](#-what-you-see) |
+| Graphics presets, including the browser's High preset | [Graphics presets](#-graphics-presets) · [Browser demo](#-play-in-the-browser-sandbox-demo) · [Benchmark](docs/BENCHMARK.md) |
+| Linux and macOS builds, signed releases | [Download](#-download) · [limitations](docs/KNOWN_LIMITATIONS.md#linux-and-macos) |
+| Server mode | [SERVER](docs/SERVER.md) · [Teams](#-teams-multi-user) |
+| Backend plugins | [PLUGINS](docs/PLUGINS.md) · [example plugin](examples/plugins/static-world) |
+| Contributing | [CONTRIBUTING](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) |
+| Releases and what changed | [CHANGELOG](docs/CHANGELOG.md) · [Releases](https://github.com/DasCondor/kubefactory/releases) |
 
 ## 📥 Download
 
@@ -796,8 +814,7 @@ More tests and checks:
 
 The model library can be inspected in a browser with the asset reviewer
 (`tools/model-viewer/index.html`, published at
-`https://dascondor.github.io/kubefactory/model-viewer/` once this branch is
-merged and Pages has deployed): every model at every tier, door open and shut,
+`https://dascondor.github.io/kubefactory/model-viewer/`): every model at every tier, door open and shut,
 with a review checklist you can export.
 
 Want to help? Start with **[CONTRIBUTING](CONTRIBUTING.md)**: setup, where things are, the tests and the ground rules.
