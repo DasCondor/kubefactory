@@ -138,7 +138,8 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
 
 - Placed in the world: the 25 machines, Porter, Bob, Gauge, Foreman (one
   model per provider) and the six workers at their stations (Sentinel, Scout,
-  Scrappy, Archie, Forge, Blueprint). The Krew HQ model and the 101 V2 models
+  Scrappy, Archie, Forge, Blueprint), and the Service pipelines (below). The
+  Krew HQ model and the other 98 V2 models
   (network, storage, structures, props, displays, tools) are shipped but not
   used: they are below the Porter V3 standard or belong to features that do
   not exist yet.
@@ -147,6 +148,17 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
   is not: no model is approved for release, 50 designs are still V2 legacy
   geometry, and its checks were sampled, not exhaustive. Nothing here changes
   that.
+- **The Service pipelines use V2 models, by choice.** Every belt from a
+  Service's depot to its pods is built from the library's `pipe_straight`
+  (the tube takes the Service's colour), the junction block of
+  `conduit_elbow` at each corner, and `pipe_valve` on the drop into each
+  machine. The library marks these "legacy geometry, visual rebuild pending":
+  they are below the V3 standard the other placed models meet, and were
+  placed because the operator asked for them. Checked on Standard, Enhanced
+  and Ultra in the `kubernetes` and `media` worlds (screenshots, no gaps
+  found at corners or drops); not reviewed piece by piece for clipping. The
+  browser's Standard preset and the Compatibility renderer keep the
+  code-drawn belts.
 - **A machine is a pod, and its plate says so.** Pods read POD and Docker
   containers CONTAINER; a pod gets a role model (DATABASE SERVER, CACHE
   SERVER, NETWORK APPLIANCE...) only when the image it runs is that software.

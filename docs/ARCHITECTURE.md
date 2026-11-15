@@ -29,7 +29,8 @@ needs no server, no account and sends no telemetry; a KubeFactory server
 |---|---|
 | `scripts/main.gd` | game loop, input, tools, command-line switches, automated screenshot runs |
 | `scripts/cluster.gd` | owns the active backend; polls on a worker thread; runs actions; audit log; signals `data_ready`, `connect_failed`, `agent_event` |
-| `scripts/world.gd` | turns cluster state into platforms (nodes), machines (pods), belts (services), Porter, Bob and Gauge |
+| `scripts/world.gd` | turns cluster state into platforms (nodes), machines (pods), Service lines, Porter, Bob and Gauge |
+| `scripts/pipes.gd` | the Service lines as pipelines from the library's pipe kit (pipe runs, corner junctions, a valve into each machine); without the library, `world.gd` draws them as conveyor belts |
 | `scripts/machine.gd` | one pod: library model or code-drawn model, door, interior, screen |
 | `scripts/models.gd` | the model library: catalog, tier choice, door, display surfaces and type plate taken from the catalog's anchors |
 | `scripts/hud.gd` | HUD, connection wizard, storage browser, LiveView window, Porter and Bob |
