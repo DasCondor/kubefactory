@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Komodo: every container, not the first page.** Komodo Core 2.3 pages
+  `ListAllDockerContainers`; without a limit only the first page (30 by
+  default) came back and the rest of the containers were missing without an
+  error. KubeFactory now asks for all of them (`limit: 0`).
+
 ## 2.0.0-beta.1 (2026-11-14)
 
 A beta: not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
