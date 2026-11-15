@@ -1,7 +1,11 @@
 # KubeFactory for teams: admin guide
 
-KubeFactory has no server of its own. Every player runs the game with their own
-cluster login, and the cluster is the shared channel between them.
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
+This guide is for teams where every player runs the game with their own
+cluster login, and the cluster is the shared channel between them. The other
+way, one KubeFactory server that everyone connects to with a token, is in
+[SERVER.md](SERVER.md).
 
 ## The model in one minute
 
@@ -18,7 +22,9 @@ The tool-tier policy is a safety rail, not a security boundary: a person with
 
 ## Set up a cluster (once)
 
-    kubectl apply -f deploy/kubefactory.yaml
+```bash
+kubectl apply -f deploy/kubefactory.yaml
+```
 
 This creates the `kubefactory` namespace, the policy ConfigMap, a role that lets
 every signed-in user announce presence and post to the feed, and three
@@ -29,31 +35,37 @@ only local policy applies.
 
 ## Give people access
 
-    # read-only across the cluster (Mk.1)
-    kubectl create clusterrolebinding bob-view --clusterrole=kubefactory-viewer --user=bob
+```bash
+# read-only across the cluster (Mk.1)
+kubectl create clusterrolebinding bob-view --clusterrole=kubefactory-viewer --user=bob
 
-    # build / scale / restart in one namespace only (Mk.2-Mk.3)
-    kubectl create rolebinding alice-ops -n shop --clusterrole=kubefactory-operator --user=alice
+# build / scale / restart in one namespace only (Mk.2-Mk.3)
+kubectl create rolebinding alice-ops -n shop --clusterrole=kubefactory-operator --user=alice
 
-    # everything, for a group (Mk.4-Mk.5)
-    kubectl create clusterrolebinding sre-admin --clusterrole=kubefactory-admin --group=sre
+# everything, for a group (Mk.4-Mk.5)
+kubectl create clusterrolebinding sre-admin --clusterrole=kubefactory-admin --group=sre
+```
 
 Namespace-limited people should have that namespace set in their kubeconfig
 context; the game shows them that namespace only.
 
 ## Set tool tiers
 
-    kubectl edit configmap kubefactory-policy -n kubefactory
+```bash
+kubectl edit configmap kubefactory-policy -n kubefactory
+```
 
-    {
-      "max_tier": 3,                              default for everyone
-      "users":  { "alice": 3, "bob": 1 },         per person (wins over groups)
-      "groups": { "sre": 5 },                     best matching group
-      "protected_namespaces": ["kube-system"],
-      "protected_max_tier": 1,                    limit inside protected namespaces
-      "confirm_tier": 5,                          this tier and above: type the target's name
-      "presence": true
-    }
+```text
+{
+  "max_tier": 3,                              default for everyone
+  "users":  { "alice": 3, "bob": 1 },         per person (wins over groups)
+  "groups": { "sre": 5 },                     best matching group
+  "protected_namespaces": ["kube-system"],
+  "protected_max_tier": 1,                    limit inside protected namespaces
+  "confirm_tier": 5,                          this tier and above: type the target's name
+  "presence": true
+}
+```
 
 Players pick up policy changes within a few seconds. Your own admin user or
 group must be listed with tier 5, or you are held to the default as well.
@@ -68,10 +80,12 @@ group must be listed with tier 5, or you are held to the default as well.
 
 ## Per-player rules and central audit (`policy.json`)
 
-    {
-      "contexts": [ { "match": "prod", "max_tier": 3, "confirm_tier": 4 } ],
-      "audit_webhook": "https://hooks.example.com/..."
-    }
+```json
+{
+  "contexts": [ { "match": "prod", "max_tier": 3, "confirm_tier": 4 } ],
+  "audit_webhook": "https://hooks.example.com/..."
+}
+```
 
 - `contexts`: stricter limits for any kubeconfig context whose name contains
   `match`. The shipped file limits contexts containing "prod" to Mk.3.
@@ -102,15 +116,19 @@ you hand out (`tools\package.ps1` builds it; in the source tree the files are in
   them out on purpose. Grant them only where you would grant `kubectl exec`
   and `kubectl port-forward`, for example:
 
-      kubectl create role kf-inspect -n shop --verb=create --resource=pods/exec,pods/portforward
-      kubectl create rolebinding alice-inspect -n shop --role=kf-inspect --user=alice
+```bash
+  kubectl create role kf-inspect -n shop --verb=create --resource=pods/exec,pods/portforward
+  kubectl create rolebinding alice-inspect -n shop --role=kf-inspect --user=alice
+```
 
   Without them those two features answer "not permitted"; everything else works.
 
 ## Try it on one machine
 
-    tools\dev-cluster.ps1    local 3-node cluster
-    tools\dev-users.ps1      applies the setup and creates two test logins
-    play.bat --context=kind-kubefactory     admin
-    play.bat --context=kf-alice             operator, namespace shop only
-    play.bat --context=kf-bob               viewer
+```powershell
+tools\dev-cluster.ps1    local 3-node cluster
+tools\dev-users.ps1      applies the setup and creates two test logins
+play.bat --context=kind-kubefactory     admin
+play.bat --context=kf-alice             operator, namespace shop only
+play.bat --context=kf-bob               viewer
+```

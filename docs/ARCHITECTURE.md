@@ -1,8 +1,11 @@
 # Architecture
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 KubeFactory is two programs: the game (Godot 4.3, GDScript) and a small native
-companion (`kf-agent`, Go) that the game starts and talks to over a pipe. There
-is no server, no account and no telemetry.
+companion (`kf-agent`, Go) that the game starts and talks to over a pipe. It
+needs no server, no account and sends no telemetry; a KubeFactory server
+([SERVER.md](SERVER.md)) is optional.
 
 ```
  KubeFactory.exe (Godot)                         kf-agent.exe (Go)

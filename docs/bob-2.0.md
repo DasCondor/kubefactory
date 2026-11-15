@@ -1,5 +1,7 @@
 # Bob 2.0: reading the logs
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 Status: **built.** This is the design the feature was built from; the README's
 "Bob 2.0" section describes what shipped. Where the two differ, the code wins:
 the button reads "Read the log with me, Bob", findings are shown as cards (one

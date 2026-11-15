@@ -64,6 +64,7 @@ if ($saved) { [IO.File]::WriteAllText($settings, $saved) }
 
 $base = $all[0]
 $md = @("# Graphics benchmark", "",
+    "<sub>[KubeFactory](../README.md) &middot; [All docs](../README.md#-docs-by-topic) &middot; [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) &middot; [Known limitations](KNOWN_LIMITATIONS.md)</sub>", "",
     "Baseline: release ``$Baseline``. $Resolution, vsync off, the ``$World`` demo world ($($base.machines) machines), a fixed 18-second camera route.",
     "GPU: $(if ($ShowGpu) { $base.gpu } else { 'not recorded (run with -ShowGpu to name it)' }). Median of $Runs runs each. Reproduce with ``tools\bench.ps1``.", "",
     "| Build | Avg fps | vs release | Frame ms | 1% low fps | Draw calls | Objects | Primitives | Video mem MB |",

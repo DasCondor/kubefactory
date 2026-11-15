@@ -1,5 +1,7 @@
 # 2.0 go-live checklist
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 What stands between the published beta and a stable 2.0.0. Status words as in
 [FEATURE_PARITY.md](FEATURE_PARITY.md): **verified live**, **verified in
 simulation**, **not tested**, **unsupported**.

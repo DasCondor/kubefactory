@@ -1,5 +1,7 @@
 # Feature parity
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 Two questions: does 2.0 still do everything 1.0.1 did, and how much of the 2.0
 handoff is in?
 
