@@ -1,30 +1,49 @@
 # Contributing to KubeFactory
 
 Thanks for wanting to help. KubeFactory is a Godot 4.3 game (GDScript) with a
-small Go companion, `kf-agent`, that talks to Kubernetes and holds secrets. You
-do not need a cluster to work on it: the built-in simulation (`--demo`) runs
-everything, and every test below runs without real infrastructure unless it
-says otherwise.
+Go companion, `kf-agent`. You do not need a cluster for most changes: the
+built-in simulation (`--demo`) does not connect to real infrastructure.
 
 ## Getting set up
 
-    git clone https://github.com/DasCondor/kubefactory
-    cd kubefactory
-    powershell -ExecutionPolicy Bypass -File tools\setup.ps1     # fetches Godot 4.3 into engine\ and checks the rest
-    play.bat --demo                                               # the simulated world
+Install Git and Godot 4.3. Go 1.25 or newer is needed to build or test the
+companion; its version requirement is in `agent/go.mod`. Clone the repository,
+or fork it on GitHub and clone your fork if you cannot push to this repository:
 
-The companion is only needed for real clusters, LiveView and the AI
-providers. Build it with `tools\build-agent.ps1` (`-Fetch` downloads a private
-Go toolchain into `.toolchain\` if you have none).
+```sh
+git clone https://github.com/DasCondor/kubefactory.git
+cd kubefactory
+git switch -c my-change
+```
 
-Today the scripts are PowerShell and the builds are Windows and the browser.
-Linux and macOS builds are on the roadmap; GDScript and Go changes are not
-platform-specific, so you can work on most things anywhere Godot 4.3 runs
-(`godot --path . -- --demo`).
+On Windows, the setup script can download Godot and install missing tools via
+winget. Use `-CheckOnly` first to see what it would check without installing:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\setup.ps1 -CheckOnly
+powershell -ExecutionPolicy Bypass -File tools\setup.ps1
+.\play.bat --demo
+```
+
+Docker, kind and kubectl are not needed for the simulation. The setup script
+also installs them if missing; install Godot separately if you do not want
+those tools. On Linux or macOS, install Godot 4.3 for your platform and run this
+from the repository root, replacing `godot` with the executable path if needed:
+
+```sh
+godot --path . -- --demo
+```
+
+The companion is needed for native Kubernetes connections, LiveView and
+providers. On Windows, run `powershell -ExecutionPolicy Bypass -File tools\build-agent.ps1`;
+add `-Fetch` if Go is missing and you want the script to download its pinned
+private toolchain. On Linux or macOS, build it with
+`(cd agent && go build -o bin/kf-agent .)`. Tokens and keys cannot be stored
+on Linux or macOS; see [known limitations](docs/KNOWN_LIMITATIONS.md).
 
 ## Where things are
 
-`docs/ARCHITECTURE.md` maps every script and the companion's operations. The
+[Architecture](docs/ARCHITECTURE.md) maps the scripts and companion operations. The
 short version:
 
 | You want to change | Look in |
@@ -43,24 +62,45 @@ not know where data came from. A new source is a new `backend_*.gd`.
 
 ## Tests
 
-Run these before opening a pull request. They are what CI and the release
-script run.
+Run the relevant checks before opening a pull request. The release packaging
+scripts run the normalization test; the release workflow also tests the Go
+companion. On Windows, from the repository root:
 
-    engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tests/normalize_test.gd
-    powershell -ExecutionPolicy Bypass -File tools\build-agent.ps1 -Test
+```powershell
+engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tests/normalize_test.gd
+powershell -ExecutionPolicy Bypass -File tools\build-agent.ps1 -Test
+```
+
+On Linux or macOS, with Godot and Go on `PATH`:
+
+```sh
+godot --headless --path . -s tests/normalize_test.gd
+(cd agent && go vet ./... && go test ./...)
+```
+
+Go tests that require Windows protected storage cannot exercise that path on
+Linux or macOS; run the Windows tests too when changing credential handling.
 
 In-game tests drive the real game on the simulation and are worth running
-when you touch what they cover (each prints PASSED or the checks that failed):
+when you touch what they cover. For example, on Windows:
 
-    engine\Godot_v4.3-stable_win64_console.exe --path . -s tests/live/krew_ui_test.gd -- --demo
-    engine\Godot_v4.3-stable_win64_console.exe --path . --rendering-method gl_compatibility -s tests/live/krew_ui_test.gd -- --demo
+```powershell
+engine\Godot_v4.3-stable_win64_console.exe --path . -s tests/live/krew_ui_test.gd -- --demo
+engine\Godot_v4.3-stable_win64_console.exe --path . --rendering-method gl_compatibility -s tests/live/krew_ui_test.gd -- --demo
+```
 
 The second line is the renderer the browser build uses; check both when you
-change anything visible. More in the README under "Run from source".
+change anything visible. These tests need a graphical desktop. More test
+commands are in the [README](README.md#-run-from-source).
 
-Tests against real infrastructure (`tests/live/*_live_test.gd`,
-`tools\live-test.ps1`) create their own throw-away containers or clusters and
-remove them afterwards. Never point a test at infrastructure you care about.
+Some tests in `tests/live/` and `tools\live-test.ps1` use real infrastructure.
+Read the specific test and its prerequisites before running it; use disposable
+resources, never infrastructure you care about.
+
+For packaging, Windows uses `tools\package.ps1`; Linux and macOS use
+`tools/package.sh linux` and `tools/package.sh macos`. These need Godot 4.3
+export templates and Go; the macOS universal package must be built on a Mac.
+Packaging writes to `dist/` and replaces its staging output.
 
 ## Ground rules
 
@@ -81,17 +121,27 @@ requests are checked against them:
 
 ## Pull requests
 
-- One topic per pull request, with tests for new behaviour.
-- Update `docs/CHANGELOG.md`, and `docs/KNOWN_LIMITATIONS.md` when something is
-  partial.
-- Screenshots for visible changes, taken from the simulation.
-- New dependencies (Go modules, assets) need a licence that fits MIT; list them
-  in `docs/THIRDPARTY.md`.
+1. Keep each branch focused on one change. Add or update tests for changed
+   behaviour and run the relevant checks above.
+2. Update [the changelog](docs/CHANGELOG.md) for user-visible changes and
+   [known limitations](docs/KNOWN_LIMITATIONS.md) when a feature is partial.
+   Update [feature parity](docs/FEATURE_PARITY.md) if verification changes.
+3. Push your branch to your fork or this repository and open a pull request
+   against `main`. Follow the pull request template: explain what and why,
+   report the exact tests and platforms used, and clearly say what was not
+   tested. Include simulation screenshots for visible changes.
+4. Respond to review feedback and push follow-up commits to the same branch.
+   Do not publish release tags as part of a contribution.
+
+New dependencies (Go modules and assets) need a licence compatible with MIT;
+list them in [third-party notices](docs/THIRDPARTY.md).
 
 By contributing you agree that your contribution is licensed under the
 project's MIT licence.
 
 ## Reporting bugs and security problems
 
-Bugs and ideas: open an issue (there are templates). Security problems: follow
-`docs/SECURITY.md` and do not open a public issue.
+For bugs and ideas, use the repository's issue templates; include the version,
+platform, reproduction steps and relevant redacted logs for bugs. Report
+security problems privately as described in [security](docs/SECURITY.md), not
+in a public issue.
