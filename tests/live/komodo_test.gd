@@ -51,6 +51,13 @@ func _run() -> void:
 		_check("Scout sees the port open on every address", game.krew.findings.has("scout:host-ports:pve-docker-1/immich-server"))
 		await create_timer(2.0).timeout
 		_check("the world built the machines", game.world.machines.size() == 4, game.world.machines.size())
+		var logs = {}
+		c.logs_ready.connect(func(key, text): logs[key] = text)
+		c.act({"op": "logs", "ns": "pve-docker-1", "name": "immich-server", "container": "immich-server", "key": "t:log"})
+		c.act({"op": "logs", "ns": "pve-docker-2", "name": "paperless", "container": "paperless", "key": "t:nolog"})
+		await _wait(func(): return logs.has("t:log") and logs.has("t:nolog"), 15.0)
+		_check("a container's log comes through Komodo, both streams", str(logs.get("t:log", "")).contains("listening on :2283") and str(logs.get("t:log", "")).contains("thumbnail queue slow"), logs.get("t:log"))
+		_check("a key without Komodo's Logs permission is told so", str(logs.get("t:nolog", "")).contains("Logs permission on pve-docker-2"), logs.get("t:nolog"))
 		var done = []
 		c.action_done.connect(func(ok, msg): done.append([ok, msg]))
 		c.read_only = false
@@ -65,7 +72,7 @@ func _run() -> void:
 			root.get_texture().get_image().save_png(dir.path_join("komodo.png"))
 	var rec = FileAccess.get_file_as_string(OS.get_environment("KF_MOCK_KOMODO_RECORD"))
 	var lines = Array(rec.split("\n", false)).map(func(l): return JSON.parse_string(l))
-	_check("only /read was ever called, with the read requests only", lines.all(func(l): return l["path"] == "/read" and l["type"] in ["GetVersion", "ListServers", "ListAllContainers", "ListAllDockerContainers"]), lines.size())
+	_check("only /read was ever called, with the read requests only", lines.all(func(l): return l["path"] == "/read" and l["type"] in ["GetVersion", "ListServers", "ListAllContainers", "ListAllDockerContainers", "GetContainerLog"]), lines.size())
 	game.queue_free()
 	await process_frame
 	print("KOMODO PASSED" if _fails.is_empty() else "KOMODO FAILED: " + ", ".join(_fails))

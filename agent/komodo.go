@@ -31,8 +31,26 @@ import (
 )
 
 // ListAllContainers is the 2.3 name of ListAllDockerContainers; older Cores
-// know only the old one, so komodo.state falls back to it.
-var komodoReads = map[string]bool{"GetVersion": true, "ListServers": true, "ListAllContainers": true, "ListAllDockerContainers": true}
+// know only the old one, so komodo.state falls back to it. GetContainerLog
+// needs the key's user to hold Read plus the Logs permission on the server.
+var komodoReads = map[string]bool{"GetVersion": true, "ListServers": true, "ListAllContainers": true, "ListAllDockerContainers": true,
+	"GetContainerLog": true}
+
+// komodoLogText: Komodo answers a log as a Log entity with stdout and stderr
+// apart (the Docker CLI's two streams); the game shows one text. Many
+// containers log to stderr alone, so the divider appears only between two.
+func komodoLogText(stdout, stderr string) string {
+	out, e := strings.TrimRight(stdout, "\n"), strings.TrimRight(stderr, "\n")
+	switch {
+	case strings.TrimSpace(out+e) == "":
+		return "(no log output)"
+	case out == "":
+		return e
+	case e == "":
+		return out
+	}
+	return out + "\n--- stderr ---\n" + e
+}
 
 type komodoConn struct {
 	ID        string `json:"id"`
@@ -260,7 +278,7 @@ func registerKomodo() {
 			c.Sealed = s
 		}
 		if c.Sealed == "" {
-			return nil, fail("invalid", "enter the API key and secret (Komodo: Settings > API keys; a read-only key is enough)")
+			return nil, fail("invalid", "enter the API key and secret (Komodo: Settings > API keys; a read-only key is enough, plus the Logs permission for logs)")
 		}
 		if idx < 0 {
 			b := make([]byte, 6)
@@ -348,5 +366,49 @@ func registerKomodo() {
 			return nil, err
 		}
 		return map[string]any{"servers": servers, "containers": containers}, nil
+	}
+
+	// The last lines of one container's log, read through Komodo (GetContainerLog).
+	ops["komodo.logs"] = func(raw json.RawMessage) (any, error) {
+		a, err := decode[struct {
+			ID        string `json:"id"`
+			Server    string `json:"server"`      // Komodo's server id (or name)
+			Name      string `json:"server_name"` // for messages only
+			Container string `json:"container"`
+			Tail      int    `json:"tail"`
+		}](raw)
+		if err != nil {
+			return nil, err
+		}
+		if a.Server == "" || a.Container == "" {
+			return nil, fail("invalid", "which server and container?")
+		}
+		// Komodo refuses more than 5000 lines
+		if a.Tail <= 0 {
+			a.Tail = 150
+		}
+		a.Tail = min(a.Tail, 5000)
+		c, err := komodoFind(a.ID)
+		if err != nil {
+			return nil, err
+		}
+		var lg struct {
+			Stdout  string `json:"stdout"`
+			Stderr  string `json:"stderr"`
+			Success bool   `json:"success"`
+		}
+		err = komodoRead(c, "GetContainerLog", map[string]any{"server": a.Server, "container": a.Container, "tail": a.Tail, "timestamps": false}, &lg)
+		var e *opError
+		if errors.As(err, &e) && strings.Contains(e.Msg, "[Logs]") {
+			where := a.Name
+			if where == "" {
+				where = a.Server
+			}
+			return nil, fail("auth", "%s does not let this key read logs: in Komodo, give the key's user the Logs permission on %s (Read alone is not enough)", c.Name, where)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"text": komodoLogText(lg.Stdout, lg.Stderr), "success": lg.Success}, nil
 	}
 }

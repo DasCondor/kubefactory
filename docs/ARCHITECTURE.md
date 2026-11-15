@@ -74,7 +74,7 @@ If it does not exit within 15 seconds, the game terminates its child process.
 | `files.go` | `files.mounts`, `files.list`, `files.read` |
 | `forward.go` | `kube.forward`, `kube.forward_stop` |
 | `browser.go` | `browser.find`, `open`, `close`, `rate`, `navigate`, `input` |
-| `komodo.go` | `komodo.list`, `save`, `remove`, `test`, `state`: Komodo Core, read requests only (a fixed list), key and secret sealed |
+| `komodo.go` | `komodo.list`, `save`, `remove`, `test`, `state`, `logs`: Komodo Core, read requests only (a fixed list), key and secret sealed |
 | `ai.go` | `ai.list`, `save`, `remove`, `test`, `ask`: Foreman's AI providers (OpenAI-compatible and Claude APIs). Keys sealed like provider tokens; cloud consent; bounded, no redirects, no retries |
 | `providers.go` | `provider.list`, `save`, `remove`, `test`, `link`; `grafana.dashboards`, `panels`, `link`; `tautulli.activity`. Tokens sealed in `provider_seal_windows.go` |
 
