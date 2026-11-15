@@ -199,7 +199,10 @@ func start(mode: String, ctx: String = "", profile: String = "") -> void:
 	_find_seq += 1
 	finding_targets = false
 	if backend != null and backend.has_method("cleanup"):
-		_spawn(backend.cleanup)   # closes its session and forwards; off the main thread
+		if backend.get("cleanup_on_main_thread") == true:
+			backend.cleanup()     # quick, and must not run on a worker (see backend_remote.gd)
+		else:
+			_spawn(backend.cleanup)   # closes its session and forwards; off the main thread
 	backend = null
 	detecting = true
 	_spawn(_detect.bind(mode, ctx, _gen, profile))

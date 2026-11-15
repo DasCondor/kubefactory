@@ -202,8 +202,10 @@ for troubleshooting. `check-requirements.ps1` checks for the optional cloud CLIs
 > **2.0 is in beta.** Connecting, managing and storage inspection are verified
 > on a real cluster with running containers (kind) and on a real Docker engine.
 > Not yet tried: any cloud provider, LiveView on a real application through a
-> port-forward, a real Komodo, a Mac, a physical controller, and a server
-> reached from another machine. See
+> port-forward, playing the game against a real Komodo, a physical
+> controller, and a server reached from another machine. On a Mac (Apple
+> Silicon) the game starts and the companion answers; it has not been played
+> there, and an Intel Mac is untried. See
 > [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
 The short version:

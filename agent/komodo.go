@@ -312,8 +312,11 @@ func registerKomodo() {
 		if err := komodoRead(c, "ListServers", nil, &servers); err != nil {
 			return nil, err
 		}
+		// Komodo 2.3 pages this list (Core's default_pagination_limit, 30 unless
+		// configured) and returns only the first page when no limit is given.
+		// limit 0 asks for every container; older Cores ignore the field.
 		var containers []json.RawMessage
-		if err := komodoRead(c, "ListAllDockerContainers", nil, &containers); err != nil {
+		if err := komodoRead(c, "ListAllDockerContainers", map[string]any{"limit": 0}, &containers); err != nil {
 			return nil, err
 		}
 		return map[string]any{"servers": servers, "containers": containers}, nil

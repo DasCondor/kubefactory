@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Komodo: every container, not the first page.** Komodo Core 2.3 pages
+  `ListAllDockerContainers`; without a limit only the first page (30 by
+  default) came back and the rest of the containers were missing without an
+  error. KubeFactory now asks for all of them (`limit: 0`).
+- **Switching away from a KubeFactory server no longer crashes the game.**
+  The server connection was closed from a worker thread; Godot 4.3 corrupted
+  its heap (Windows: `0xc0000374` in ntdll; Linux: SIGSEGV) on the first
+  switch to any other source. It now closes on the main thread, and every use
+  of the connection is locked. Test: `tests/live/remote_switch_test.gd`.
+
+### Changed
+- **Rebinding a key that is already in use asks first.** Settings now says
+  "E is already bound to Inspect / talk. Move it to Move right?" with
+  **Move it here** (the other action loses the key), **Keep both** (the old
+  behaviour) and **Cancel**. Nothing changes until you choose.
+
+### Added
+- **Unbind** (×) beside every action in Settings, and a line naming any action
+  left without a key. An unbound action stays unbound after a restart.
+
 ## 2.0.0-beta.1 (2026-11-14)
 
 A beta: not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested

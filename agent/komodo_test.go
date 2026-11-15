@@ -44,8 +44,14 @@ func fakeKomodo(t *testing.T, seen *[]string) *httptest.Server {
 			w.Write([]byte(`[{"id":"s1","name":"pve-docker-1","tags":[],"info":{"state":"Ok","region":"","address":"https://10.0.0.11:8120"}},
 				{"id":"s2","name":"nas","tags":[],"info":{"state":"NotOk","region":""}}]`))
 		case "ListAllDockerContainers":
-			w.Write([]byte(`[{"server_id":"s1","name":"immich-server","id":"abc","image":"ghcr.io/immich-app/immich-server:release","state":"running","status":"Up 3 days","ports":[{"IP":"0.0.0.0","PrivatePort":2283,"PublicPort":2283,"Type":"tcp"}],"networks":["immich"]},
-				{"server_id":"s1","name":"immich-postgres","id":"def","image":"tensorchord/pgvecto-rs:pg14-v0.2.0","state":"exited","status":"Exited (1) 2 hours ago"}]`))
+			// Komodo 2.3 pages this list: without "limit": 0 only the first page
+			// (default_pagination_limit, here 1) comes back.
+			all := []string{`{"server_id":"s1","name":"immich-server","id":"abc","image":"ghcr.io/immich-app/immich-server:release","state":"running","status":"Up 3 days","ports":[{"IP":"0.0.0.0","PrivatePort":2283,"PublicPort":2283,"Type":"tcp"}],"networks":["immich"]}`,
+				`{"server_id":"s1","name":"immich-postgres","id":"def","image":"tensorchord/pgvecto-rs:pg14-v0.2.0","state":"exited","status":"Exited (1) 2 hours ago"}`}
+			if l, ok := req.Params["limit"].(float64); !ok || l != 0 {
+				all = all[:1]
+			}
+			w.Write([]byte("[" + strings.Join(all, ",") + "]"))
 		default:
 			w.WriteHeader(400)
 		}
