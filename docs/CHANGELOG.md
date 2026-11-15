@@ -10,6 +10,8 @@
   interface scale, not a scaled picture) and scroll when taller; on a phone
   held upright they are drawn sideways, at the size they have in landscape.
   Before, a desktop dialog was shrunk to fit and its text was 4-6 pixels.
+  Foreman and the Krew board have a narrow touch layout (each incident or
+  finding on two lines), so their text is about 12 px on a phone instead of 8.
   Test: `tests/live/touch_dialogs_test.gd`.
 - **Browser High graphics load on the published site.** GitHub Pages sends
   the model library gzipped; the browser unpacked it and Godot tried to unpack

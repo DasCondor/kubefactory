@@ -37,7 +37,7 @@ func _run() -> void:
 	var upright = win.y > win.x * 1.6
 	print("window ", win, "  (upright)" if upright else "  (sideways)", "  interface scale ", own)
 	var shots = OS.get_environment("KF_SHOTS")
-	for d in [["welcome", hud.open_welcome], ["demos", hud.open_demos], ["foreman", hud.open_foreman], ["settings", hud.open_settings], ["pause", hud.open_pause]]:
+	for d in [["welcome", hud.open_welcome], ["demos", hud.open_demos], ["foreman", hud.open_foreman], ["krew", hud.open_krew], ["settings", hud.open_settings], ["pause", hud.open_pause]]:
 		d[1].call()
 		for i in 8:
 			await process_frame
@@ -50,6 +50,9 @@ func _run() -> void:
 		_check("%s: fills the long edge" % d[0], (fill > 0.9 or root.content_scale_factor >= 3.99) and fill <= 1.0,"%.2f of the edge, interface scale %.2f" % [fill, root.content_scale_factor])
 		_check("%s: %s" % [d[0], "turned sideways" if upright else "upright"], is_equal_approx(scroll.rotation, PI / 2.0) == upright, scroll.rotation)
 		_check("%s: enlarged, never shrunk below the player's size" % d[0], root.content_scale_factor >= own - 0.01, root.content_scale_factor)
+		# body text (13 px in the dialog) as drawn on the screen, in window pixels
+		var text_px = 13.0 * win.x / vp.x
+		_check("%s: body text at least 10 px on screen" % d[0], text_px >= 9.95,"%.1f px" % text_px)
 		if shots != "":
 			DirAccess.make_dir_recursive_absolute(shots)
 			root.get_texture().get_image().save_png(shots.path_join("touch_%s_%s.png" % [d[0], "upright" if upright else "sideways"]))
