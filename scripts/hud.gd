@@ -4443,6 +4443,7 @@ func open_foreman_providers() -> void:
 signal settings_changed(key)
 
 var _rebind = ""                   # the action waiting for a key, or ""
+var _rebind_clash = {}             # a key already in use, waiting for a choice: {action, binding, others}
 var _settings_note = ""
 
 func open_settings() -> void:
@@ -4482,6 +4483,18 @@ func open_settings() -> void:
 		open_settings()))
 	if _settings_note != "":
 		col.add_child(_lbl(_settings_note, 13, K.health_color("warn")))
+	if not _rebind_clash.is_empty():
+		var c = _rebind_clash
+		var names = ", ".join(PackedStringArray(c["others"].map(func(o): return Controls.title(o))))
+		var cr = _row(8)
+		cr.add_child(_btn("Move it here (%s loses %s)" % [names, Controls.name_of(c["binding"])], func():
+			_resolve_clash("move"), "primary"))
+		cr.add_child(_btn("Keep both", func(): _resolve_clash("both")))
+		cr.add_child(_btn("Cancel", func(): _resolve_clash("cancel")))
+		col.add_child(cr)
+	var unbound = Controls.unbound()
+	if not unbound.is_empty():
+		col.add_child(_lbl("No key: %s." % ", ".join(PackedStringArray(unbound.map(func(o): return Controls.title(o)))), 13, K.health_color("warn")))
 	var grid = GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 24)
@@ -4494,16 +4507,29 @@ func open_settings() -> void:
 		var act = a[0]
 		var b = _btn("press a key or button..." if waiting else (" / ".join(PackedStringArray(names)) if not names.is_empty() else "unbound"), func():
 			_rebind = act
+			_rebind_clash = {}
 			_settings_note = "Press the new key or mouse button for %s. Esc cancels." % a[1]
 			open_settings(), "primary" if waiting else "normal")
 		b.custom_minimum_size.x = 200
 		r.add_child(b)
+		var x = _btn("×", func():
+			_rebind = ""
+			_rebind_clash = {}
+			Controls.set_bindings(act, [])
+			_keys_changed()
+			_settings_note = "%s has no key now." % a[1]
+			open_settings())
+		x.tooltip_text = "Unbind " + a[1]
+		x.disabled = names.is_empty()
+		r.add_child(x)
 		grid.add_child(r)
 	col.add_child(grid)
 	var kr = _row(8)
 	kr.add_child(_btn("Reset all keys to the defaults", func():
 		for a in Controls.ACTIONS:
 			Controls.set_bindings(a[0], Controls.defaults(a[0]))
+		_rebind_clash = {}
+		_settings_note = ""
 		_keys_changed()
 		open_settings()))
 	col.add_child(kr)
@@ -4575,8 +4601,35 @@ func _input(ev: InputEvent) -> void:
 		open_settings.call_deferred()
 		return
 	var d = Controls.to_data(ev)
-	var clash = Controls.conflicts(act, d)
-	Controls.set_bindings(act, [d])
-	_keys_changed()
-	_settings_note = ("%s is also used for: %s. Both will happen." % [Controls.name_of(d), ", ".join(PackedStringArray(clash))]) if not clash.is_empty() else ""
+	var others = Controls.conflicting_actions(act, d)
+	if others.is_empty():
+		Controls.set_bindings(act, [d])
+		_keys_changed()
+		_settings_note = ""
+	else:
+		# already in use: nothing changes until the player chooses (move, keep both, cancel)
+		_rebind_clash = {"action": act, "binding": d, "others": others}
+		_settings_note = "%s is already bound to %s. Move it to %s?" % [Controls.name_of(d),
+			", ".join(PackedStringArray(Controls.conflicts(act, d))), Controls.title(act)]
 	open_settings.call_deferred()
+
+# The answer to "already bound": move takes the key from the others (they may be left
+# with none), both keeps it on every action, cancel leaves everything as it was.
+func _resolve_clash(choice: String) -> void:
+	var c = _rebind_clash
+	_rebind_clash = {}
+	_settings_note = ""
+	if c.is_empty() or choice == "cancel":
+		open_settings()
+		return
+	var key = Controls.name_of(c["binding"])
+	if choice == "move":
+		var lost = Controls.move_binding(c["action"], c["binding"])
+		var left = lost.filter(func(o): return Controls.bindings(o).is_empty())
+		if not left.is_empty():
+			_settings_note = "%s now has no key: choose one." % ", ".join(PackedStringArray(left.map(func(o): return Controls.title(o))))
+	else:
+		Controls.set_bindings(c["action"], [c["binding"]])
+		_settings_note = "%s does both: %s and %s." % [key, Controls.title(c["action"]), ", ".join(PackedStringArray(c["others"].map(func(o): return Controls.title(o))))]
+	_keys_changed()
+	open_settings()
