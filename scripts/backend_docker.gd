@@ -89,19 +89,22 @@ func _inspect_all(rows: Array) -> void:
 		_inspect[str(i.get("Id", ""))] = {"state": str(i.get("State", {}).get("Status", "")), "sec": K.container_security(i), "store": K.container_storage(i),
 			"net": K.container_net(i), "finished": finished}
 
-# A VPN gateway's outside address: Gluetun writes it to /tmp/gluetun/ip
-# (PUBLICIP_FILE). Read with the container's own `head`, at most every minute,
-# and nothing else: no call out to the internet from here.
-var _exit = {}      # container id -> {"ip", "note", "at"}
+# A VPN's outside address. Images that record it themselves (Gluetun writes
+# /tmp/gluetun/ip) are read with the container's own `head`, at most every
+# minute, with no call to the internet. For the others the operator can ask
+# for it (vpn_check): that one call goes from inside the tunnel, on request.
+var _exit = {}      # container id -> {"ip", "note", "at", "asked"}
 
-func _exit_ip(id: String, running: bool) -> Dictionary:
+func _exit_ip(id: String, running: bool, ip_file: String) -> Dictionary:
 	if not running:
 		return {"ip": "", "note": "the VPN container is not running"}
 	var now = Time.get_unix_time_from_system()
 	var e = _exit.get(id, {})
-	if not e.is_empty() and now - float(e["at"]) < 60.0:
+	if not e.is_empty() and (e.get("asked", false) or now - float(e["at"]) < 60.0):
 		return e
-	var r = _run(["exec", id, "head", "-c", "64", "/tmp/gluetun/ip"], false)
+	if ip_file == "":
+		return {"ip": "", "note": "this image does not record it: use Check now"}
+	var r = _run(["exec", id, "head", "-c", "64", ip_file], false)
 	var ip = r.out.strip_edges() if r.code == 0 else ""
 	if ip != "" and K.valid_ip(ip):
 		e = {"ip": ip, "note": "", "at": now}
@@ -185,10 +188,28 @@ func fetch() -> Dictionary:
 			by_id[via]["net"]["vpn"]["through"].append(p["name"])
 	for p in st.pods:
 		if not p["net"]["vpn"].is_empty():
-			var e = _exit_ip(p["uid"], p["ready"])
+			var e = _exit_ip(p["uid"], p["ready"], str(p["net"]["vpn"].get("ip_file", "")))
 			p["net"]["vpn"]["exit_ip"] = e["ip"]
 			p["net"]["vpn"]["exit_note"] = e["note"]
+			p["net"]["vpn"]["can_check"] = p["ready"] and not remote
 	return st
+
+# Asked for by the operator: the address the internet sees, asked of a
+# what's-my-address service from inside the VPN container (so through its
+# tunnel), with whichever of wget and curl the image has. Nothing else is sent.
+const IP_ECHO = "https://ipinfo.io/ip"
+
+func _vpn_check(id: String) -> Dictionary:
+	if id == "":
+		return {"ok": false, "msg": "which container?", "data": {}}
+	var r = _run(["exec", id, "wget", "-qO-", "-T", "8", IP_ECHO], false)
+	if r.code != 0:
+		r = _run(["exec", id, "curl", "-fsS", "-m", "8", IP_ECHO], false)
+	var ip = r.out.strip_edges().left(64)
+	if r.code != 0 or not K.valid_ip(ip):
+		return {"ok": false, "msg": "Could not ask from inside that container (it needs wget or curl, and a working tunnel)", "data": {}}
+	_exit[id] = {"ip": ip, "note": "asked ipinfo.io from inside the tunnel, " + Time.get_time_string_from_system(), "at": Time.get_unix_time_from_system(), "asked": true}
+	return {"ok": true, "msg": "The internet sees %s from inside that container." % ip, "data": {"ip": ip}}
 
 func run_action(a: Dictionary) -> Dictionary:
 	var special = _app_action(a)
@@ -196,6 +217,8 @@ func run_action(a: Dictionary) -> Dictionary:
 		return special
 	var r
 	match a["op"]:
+		"vpn_check":
+			return _vpn_check(str(a.get("pod", "")))
 		"delete_pod":
 			r = _run(["rm", "-f", a["name"]])
 		"restart":

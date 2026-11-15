@@ -30,7 +30,7 @@ const Remote = preload("res://scripts/backend_remote.gd")
 const LogSources = preload("res://scripts/log_sources.gd")
 const VIEW_OPS = ["logs", "events", "cluster_events", "templates"]
 # read-only operations that hand back data (not text): storage inspection and loopback forwards
-const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan"]
+const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan", "vpn_check"]
 const APP_OPS = ["apply_app", "remove_app", "portainer_install", "portainer_open", "deploy_template", "remove_template"]
 
 var backend = null
@@ -158,6 +158,8 @@ static func describe(a: Dictionary) -> String:
 			return "drain node %s" % a["node"]
 		"logs":
 			return "view logs %s/%s %s%s" % [a["ns"], a["name"], a.get("container", ""), " (previous)" if a.get("previous", false) else ""]
+		"vpn_check":
+			return "ask the internet's view of %s's address from inside its VPN tunnel (ipinfo.io)" % a.get("name", "")
 		"events":
 			return "view events %s/%s" % [a["ns"], a["name"]]
 		"apply_app":

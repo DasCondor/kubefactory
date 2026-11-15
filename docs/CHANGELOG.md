@@ -31,6 +31,9 @@
   of the connection is locked. Test: `tests/live/remote_switch_test.gd`.
 
 ### Changed
+- **VPN pipes are direct:** a container using a VPN's network is piped
+  straight across to it, and a Kubernetes VPN sidecar is drawn as its own unit
+  on the pod's roof, piped into the machine it carries.
 - **Services are pipelines.** Where the model library is in use (desktop, and
   the browser's High preset), the belts from a Service's depot to its pods are
   built from the library's pipe kit: tinted pipe runs with steel flanges, a
@@ -45,6 +48,20 @@
   behaviour) and **Cancel**. Nothing changes until you choose.
 
 ### Added
+- **A text editor** (Esc > Text editor): KubeFactory's settings files and
+  Porter's app setups, and a container's file read-only from the storage
+  browser. Light, dark or System theme (the default), line numbers, wrap,
+  font size, find / replace, go to line, line tools, and Standard, Vim or
+  Nano keys. JSON is checked before saving, the old file is kept as .bak,
+  unsaved changes are asked about, and files that hold credentials are not
+  offered. Test: `tests/live/editor_test.gd`.
+- **More VPN images** are recognised: transmission-openvpn, binhex `*vpn` and
+  hotio images with their VPN on, the OpenVPN and WireGuard clients, NordVPN,
+  ExpressVPN, Surfshark, PIA and Proton VPN clients and Cloudflare WARP, next to
+  Gluetun. **Check now** asks the outside address from inside a VPN's tunnel,
+  on request.
+- **Esc > VPN tunnels:** every VPN with both sides, Check now, Go there, and
+  the downloaders that are not behind a VPN.
 - **Porter's "Media server: Jellyfin + VPN".** Seerr → Radarr / Sonarr →
   Prowlarr → Deluge behind Gluetun → Jellyfin, as Compose and Kubernetes
   files (`apps/media-vpn.*`). The VPN account stays in `apps/vpn.env` or a

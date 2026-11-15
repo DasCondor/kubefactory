@@ -266,17 +266,21 @@ static func sim_net(w: Dictionary, p: Dictionary, running: bool) -> Dictionary:
 		n["addrs"].append("%s (pod)" % p["ip"])
 	var others = []
 	var gw = false
+	var side = ""
 	for c in w["containers"]:
 		if K.is_vpn_image(str(c[1])):
 			gw = true
+			side = str(c[0])
 		else:
 			others.append(str(c[0]))
 	if gw:
 		var env = []
 		for k in SIM_VPN:
 			env.append("%s=%s" % [k, SIM_VPN[k]])
-		var v = K.vpn_settings(env)
+		var v = K.vpn_settings(env, K.vpn_entry("qmcgaw/gluetun"))
 		v["through"] = others
+		v["sidecar"] = side
+		v["can_check"] = running
 		v["exit_ip"] = "203.0.113.%d" % (40 + abs(str(p["uid"]).hash()) % 200) if running else ""
 		v["exit_note"] = "SIMULATED" if running else "the VPN container is not running"
 		n["vpn"] = v
@@ -616,6 +620,9 @@ func _sim_scan() -> Dictionary:
 		"build_cache": {"entries": 46, "reclaimable": 3.1e9, "in_use": 2}}}
 
 func run_action(a: Dictionary) -> Dictionary:
+	if a["op"] == "vpn_check":      # nothing is asked of the internet in a demo
+		return {"ok": true, "msg": "The internet sees 203.0.113.%d from inside that pod (SIMULATED: nothing was asked)." % (40 + abs(str(a.get("pod", "")).hash()) % 200),
+			"data": {"ip": "203.0.113.%d" % (40 + abs(str(a.get("pod", "")).hash()) % 200), "simulated": true}}
 	if a["op"] == "cleanup_scan":
 		_mx.lock()
 		var sres = _sim_scan()

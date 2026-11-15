@@ -16,6 +16,8 @@ const NET = "kf-live-vpn-net"
 const GW = "kf-live-vpn-gateway"
 const DL = "kf-live-vpn-downloader"
 const EXIT = "203.0.113.77"
+const BX_TAG = "kf-live-test/binhex/arch-delugevpn:1"     # a stand-in under a name the registry knows
+const BX = "kf-live-vpn-builtin"
 const SECRET = "kf-test-wireguard-key-must-not-be-kept"
 
 var _results = []
@@ -32,14 +34,17 @@ func _step(name: String, ok: bool, note = "") -> void:
 func _clean() -> void:
 	_docker(["rm", "-f", DL])
 	_docker(["rm", "-f", GW])
+	_docker(["rm", "-f", BX])
 	_docker(["network", "rm", NET])
 	_docker(["rmi", TAG])
+	_docker(["rmi", BX_TAG])
 
 func _init() -> void:
 	var Docker = load("res://scripts/backend_docker.gd")
 	_clean()
 	_docker(["pull", "-q", "busybox:1.36"])
 	_docker(["tag", "busybox:1.36", TAG])
+	_docker(["tag", "busybox:1.36", BX_TAG])
 	_docker(["network", "create", NET])
 	var gw = _docker(["run", "-d", "--name", GW, "--network", NET,
 		"-e", "VPN_SERVICE_PROVIDER=testprovider", "-e", "VPN_TYPE=wireguard", "-e", "SERVER_COUNTRIES=Testland",
@@ -70,6 +75,20 @@ func _init() -> void:
 		_step("the downloader has no network of its own: it uses the gateway's", c["net"]["via"] == g["uid"], c["net"]["via"].left(12))
 		_step("the gateway lists what goes through it", DL in v.get("through", []), v.get("through"))
 		_step("the fake WireGuard key is nowhere in what the game holds", not JSON.stringify(st).contains(SECRET))
+	# an image with its VPN built in (binhex's *vpn images): recognised only with its VPN on
+	var bx = _docker(["run", "-d", "--name", BX, "-e", "VPN_ENABLED=yes", "-e", "VPN_PROV=airvpn", "-e", "VPN_CLIENT=wireguard",
+		"-e", "VPN_PASS=" + SECRET, BX_TAG, "sleep", "300"])
+	OS.delay_msec(1500)
+	st = d.fetch()
+	var b = null
+	for p in st.get("pods", []):
+		if p["name"] == BX:
+			b = p
+	var bv: Dictionary = b["net"]["vpn"] if b != null else {}
+	_step("an image with a built-in VPN is recognised", bx[0] == 0 and bv.get("role") == "built-in" and bv.get("provider") == "airvpn", bv)
+	_step("it carries its own app", BX in bv.get("through", []), bv.get("through"))
+	_step("its outside address can be asked for, and is not guessed", bv.get("exit_ip") == "" and bv.get("can_check") == true, bv.get("exit_note"))
+	_step("its VPN password is nowhere in what the game holds", not JSON.stringify(st).contains(SECRET))
 	_clean()
 	var left = _docker(["ps", "-a", "--filter", "name=kf-live-vpn", "-q"])
 	_step("everything the test made is gone", left[1].strip_edges() == "", left[1])

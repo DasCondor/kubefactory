@@ -46,6 +46,18 @@ func _run() -> void:
 		_check("the outside sign is at the top of the tunnel", s["outside"].position.y > s["inside"].position.y + 15.0, [s["inside"].position.y, s["outside"].position.y])
 	var tunnel = w._paths.filter(func(pa): return pa["color"] == w.VPN_TUNNEL_COL)
 	_check("a tunnel rises from the gateway", tunnel.size() == 1, tunnel.size())
+	_check("the sidecar is its own VPN unit on the pod's roof", s != null and s["unit"] != null and is_instance_valid(s["unit"]))
+	var feed = w._paths.filter(func(pa): return pa["color"] == w.VPN_FEED_COL)
+	_check("a direct pipe runs from the VPN unit into the machine it carries", feed.size() == 1 and feed[0]["pts"].size() == 3, feed.size())
+	game.hud.open_vpn()
+	await create_timer(0.6).timeout
+	var vtext = "\n".join(PackedStringArray(game.hud._modal.find_children("*", "Label", true, false).map(func(l): return l.text)))
+	_check("the VPN panel shows both sides", vtext.contains("INSIDE") and vtext.contains(v["exit_ip"]))
+	_check("and the downloaders that are not behind a VPN (qBittorrent in the Plex suite)", vtext.contains("DOWNLOADERS NOT BEHIND A VPN") and vtext.contains("qbittorrent"))
+	if OS.get_environment("KF_SHOTS") != "":
+		DirAccess.make_dir_recursive_absolute(OS.get_environment("KF_SHOTS"))
+		root.get_texture().get_image().save_png(OS.get_environment("KF_SHOTS").path_join("vpn_panel_list.png"))
+	game.hud.close_modal(false)
 	game.hud.open_pod(gw["uid"])
 	await create_timer(0.8).timeout
 	var panel_text = "\n".join(PackedStringArray(game.hud._modal.find_children("*", "Label", true, false).map(func(l): return l.text)))

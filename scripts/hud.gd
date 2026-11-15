@@ -599,6 +599,11 @@ func _player_ui_scale() -> void:
 	get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
 
 func close_modal(recapture: bool = true) -> void:
+	# the editor asks before unsaved changes are lost, however it is closed
+	if _modal_kind == "editor" and is_instance_valid(_editor) and _editor.modified() and not _editor_closing:
+		_editor.request_close()
+		return
+	_editor_closing = false
 	if _modal != null:
 		_modal.queue_free()
 		_modal = null
@@ -817,6 +822,127 @@ func on_logs(key: String, text: String) -> void:
 		_logs.text = text
 		_logs.scroll_vertical = _logs.get_line_count()
 
+# ----- the text editor (text_editor.gd): KubeFactory's own settings files, and
+# a container's file read-only from the storage browser
+const TextEditor = preload("res://scripts/text_editor.gd")
+var _editor: Node = null
+var _editor_closing = false
+
+# The files the editor offers: the settings files next to the game and Porter's
+# app setups. Files that hold credentials are left out on purpose: they are
+# edited outside the game, so a key is never on screen (portainer.json holds an
+# API key, apps/vpn.env a VPN account).
+const EDITOR_SKIP = ["portainer.json", "vpn.env", "server-tokens.json"]
+
+func editor_files() -> Array:
+	var out = []
+	for n in ["policy.json", "catalogs.json", "log-providers.json", "bob.json"]:
+		var p = K.config_path(n)
+		if FileAccess.file_exists(p):
+			out.append([n, p])
+	var apps_dir = K.data_path("apps")
+	var d = DirAccess.open(apps_dir)
+	if d != null:
+		var names = Array(d.get_files()).filter(func(f): return (f.ends_with(".yaml") or f.ends_with(".yml")) and not f in EDITOR_SKIP)
+		names.sort()
+		for f in names:
+			out.append(["apps/" + f, apps_dir.path_join(f)])
+	return out.filter(func(e): return not str(e[0]).get_file() in EDITOR_SKIP)
+
+func open_editor(file_path: String = "", text = null, read_only: bool = false, title: String = "") -> void:
+	var body = _open_modal("editor", file_path, "TEXT EDITOR" + ("  //  read-only" if read_only else ""), Vector2(1320, 840) if touch_u <= 0.0 else Vector2(900, 900))
+	var te = TextEditor.new()
+	var opts = {"settings": settings, "save_setting": _save_setting, "read_only": read_only, "title": title, "path": file_path,
+		"files": [] if read_only else editor_files()}
+	if text != null:
+		opts["text"] = str(text)
+	body.add_child(te)
+	te.setup(opts)
+	te.closed.connect(func():
+		_editor_closing = true
+		close_modal())
+	_editor = te
+	te.ed.grab_focus.call_deferred()
+
+# ----- VPN tunnels: every VPN in the world, both sides of each tunnel, and the
+# downloaders that are not behind one
+var _vpn_checked = {}      # uid -> the address an explicit check returned
+
+func _vpn_check(p: Dictionary) -> void:
+	notify("Asking from inside %s's tunnel..." % p["name"], "info")
+	cluster.act({"op": "vpn_check", "ns": p["ns"], "name": p["name"], "pod": p["uid"], "key": "vpn:" + str(p["uid"])})
+
+func open_vpn() -> void:
+	var body = _open_modal("vpn", null, "VPN  //  TUNNELS", Vector2(1100, 760) if touch_u <= 0.0 else Vector2(760, 900))
+	var narrow = touch_u > 0.0
+	var tw = 700 if narrow else 1040
+	var pods: Array = cluster.state.get("pods", [])
+	var vpns = pods.filter(func(p): return not p.get("net", {}).get("vpn", {}).is_empty())
+	var sim = str(cluster.state.get("source", "")) == "simulation"
+	var intro = _lbl("Each VPN with both sides of its tunnel: INSIDE, its addresses on your network and what it carries; OUTSIDE, the address the internet sees. Only the VPN's provider, type and countries are read from its settings, never its keys." +
+		("   SIMULATED: the demo's addresses are invented." if sim else ""), 13, DIM)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.custom_minimum_size.x = tw
+	body.add_child(intro)
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(8)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	if vpns.is_empty():
+		list.add_child(_lbl("No VPN containers here. Recognised: " + ", ".join(PackedStringArray(K.VPN_REGISTRY.map(func(e): return e["product"]))) + ".", 14, DIM))
+	for p in vpns:
+		var v: Dictionary = p["net"]["vpn"]
+		var pc = PanelContainer.new()
+		var sb = _sb(BG2, Color(0.95, 0.72, 0.22), 0, 10)
+		sb.border_width_left = 4
+		pc.add_theme_stylebox_override("panel", sb)
+		var col = _col(4)
+		pc.add_child(col)
+		var head = _row(10)
+		var kind = {"gateway": "gateway: other containers use its network", "built-in": "VPN built into the app's own image"}.get(str(v.get("role", "")), "")
+		if str(v.get("sidecar", "")) != "":
+			kind = "sidecar: carries its whole pod"
+		head.add_child(_lbl("%s   %s" % [p["name"], str(v.get("product", ""))], 15, Color(0.95, 0.75, 0.3)))
+		head.add_child(_lbl(kind, 12, DIM))
+		head.add_child(_spacer())
+		if v.get("can_check", false):
+			head.add_child(_btn("Check now", func(): _vpn_check(p)))
+		var spot_uid = str(p["uid"])
+		if world.machines.has(spot_uid):
+			head.add_child(_btn("Go there", func():
+				var spot = world.machine_spot(spot_uid)
+				if spot != null:
+					close_modal()
+					player.teleport(spot[0], spot[1])))
+		col.add_child(head)
+		for t in [[K.vpn_inside_text(p), Color(0.75, 0.6, 1.0)], [K.vpn_outside_text(p), Color(0.95, 0.75, 0.3)]]:
+			var l = _lbl(t[0].replace("\n", "     "), 14, t[1])
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = tw - 30
+			col.add_child(l)
+		if _vpn_checked.has(spot_uid):
+			col.add_child(_lbl("Checked just now from inside the tunnel:  " + _vpn_checked[spot_uid], 14, K.health_color("ok")))
+		list.add_child(pc)
+	# downloaders with nothing between them and the internet
+	var exposed = []
+	for p in pods:
+		var net: Dictionary = p.get("net", {})
+		if not net.get("vpn", {}).is_empty():
+			continue
+		var via = K.find_pod(cluster.state, str(net.get("via", ""))) if str(net.get("via", "")) != "" else null
+		if via != null and not via.get("net", {}).get("vpn", {}).is_empty():
+			continue
+		if p["containers"].any(func(c): return K.is_downloader(str(c.get("image", "")))):
+			exposed.append(str(p["name"]))
+	list.add_child(_lbl("DOWNLOADERS NOT BEHIND A VPN", 13, DIM))
+	var ex = _lbl(", ".join(PackedStringArray(exposed)) if not exposed.is_empty() else "None: every downloader here goes through a VPN (or there are none).", 14, K.health_color("warn") if not exposed.is_empty() else DIM)
+	ex.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ex.custom_minimum_size.x = tw - 30
+	list.add_child(ex)
+
 # Its network: its own addresses, the VPN gateway it goes through, or, for a
 # gateway, both sides of the tunnel.
 func _pod_network(p: Dictionary) -> void:
@@ -837,6 +963,8 @@ func _pod_network(p: Dictionary) -> void:
 		if behind:
 			_dyn.add_child(_lbl("Outside, the internet sees:  " + (str(gw["net"]["vpn"]["exit_ip"]) if str(gw["net"]["vpn"].get("exit_ip", "")) != "" else "(unknown: " + str(gw["net"]["vpn"].get("exit_note", "")) + ")"), 14, Color(0.95, 0.75, 0.3)))
 	elif not v.is_empty():
+		if v.get("can_check", false):
+			_dyn.add_child(_btn("Check the outside address now", func(): _vpn_check(p)))
 		var inside = _lbl(K.vpn_inside_text(p).replace("\n", "     "), 14, Color(0.75, 0.6, 1.0))
 		inside.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		inside.custom_minimum_size.x = 820
@@ -1454,6 +1582,13 @@ func _store_file(path: String, page: int) -> void:
 
 # Answers to the storage requests (and, further down, LiveView's).
 func on_data(key: String, r: Dictionary) -> void:
+	if key.begins_with("vpn:"):
+		notify(str(r.get("msg", "")), "ok" if r.get("ok", false) else "warn")
+		if r.get("ok", false):
+			_vpn_checked[key.trim_prefix("vpn:")] = str(r.get("data", {}).get("ip", ""))
+		if _modal_kind == "vpn":
+			open_vpn()
+		return
 	if key.begins_with("gauge:"):
 		if _modal_kind == "gauge" and key == _gauge["key"]:
 			_gauge_readout.text = str(_gauge["target"]) + "\n" + Gauge.reading(r)
@@ -1850,6 +1985,10 @@ func _fill_storage() -> void:
 		head.add_child(_spacer())
 		head.add_child(_btn("  <  ", func(): _store_file(f["path"], int(d["page"]) - 1), "normal", int(d.get("page", 0)) > 0))
 		head.add_child(_btn("  >  ", func(): _store_file(f["path"], int(d["page"]) + 1), "normal", int(d.get("page", 0)) + 1 < int(d.get("pages", 1))))
+		if not binary and not bytes.is_empty():
+			var page_text = bytes.get_string_from_utf8()
+			var fname = "%s  (page %d, read-only)" % [str(f["path"]), int(d.get("page", 0)) + 1]
+			head.add_child(_btn("Open in editor", func(): open_editor("", page_text, true, fname)))
 		head.add_child(_btn("Back to the folder", func(): _store_dir(_store["mount"], _store["path"])))
 		right.add_child(head)
 		var te = TextEdit.new()      # plain text only: nothing in a file is ever rendered or run
@@ -3483,6 +3622,8 @@ func open_pause() -> void:
 		open_pause()))
 	body.add_child(_btn("Krew operations  (K)", func(): open_krew()))
 	body.add_child(_btn("Foreman  (H)", func(): open_foreman()))
+	body.add_child(_btn("VPN tunnels", open_vpn))
+	body.add_child(_btn("Text editor", func(): open_editor()))
 	body.add_child(_btn("Gauge  (resource desk)", open_gauge))
 	body.add_child(_btn("Gauge in the world:  %s" % ("ON" if world._gauge.visible else "OFF"), func():
 		var show = not world._gauge.visible
@@ -4686,6 +4827,27 @@ func open_settings() -> void:
 			settings_changed.emit("palette")
 			open_settings(), "primary" if chosen else "normal"))
 		col.add_child(r)
+	# --- the text editor
+	col.add_child(_lbl("TEXT EDITOR", 15, ORANGE))
+	for opt in [["editor_theme", "Theme", [["system", "System (follows this computer)"], ["light", "Light"], ["dark", "Dark"]]],
+			["editor_keys", "Keys", [["standard", "Standard"], ["vim", "Vim"], ["nano", "Nano"]]]]:
+		var er = _row(10)
+		er.add_child(_fixed(_lbl(opt[1], 14), 120))
+		for ch in opt[2]:
+			var key = opt[0]
+			var val = ch[0]
+			var on = str(settings.get(key, opt[2][0][0])) == val
+			er.add_child(_btn(("IN USE:  " if on else "") + ch[1], func():
+				_save_setting(key, val)
+				open_settings(), "primary" if on else "normal"))
+		col.add_child(er)
+	var lr = _row(10)
+	lr.add_child(_fixed(_lbl("Line numbers", 14), 120))
+	lr.add_child(_btn("ON" if bool(settings.get("editor_lines", true)) else "OFF", func():
+		_save_setting("editor_lines", not bool(settings.get("editor_lines", true)))
+		open_settings()))
+	lr.add_child(_btn("Open the editor", func(): open_editor()))
+	col.add_child(lr)
 	var back = _row(10)
 	back.add_child(_spacer())
 	back.add_child(_btn("Back", open_pause))
