@@ -1,12 +1,12 @@
 # 2.0 go-live checklist
 
-<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.2 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
 
 What stands between the published beta and a stable 2.0.0. Status words as in
 [FEATURE_PARITY.md](FEATURE_PARITY.md): **verified live**, **verified in
 simulation**, **not tested**, **unsupported**.
 
-**Where things stand (2026-11-14):** `2.0.0-beta.1` is published as a
+**Where things stand (2026-11-15):** `2.0.0-beta.2` is published as a
 pre-release with Windows, Linux and macOS packages, checksums and
 build-provenance attestations. `main` has fixes the beta does not have (see
 the Unreleased section of [CHANGELOG.md](CHANGELOG.md)), among them a crash
@@ -22,7 +22,7 @@ Do not tag 2.0.0 until each of these is done or explicitly moved to section 2.
 
 | # | Item | Done when | Needs |
 |---|---|---|---|
-| 1.1 | **Ship the fixes on `main`** | A `v2.0.0-beta.2` tag is built and published (or the fixes go straight into 2.0.0). The server-switch crash fix is the important one | Here |
+| 1.1 | ~~**Ship the fixes on `main`**~~ | **Done:** published in `v2.0.0-beta.2` (2026-11-15), with the server-switch crash fix | Here |
 | 1.2 | **Clean Windows install** | The Windows zip, installed with `install.ps1` on a Windows machine that has never had kubectl, Go or Godot, opens the demo, connects to a kubeconfig and to Docker | A clean Windows VM or PC |
 | 1.3 | **One real AI provider behind Foreman** | Foreman answers a question about a real or simulated cluster through at least one real provider (Ollama is the cheapest), a proposal is checked and refused or approved, and the key is absent from logs and disk. Today every provider is tested against a mock only | Here with Ollama; an API key for OpenAI or Claude |
 | 1.4 | **Komodo in the game against a real Core** | The game connects to a real Komodo Core 2.3+, shows its servers and containers, and the record shows `ListAllContainers` answered (or the fallback used). The supporter who asked for Komodo uses it | A Komodo Core with a read-only key |
@@ -71,7 +71,7 @@ Stated in the release notes, not worked on for 2.0.0:
 
 ## 4. Housekeeping
 
-- Write the 2.0.0 release notes: the Unreleased and beta.1 sections of the
+- Write the 2.0.0 release notes: the beta.1 and beta.2 sections of the
   changelog, the verification summary above, and section 3.
 - Remove leftover local worktrees from other tools that still hold the
   history from before the images were stripped.

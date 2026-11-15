@@ -12,7 +12,7 @@ scale, deploy whole stacks and tear them down, all with a belt of six tools,
 with a crew of robots that watch it for you. Built for personal and homelab use.
 
 [![Play in your browser](https://img.shields.io/badge/▶_Play_in_your_browser-f99549?style=for-the-badge)](https://dascondor.github.io/kubefactory/)
-[![Get 2.0.0-beta.1](https://img.shields.io/badge/⬇_Get_2.0.0--beta.1-pre--release-e3b341?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1)
+[![Get 2.0.0-beta.2](https://img.shields.io/badge/⬇_Get_2.0.0--beta.2-pre--release-e3b341?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2)
 [![All releases](https://img.shields.io/badge/All_releases-Windows_·_Linux_·_macOS-2b2f36?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases)
 
 [![Release](https://img.shields.io/github/v/release/DasCondor/kubefactory?include_prereleases&color=f99549)](https://github.com/DasCondor/kubefactory/releases)
@@ -40,12 +40,14 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 </div>
 
 > [!NOTE]
-> **KubeFactory 2.0 is in beta.** [2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) is a pre-release for
+> **KubeFactory 2.0 is in beta.** [2.0.0-beta.2](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2) is a pre-release for
 > Windows, Linux and macOS: native Kubernetes without `kubectl`, the Krew and
 > Foreman, read-only Docker hosts and Komodo, server mode, plugins, in-game
-> settings and controller support. What has and has not been tried on real
-> infrastructure is in [Known limitations](docs/KNOWN_LIMITATIONS.md); what is
-> left before 2.0.0 is in the [go-live checklist](docs/GO_LIVE_2.0.md).
+> settings and controller support, Service pipelines, VPN tunnels and a text
+> editor. What has and has not been tried on real infrastructure is listed in
+> the [release notes](docs/CHANGELOG.md#not-fully-supported-or-tested) and
+> [Known limitations](docs/KNOWN_LIMITATIONS.md); what is left before 2.0.0 is
+> in the [go-live checklist](docs/GO_LIVE_2.0.md).
 
 ## ✨ Why use it
 
@@ -190,22 +192,22 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 
 ## 📥 Download
 
-**[2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1)** is the current pre-release. The latest stable build
+**[2.0.0-beta.2](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2)** is the current pre-release. The latest stable build
 (1.0.1, Windows only) and every earlier version are on the
 [Releases page](https://github.com/DasCondor/kubefactory/releases).
 
 | Platform | Download | Start it |
 |---|---|---|
-| Windows | [**.zip**, 59 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-win64.zip) | `install.ps1` or `KubeFactory.exe` |
-| Linux x86_64 | [**.tar.gz**, 51 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz) | `./KubeFactory.x86_64` |
-| macOS (Apple Silicon, Intel) | [**.zip**, 91 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-macos.zip) | `KubeFactory.app` (below) |
+| Windows | [**.zip**, 59 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.2/KubeFactory-2.0.0-beta.2-win64.zip) | `install.ps1` or `KubeFactory.exe` |
+| Linux x86_64 | [**.tar.gz**, 51 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.2/KubeFactory-2.0.0-beta.2-linux-x86_64.tar.gz) | `./KubeFactory.x86_64` |
+| macOS (Apple Silicon, Intel) | [**.zip**, 91 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.2/KubeFactory-2.0.0-beta.2-macos.zip) | `KubeFactory.app` (below) |
 
 **Checking a download.** Every package has a `.sha256`, the release has one
 `SHA256SUMS`, and every package carries a signed build-provenance attestation
 that ties it to this repository's release workflow and the exact commit:
 
 ```bash
-gh attestation verify KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz -R DasCondor/kubefactory
+gh attestation verify KubeFactory-2.0.0-beta.2-linux-x86_64.tar.gz -R DasCondor/kubefactory
 ```
 
 None of the packages is signed with a Windows or Apple developer identity yet.
@@ -216,7 +218,7 @@ ad-hoc signed but not notarized, so Gatekeeper blocks a downloaded copy until
 you clear the quarantine flag on the unpacked folder:
 
 ```bash
-xattr -dr com.apple.quarantine KubeFactory-2.0.0-beta.1-macos
+xattr -dr com.apple.quarantine KubeFactory-2.0.0-beta.2-macos
 ```
 
 ## 📦 Install (release build)
@@ -260,7 +262,7 @@ for troubleshooting. `check-requirements.ps1` checks for the optional cloud CLIs
 ## 🔌 Connecting to a cluster (no kubectl needed)
 
 > [!IMPORTANT]
-> **2.0 is in beta** ([2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1)). Connecting, managing and storage inspection are verified
+> **2.0 is in beta** ([2.0.0-beta.2](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2)). Connecting, managing and storage inspection are verified
 > on a real cluster with running containers (kind) and on a real Docker engine;
 > a user reports k3s working. Not yet tried: any cloud provider, a real AI
 > provider behind Foreman, LiveView on a real application through a

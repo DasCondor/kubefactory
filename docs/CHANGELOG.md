@@ -1,8 +1,45 @@
 # Changelog
 
-<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.2 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
 
-## Unreleased
+## 2.0.0-beta.2 (2026-11-15)
+
+A beta: not a stable release. Everything since beta.1 is below: phone menus,
+the browser's High preset fixed on the site, Service pipelines, the Jellyfin +
+VPN stack with VPN tunnels, the text editor, free Windows signing (wired, not
+active yet), and fixes.
+
+### Not fully supported or tested
+
+Status words as everywhere: **verified live** (real infrastructure),
+**verified in simulation**, **not tested**.
+
+| Feature | Status | What is missing |
+|---|---|---|
+| Windows code signing (SignPath Foundation) | wired, **not active** | needs SignPath's approval and two settings ([CODE_SIGNING](CODE_SIGNING.md)); these packages are unsigned |
+| macOS packages | startup smoke test on Apple Silicon only | not played on a Mac; Intel untested; not notarized |
+| Linux packages | headless in a container | not played on a Linux desktop with a GPU |
+| Provider, AI and Komodo keys on Linux and macOS | **unsupported** | refused there (Windows' protection only); never stored in the clear |
+| Foreman with an AI provider | verified in simulation (mock) | no real Ollama, LM Studio, OpenAI or Claude |
+| Komodo | requests checked against a real Core 2.3.4 by a contributor | not played against a real Core; the 2.3 name and its fallback tested on stand-ins only |
+| Cloud Kubernetes (EKS, AKS, GKE), Rancher, OpenShift | **not tested** | k3s reported working by a user, not tested here |
+| Metrics API figures (Gauge, Metrics view) | **not tested** | only "no metrics API" seen live |
+| Server mode | verified in simulation (one machine, `ws://`) | `wss://` and a second machine |
+| Physical controller | simulated input only | dead zone and speeds not tuned on a real pad |
+| Phone and tablet menus | verified in simulation at phone and tablet sizes | not yet tried on a real iPhone or Android phone |
+| Browser High preset | verified on the deployed site (desktop browser) | not measured on phones |
+| Service pipelines | verified in simulation, all presets | built from **V2** library models ("legacy geometry"); not reviewed piece by piece for clipping |
+| VPN tunnels: inside and outside addresses | verified live on throw-away stand-in containers | not with a real VPN account; outside address **not read on Kubernetes** or through the read-only Docker proxy |
+| VPN "Check now" | **not tested** against a real VPN | asks ipinfo.io from inside the container, on request |
+| VPN images other than Gluetun | recognised by name and settings from their docs | only Gluetun and a binhex-style stand-in were run |
+| Porter's Jellyfin + VPN stack | Compose checked with `docker compose config`, Kubernetes file parsed | never run with a real VPN account |
+| Text editor | verified in simulation with real key events | Vim and Nano are everyday subsets (no counts, visual mode, macros); YAML is saved unchecked; the System theme falls back to dark where Godot cannot read it |
+| Storage inspection on distroless images | **not tested** | |
+| LiveView through a Kubernetes port-forward | **not tested** | port-forward itself verified live |
+| Tautulli stream counts | verified in simulation | needs a Plex server playing something |
+| Backend plugins | verified with the example plugin only | |
+
+The full list, with details, is in [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md).
 
 ### Fixed
 - **Menus on phones are readable.** The browser demo now switches to touch
