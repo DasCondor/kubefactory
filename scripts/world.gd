@@ -12,6 +12,7 @@ const Gfx = preload("res://scripts/gfx.gd")
 const Controls = preload("res://scripts/controls.gd")
 const Scenery = preload("res://scripts/scenery.gd")
 const Models = preload("res://scripts/models.gd")
+const Pipes = preload("res://scripts/pipes.gd")
 
 const FRONT_Z = -46.0
 const YARD_Z = -22.0
@@ -67,6 +68,10 @@ var _paths = []
 var _belt_mm: MultiMeshInstance3D
 var _item_mm: MultiMeshInstance3D
 var _item_spacing = 4.0
+var _pipes: Node3D = null       # the library's pipe kit, when the library is in use
+var _pipe_mode = false          # belts drawn as pipes (flow collars ride them) or as code-drawn tracks
+var _item_box: Mesh
+var _item_ring: Mesh
 var _hub_label: Label3D
 var _hologram: Node3D
 var _log_label: Label3D
@@ -109,6 +114,19 @@ func _ready() -> void:
 	_build_krew_stations()
 	_belt_mm = _make_mm(Vector3.ONE, Tex.mat(Color.WHITE, 0.6, 0.4))
 	_item_mm = _make_mm(Vector3(0.5, 0.5, 0.5), Tex.mat(Color.WHITE, 0.5, 0.1))
+	_item_box = _item_mm.multimesh.mesh
+	# on pipes, what flows is a glowing collar sliding along the tube
+	var ring = CylinderMesh.new()
+	ring.top_radius = 0.42
+	ring.bottom_radius = 0.42
+	ring.height = 0.16
+	ring.radial_segments = 16
+	ring.rings = 1
+	var rm = StandardMaterial3D.new()       # unshaded: the Service's colour at full strength, like a lit band
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.vertex_color_use_as_albedo = true
+	ring.material = rm
+	_item_ring = ring
 	_build_hologram()
 	# Selection outline: 12 thin glowing edges fitted around the target
 	_select = Node3D.new()
@@ -156,6 +174,9 @@ func rebuild_graphics(st: Dictionary) -> void:
 		pf.queue_free()
 	platforms.clear()
 	_belt_sig = ""
+	if _pipes != null:              # the kit's tier follows the preset
+		_pipes.queue_free()
+		_pipes = null
 	_first = true
 	if not st.is_empty() and st.has("nodes"):
 		apply_state(st)
@@ -1300,6 +1321,7 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 func _rebuild_belts(paths: Array) -> void:
 	_paths = paths
 	var segs = {}
+	var joints = {}
 	var total = 0.0
 	for path in paths:
 		var pts = path["pts"]
@@ -1312,13 +1334,24 @@ func _rebuild_belts(paths: Array) -> void:
 				continue
 			var key = str(a) + str(b)
 			if not segs.has(key):
-				segs[key] = [a, b, path["color"]]
+				segs[key] = [a, b, path["color"], i == pts.size() - 1]     # the last one drops into the machine
+			if i < pts.size() - 1:
+				joints[str(b)] = [b, path["color"]]                      # a corner
 		path["cum"] = cum
 		total += cum[cum.size() - 1]
+	# the library's pipe kit where the library is in use; otherwise the code-drawn tracks
+	if Models.available() and _pipes == null:
+		_pipes = Pipes.new()
+		add_child(_pipes)
+	_pipe_mode = _pipes != null and _pipes.ready_to_use()
+	_belt_mm.visible = not _pipe_mode
+	_item_mm.multimesh.mesh = _item_ring if _pipe_mode else _item_box
+	if _pipe_mode:
+		_pipes.build(segs.values().map(func(sg): return [sg[0], sg[1], sg[2].darkened(0.1), sg[3]]), joints.values())
 	var mm = _belt_mm.multimesh
-	mm.instance_count = segs.size()
+	mm.instance_count = 0 if _pipe_mode else segs.size()
 	var i = 0
-	for sg in segs.values():
+	for sg in ([] if _pipe_mode else segs.values()):
 		var a: Vector3 = sg[0]
 		var b: Vector3 = sg[1]
 		var d = (b - a).abs()
@@ -1379,8 +1412,15 @@ func _process(delta: float) -> void:
 			while seg < cum.size() - 1 and cum[seg] < dist:
 				seg += 1
 			var f = (dist - cum[seg - 1]) / maxf(cum[seg] - cum[seg - 1], 0.001)
-			var pos = pts[seg - 1].lerp(pts[seg], clampf(f, 0.0, 1.0)) + Vector3(0, 0.33, 0)
-			mm.set_instance_transform(path["first"] + k, Transform3D(Basis.IDENTITY, pos))
+			var pos = pts[seg - 1].lerp(pts[seg], clampf(f, 0.0, 1.0))
+			var basis = Basis.IDENTITY
+			if _pipe_mode:
+				var d: Vector3 = pts[seg] - pts[seg - 1]
+				if absf(d.y) < 0.01:     # the collar's axis (Y) along a level run
+					basis = Basis(Vector3.BACK if absf(d.x) > absf(d.z) else Vector3.RIGHT, PI / 2.0)
+			else:
+				pos += Vector3(0, 0.33, 0)
+			mm.set_instance_transform(path["first"] + k, Transform3D(basis, pos))
 
 # Where to stand (in the aisle beside it) and where to look, as [pos, look_at].
 func workload_spot(ns: String, kind: String, wname: String) -> Variant:

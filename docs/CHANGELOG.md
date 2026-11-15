@@ -31,6 +31,13 @@
   of the connection is locked. Test: `tests/live/remote_switch_test.gd`.
 
 ### Changed
+- **Services are pipelines.** Where the model library is in use (desktop, and
+  the browser's High preset), the belts from a Service's depot to its pods are
+  built from the library's pipe kit: tinted pipe runs with steel flanges, a
+  junction at every corner, and a valve on the drop into each machine, with
+  glowing collars for the flow. The kit is V2 geometry, placed by choice
+  (see Known limitations). The browser's Standard preset keeps the conveyor
+  belts. `B` still shows and hides them. Test: `tests/live/pipes_test.gd`.
 - **Komodo asks for containers by their 2.3 name, ListAllContainers,** and falls back to ListAllDockerContainers when an older Core does not know it.
 - **Rebinding a key that is already in use asks first.** Settings now says
   "E is already bound to Inspect / talk. Move it to Move right?" with

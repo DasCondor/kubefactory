@@ -52,7 +52,7 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 - 🛠️ **It manages the real thing.** Every action goes to your cluster with your own kubeconfig, or to your own `docker`, as you: logs, events, rolling restarts, scaling, cordon and drain, deleting pods and workloads, deploying and removing complete stacks. Nothing sits in between and no credentials are stored.
 - 🏠 **Made for your own gear.** Point it at a homelab cluster, a cloud cluster, Docker on your PC or several Docker hosts, or your Komodo servers. Compose projects show up as namespaces, and Porter deploys ready-made stacks: a media server, a monitoring dashboard, WordPress, databases.
 - 🔒 **Look without handing over root.** Other Docker hosts open read-only, a ready-made proxy makes each host refuse changes on its own, and Komodo connections only ever read.
-- 🗺️ **See the whole cluster at a glance.** Nodes are platforms, pods are machines, services are conveyor belts. A failing pod throws a red light column you can see from anywhere.
+- 🗺️ **See the whole cluster at a glance.** Nodes are platforms, pods are machines, services are pipelines into them. A failing pod throws a red light column you can see from anywhere.
 - 🔧 **Six tools, five tiers.** From a harmless scanner to the Mk.5 Demolisher. Stronger actions take a longer hold, and the worst ones make you type the target's name.
 - 👴 **Bob, the pod fixer.** An old hand with a repair stand, a live fix list, a diagnosis for every failure, and a zinger for every operator.
 - 🤖 **The Krew watches for you.** Sentinel (security), Scout (network), Scrappy (cleanup), Archie (storage), Forge (build), Blueprint (drift) and Gauge (resources) report findings with evidence, a proposed fix and its risk. Nothing changes until you approve it.
@@ -600,7 +600,7 @@ Krew's stations. `N` or the pause menu shows and hides it.
 | Tanks on a machine | Containers |
 | Red light column + warning sign | Failing pod (CrashLoopBackOff, ImagePullBackOff, Error ...) |
 | "Unscheduled" platform | Pods no node can take |
-| Depot + conveyor belts | Service and the pods it routes to |
+| Depot + pipeline (a valve into each machine) | Service and the pods it routes to; glowing collars show the flow. The browser's Standard preset draws them as conveyor belts |
 | Cluster gates beside the HUB | kubeconfig contexts, Docker, simulations (provider-coloured) |
 | Logging Station (dish + light column) | Log providers; column is green when linked, red on no signal |
 | Porter's dock (right of the HUB) | Complete app setups and Portainer app lists |

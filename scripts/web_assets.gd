@@ -14,6 +14,7 @@ signal progress(done_bytes, total_bytes)
 signal finished(ok, msg)
 
 const CATEGORIES = ["machines", "krew", "tools"]
+const EXTRA = ["pipe_straight", "conduit_elbow", "pipe_valve"]     # the belts' pipe kit (pipes.gd)
 const PARALLEL = 4
 
 var base = ""
@@ -42,7 +43,7 @@ func fetch(asset_base: String = "") -> void:
 			return
 		_catalog = d
 		for m in d["models"]:
-			if not str(m.get("category", "")) in CATEGORIES:
+			if not str(m.get("category", "")) in CATEGORIES and not str(m.get("id", "")) in EXTRA:
 				continue
 			var v = m.get("variants", {}).get("standard")
 			if typeof(v) != TYPE_DICTIONARY:
