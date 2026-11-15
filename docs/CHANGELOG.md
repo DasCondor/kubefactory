@@ -7,6 +7,7 @@
   `ListAllDockerContainers`; without a limit only the first page (30 by
   default) came back and the rest of the containers were missing without an
   error. KubeFactory now asks for all of them (`limit: 0`).
+
 ### Changed
 - **Rebinding a key that is already in use asks first.** Settings now says
   "E is already bound to Inspect / talk. Move it to Move right?" with
@@ -16,6 +17,11 @@
 ### Added
 - **Unbind** (×) beside every action in Settings, and a line naming any action
   left without a key. An unbound action stays unbound after a restart.
+- **Switching away from a KubeFactory server no longer crashes the game.**
+  The server connection was closed from a worker thread; Godot 4.3 corrupted
+  its heap (Windows: `0xc0000374` in ntdll; Linux: SIGSEGV) on the first
+  switch to any other source. It now closes on the main thread, and every use
+  of the connection is locked. Test: `tests/live/remote_switch_test.gd`.
 
 ## 2.0.0-beta.1 (2026-11-14)
 
