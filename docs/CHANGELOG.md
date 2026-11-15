@@ -7,6 +7,15 @@
   `ListAllDockerContainers`; without a limit only the first page (30 by
   default) came back and the rest of the containers were missing without an
   error. KubeFactory now asks for all of them (`limit: 0`).
+### Changed
+- **Rebinding a key that is already in use asks first.** Settings now says
+  "E is already bound to Inspect / talk. Move it to Move right?" with
+  **Move it here** (the other action loses the key), **Keep both** (the old
+  behaviour) and **Cancel**. Nothing changes until you choose.
+
+### Added
+- **Unbind** (×) beside every action in Settings, and a line naming any action
+  left without a key. An unbound action stays unbound after a restart.
 
 ## 2.0.0-beta.1 (2026-11-14)
 

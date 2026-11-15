@@ -46,10 +46,14 @@ func _run() -> void:
 	hud._rebind = "interact"
 	hud._input(_key(KEY_F))
 	await process_frame
+	_check("the clash with Storage is pointed out", hud._settings_note.contains("Storage") and hud._settings_note.contains("already bound"), hud._settings_note)
+	_check("nothing changes before the player chooses", Controls.label("interact") == "E" and Controls.label("storage") == "F" and K.load_settings().get("keys", {}).is_empty())
+	_press(hud, "Keep both")
+	await process_frame
 	_check("Interact is now F", Controls.label("interact") == "F", Controls.label("interact"))
+	_check("keep both: Storage keeps F", Controls.label("storage") == "F")
 	var saved = K.load_settings().get("keys", {})
 	_check("only the change is saved", saved.keys() == ["interact"] and int(saved["interact"][0]["key"]) == KEY_F, saved)
-	_check("the clash with Storage is pointed out", hud._settings_note.contains("Storage"), hud._settings_note)
 	_check("hints follow the binding", Controls.hint("[E] inspect   [MMB] copy   (K)") == "[F] inspect   [MMB] copy   (K)", Controls.hint("[E] inspect   [MMB] copy   (K)"))
 	_check("the help line follows the binding", hud._help.text.contains("F inspect") and not hud._help.text.contains("E inspect"))
 	await create_timer(0.3).timeout
@@ -64,6 +68,39 @@ func _run() -> void:
 	if reset != null:
 		reset.pressed.emit()
 	_check("reset restores the defaults and saves nothing", Controls.label("interact") == "E" and K.load_settings().get("keys", {}).is_empty())
+	# --- a key already in use: move it (Dvorak players putting Move right on E)
+	hud._rebind = "move_right"
+	hud._input(_key(KEY_E))
+	await process_frame
+	_check("the clash with Inspect is pointed out", hud._settings_note.contains("Inspect"), hud._settings_note)
+	await _shot("settings_key_clash")
+	_press(hud, "Move it here")
+	await process_frame
+	_check("move: Move right is E", Controls.label("move_right") == "E")
+	_check("move: Inspect lost E and is unbound", Controls.bindings("interact").is_empty() and Controls.unbound() == ["interact"], Controls.unbound())
+	_check("move: the menu says Inspect needs a key", hud._settings_note.contains("Inspect") and hud._settings_note.contains("no key"), hud._settings_note)
+	saved = K.load_settings().get("keys", {})
+	_check("an unbound action is saved as unbound", saved.has("interact") and saved["interact"].is_empty(), saved)
+	Controls.apply(saved)
+	_check("and stays unbound when loaded", Controls.bindings("interact").is_empty())
+	# --- cancel leaves both as they were
+	hud._rebind = "jump"
+	hud._input(_key(KEY_E))
+	await process_frame
+	_press(hud, "Cancel")
+	await process_frame
+	_check("cancel: nothing changed", Controls.label("jump") == "Space" and Controls.label("move_right") == "E" and hud._rebind_clash.is_empty())
+	# --- unbind with the x button
+	var x = _find_tip(hud._modal, "Unbind Jump")
+	var found = x != null   # the menu rebuilds after the press and frees x
+	if found:
+		x.pressed.emit()
+	await process_frame
+	_check("unbind: Jump has no key", found and Controls.bindings("jump").is_empty())
+	reset = _find(hud._modal, "Reset all keys")
+	if reset != null:
+		reset.pressed.emit()
+	_check("reset again: defaults, nothing saved", Controls.label("interact") == "E" and Controls.label("jump") == "Space" and K.load_settings().get("keys", {}).is_empty())
 	# --- field of view and palette
 	hud._save_setting("fov", 95.0)
 	game.player.camera.fov = 95.0
@@ -114,6 +151,22 @@ func _run() -> void:
 		f.close()
 	print("SETTINGS PASSED" if _fails.is_empty() else "SETTINGS FAILED: " + ", ".join(_fails))
 	quit(0 if _fails.is_empty() else 1)
+
+func _press(hud, label: String) -> void:
+	var b = _find(hud._modal, label)
+	if b == null:
+		_check("button '%s' is shown" % label, false)
+		return
+	b.pressed.emit()
+
+func _find_tip(node: Node, tip: String) -> Button:
+	if node is Button and node.tooltip_text.begins_with(tip):
+		return node
+	for c in node.get_children():
+		var r = _find_tip(c, tip)
+		if r != null:
+			return r
+	return null
 
 func _find(node: Node, needle: String) -> Button:
 	if node is Button and node.text.contains(needle):

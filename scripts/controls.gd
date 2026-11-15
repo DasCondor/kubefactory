@@ -99,12 +99,40 @@ static func changed() -> Dictionary:
 			out[a[0]] = now
 	return out
 
-# Which other actions already use this binding.
-static func conflicts(action: String, d: Dictionary) -> Array:
+# Which other actions already use this binding (their ids).
+static func conflicting_actions(action: String, d: Dictionary) -> Array:
 	var out = []
 	for a in ACTIONS:
 		if a[0] != action and bindings(a[0]).any(func(x): return x == d):
-			out.append(a[1])
+			out.append(a[0])
+	return out
+
+# The same, as the names the settings menu shows.
+static func conflicts(action: String, d: Dictionary) -> Array:
+	return conflicting_actions(action, d).map(func(id): return title(id))
+
+# The settings menu's name for an action.
+static func title(action: String) -> String:
+	for a in ACTIONS:
+		if a[0] == action:
+			return a[1]
+	return action
+
+# Give d to action alone: every other action that had it loses it (and may be left unbound).
+# Returns the actions that lost it.
+static func move_binding(action: String, d: Dictionary) -> Array:
+	var others = conflicting_actions(action, d)
+	for o in others:
+		set_bindings(o, bindings(o).filter(func(x): return x != d))
+	set_bindings(action, [d])
+	return others
+
+# Actions with no key or mouse button (a controller may still drive them).
+static func unbound() -> Array:
+	var out = []
+	for a in ACTIONS:
+		if bindings(a[0]).is_empty():
+			out.append(a[0])
 	return out
 
 # ---- names
