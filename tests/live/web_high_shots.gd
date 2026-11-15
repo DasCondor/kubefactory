@@ -6,6 +6,7 @@ extends SceneTree
 
 const Models = preload("res://scripts/models.gd")
 const Gfx = preload("res://scripts/gfx.gd")
+const WebAssets = preload("res://scripts/web_assets.gd")
 
 var _fails = []
 
@@ -28,7 +29,7 @@ func _run() -> void:
 	var cat = JSON.parse_string(FileAccess.get_file_as_string("res://assets/catalog.json".replace("res://", ProjectSettings.globalize_path("res://"))))
 	var files = {}
 	for m in cat["models"]:
-		if str(m["category"]) in ["machines", "krew", "tools"]:
+		if str(m["category"]) in WebAssets.CATEGORIES or str(m["id"]) in WebAssets.EXTRA:     # what the browser fetches
 			var rel = str(m["variants"]["standard"]["path"]).trim_prefix("assets/")
 			files[rel] = FileAccess.get_file_as_bytes(ProjectSettings.globalize_path("res://").path_join("assets/" + rel))
 	Models.web_load(cat, files)
@@ -52,6 +53,9 @@ func _run() -> void:
 	var m = game.world.machines.values()[0]
 	game.player.teleport(m.global_position + Vector3(2.5, 1.5, 6.0), m.global_position + Vector3(0, 1.0, 0))
 	await _shot("web_high_machines")
+	_check("the Service lines are the pipe kit, as in the browser", game.world._pipe_mode)
+	game.player.teleport(Vector3(-22, 17, -18), Vector3(6, 12, -40))
+	await _shot("web_high_pipes")
 	game.queue_free()
 	await process_frame
 	print("WEB HIGH PASSED" if _fails.is_empty() else "WEB HIGH FAILED: " + ", ".join(_fails))

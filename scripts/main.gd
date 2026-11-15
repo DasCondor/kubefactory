@@ -2052,9 +2052,12 @@ func _run_flythrough(dir: String) -> void:
 	player.flying = true
 	player.enabled = false
 	var keys = [[Vector3(0, 2.2, 24), Vector3(0, 4, 0)], [Vector3(-14, 10, 6), Vector3(-27, 3, -52)],
-		[Vector3(-44, 22, -18), Vector3(-22, 2, -62)], [Vector3(-27, 13, -34), Vector3(-27, 2, -58)],
-		[Vector3(8, 18, -30), Vector3(27, 2, -58)], [Vector3(48, 9, -36), Vector3(62, 3, -56)],
-		[Vector3(30, 5, -18), Vector3(0, 3, -24)], [Vector3(11.5, 2.3, 17), Vector3(10.5, 1.8, 9)]]
+		# over the platforms above the Service pipelines (they run 12-20 m up), not through them
+		[Vector3(-44, 22, -18), Vector3(-22, 2, -62)], [Vector3(-27, 25, -34), Vector3(-27, 2, -58)],
+		[Vector3(8, 25, -30), Vector3(27, 2, -58)], [Vector3(48, 25, -36), Vector3(62, 3, -56)],
+		# back over the depots while still high, down in the open ground south of them
+		[Vector3(40, 22, 0), Vector3(10, 3, -24)], [Vector3(30, 5, 10), Vector3(0, 3, -10)],
+		[Vector3(11.5, 2.3, 17), Vector3(10.5, 1.8, 9)]]
 	var n = 0
 	for k in keys.size() - 1:
 		for i in 13:
