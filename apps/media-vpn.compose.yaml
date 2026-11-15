@@ -1,0 +1,84 @@
+# Media server: Jellyfin + VPN. Request to screen:
+#   Seerr (requests)  ->  Radarr (films) / Sonarr (TV)  ->  Prowlarr (indexers)
+#   ->  Deluge, which has no network of its own: everything it sends goes
+#       through Gluetun's VPN tunnel, so nothing can leak if the VPN drops
+#   ->  Radarr / Sonarr rename and file it  ->  Jellyfin (watch)
+#
+# Web UIs on this machine:
+#   seerr :5055   radarr :7878   sonarr :8989   prowlarr :9696
+#   deluge :8112 (published by gluetun, since Deluge uses its network)   jellyfin :8096
+#
+# Before the first run: put your VPN account in vpn.env next to this file, e.g.
+#   VPN_SERVICE_PROVIDER=mullvad
+#   VPN_TYPE=wireguard
+#   WIREGUARD_PRIVATE_KEY=...
+#   WIREGUARD_ADDRESSES=...
+#   SERVER_COUNTRIES=Netherlands
+# (see https://github.com/qdm12/gluetun-wiki for your provider). KubeFactory
+# never reads vpn.env; in the factory it shows only the provider, the type, the
+# countries and the address the internet sees (Gluetun's /tmp/gluetun/ip).
+# Without vpn.env Gluetun stops and Deluge has no network at all, which is the
+# safe failure.
+#
+# First run: Deluge's default password is "deluge"; add Deluge as the download
+# client in Radarr and Sonarr (host: gluetun, port 8112), add your indexers in
+# Prowlarr and let it sync to Radarr and Sonarr, point Jellyfin's libraries at
+# /media, and connect Seerr to Jellyfin, Radarr and Sonarr.
+services:
+  seerr:   # requests
+    image: ghcr.io/seerr-team/seerr:latest
+    init: true
+    ports: ["5055:5055"]
+    environment: {TZ: Etc/UTC}
+    volumes: ["seerr-config:/app/config"]
+    restart: unless-stopped
+  radarr:   # films
+    image: lscr.io/linuxserver/radarr:latest
+    ports: ["7878:7878"]
+    environment: {PUID: "1000", PGID: "1000", TZ: Etc/UTC}
+    volumes: ["radarr-config:/config", "media:/media", "downloads:/downloads"]
+    restart: unless-stopped
+  sonarr:   # TV
+    image: lscr.io/linuxserver/sonarr:latest
+    ports: ["8989:8989"]
+    environment: {PUID: "1000", PGID: "1000", TZ: Etc/UTC}
+    volumes: ["sonarr-config:/config", "media:/media", "downloads:/downloads"]
+    restart: unless-stopped
+  prowlarr:   # indexers
+    image: lscr.io/linuxserver/prowlarr:latest
+    ports: ["9696:9696"]
+    environment: {PUID: "1000", PGID: "1000", TZ: Etc/UTC}
+    volumes: ["prowlarr-config:/config"]
+    restart: unless-stopped
+  gluetun:   # the VPN tunnel Deluge lives behind
+    image: qmcgaw/gluetun:v3
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    env_file:
+      - path: ./vpn.env
+        required: false
+    ports: ["8112:8112"]     # Deluge's web UI, published here because Deluge uses this network
+    restart: unless-stopped
+  deluge:   # downloads, only ever through gluetun
+    image: lscr.io/linuxserver/deluge:latest
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun: {condition: service_healthy}
+    environment: {PUID: "1000", PGID: "1000", TZ: Etc/UTC}
+    volumes: ["deluge-config:/config", "downloads:/downloads"]
+    restart: unless-stopped
+  jellyfin:   # watch
+    image: lscr.io/linuxserver/jellyfin:latest
+    ports: ["8096:8096"]
+    environment: {PUID: "1000", PGID: "1000", TZ: Etc/UTC}
+    volumes: ["jellyfin-config:/config", "media:/media"]
+    restart: unless-stopped
+volumes:
+  media:
+  downloads:
+  seerr-config:
+  radarr-config:
+  sonarr-config:
+  prowlarr-config:
+  deluge-config:
+  jellyfin-config:

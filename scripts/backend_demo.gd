@@ -56,7 +56,7 @@ const DEMO_TYPES = [
 	{"id": "dev-containers", "flavor": "dev-containers", "name": "Dev containers",
 		"desc": "A build farm for compiling: Gitea, CI server and runners, BuildKit, a registry, compile caches, and a dev container per language (C++, Rust, Go, Python, Node). One heavy build keeps running out of memory."},
 	{"id": "media", "flavor": "homelab-media", "name": "Media suite",
-		"desc": "A home media server, all healthy: Plex, Overseerr, Sonarr, Radarr, Lidarr, Bazarr, Jackett, Prowlarr, qBittorrent and Tautulli, watched by Grafana, Prometheus, cAdvisor and node-exporter."},
+		"desc": "A home media server, all healthy: Plex, Overseerr, Sonarr, Radarr, Lidarr, Bazarr, Jackett, Prowlarr, qBittorrent and Tautulli; beside it the Jellyfin stack (Seerr, Radarr, Sonarr, Prowlarr, Deluge behind a Gluetun VPN); watched by Grafana, Prometheus, cAdvisor and node-exporter."},
 ]
 
 static func demo_flavor(id: String) -> String:
@@ -137,11 +137,12 @@ func _init(flavor: String = "helmsman-sim"):
 # The homelab: the same pieces Porter's "Media server suite" and "Monitoring
 # dashboard" setups build (see Apps.APPS), already running.
 func _seed_media() -> void:
-	for app_id in ["media", "monitoring"]:
+	for app_id in ["media", "media-vpn", "monitoring"]:
 		var app = Apps.find(app_id)
 		for s in app["sim"]:
-			var heavy = s[1] in ["plex", "prometheus"]
-			_add_wl(s[0], app_id, s[1], [[s[1], s[2]]], s[3], 1.0 if heavy else 0.25, 2.0 if heavy else 0.4)
+			var heavy = s[1] in ["plex", "prometheus", "jellyfin"]
+			var conts = [[s[1], s[2]]] + (s[5] if s.size() > 5 else [])
+			_add_wl(s[0], app_id, s[1], conts, s[3], 1.0 if heavy else 0.25, 2.0 if heavy else 0.4)
 			if s[4] != "":
 				_add_svc(app_id, s[1], "LoadBalancer" if s[1] in ["plex", "grafana", "overseerr"] else "ClusterIP", s[4], s[1])
 
@@ -243,6 +244,8 @@ const SIM_SECURITY = {
 	"plex": {"host_network": true},
 	"nightly-engine-build": {"host_paths": ["/var/run/docker.sock"], "docker_socket": true, "caps": ["builder: SYS_ADMIN"]},
 	"qbittorrent": {"host_ports": [6881], "all_interfaces": true},
+	# Gluetun, Deluge's VPN sidecar, needs what any VPN client needs
+	"deluge": {"caps": ["gluetun: NET_ADMIN"], "host_paths": ["/dev/net/tun"]},
 }
 
 # Where simulated software keeps its data. The shop's Redis runs on scratch
@@ -251,6 +254,33 @@ const SIM_SECURITY = {
 const DATA_DIRS = {"postgres": "/var/lib/postgresql/data", "mysql": "/var/lib/mysql", "mariadb": "/var/lib/mysql", "redis": "/data", "prometheus": "/prometheus",
 	"grafana": "/var/lib/grafana", "influxdb": "/var/lib/influxdb2", "minio": "/data", "registry": "/var/lib/registry", "gitea": "/data", "plex": "/config", "homeassistant": "/config"}
 const SIM_EPHEMERAL = ["redis"]
+
+# A simulated VPN gateway (a Gluetun sidecar): its settings as a real one would
+# state them, and an outside address from the documentation range 203.0.113.0/24,
+# which belongs to nobody, so it cannot be mistaken for a real one.
+const SIM_VPN = {"VPN_SERVICE_PROVIDER": "mullvad", "VPN_TYPE": "wireguard", "SERVER_COUNTRIES": "Netherlands"}
+
+static func sim_net(w: Dictionary, p: Dictionary, running: bool) -> Dictionary:
+	var n = K.empty_net()
+	if str(p.get("ip", "")) != "" and str(p.get("node", "")) != "":
+		n["addrs"].append("%s (pod)" % p["ip"])
+	var others = []
+	var gw = false
+	for c in w["containers"]:
+		if K.is_vpn_image(str(c[1])):
+			gw = true
+		else:
+			others.append(str(c[0]))
+	if gw:
+		var env = []
+		for k in SIM_VPN:
+			env.append("%s=%s" % [k, SIM_VPN[k]])
+		var v = K.vpn_settings(env)
+		v["through"] = others
+		v["exit_ip"] = "203.0.113.%d" % (40 + abs(str(p["uid"]).hash()) % 200) if running else ""
+		v["exit_note"] = "SIMULATED" if running else "the VPN container is not running"
+		n["vpn"] = v
+	return n
 
 static func _data_dir(wname: String, image: String) -> String:
 	var img = image.to_lower()
@@ -431,7 +461,8 @@ func fetch() -> Dictionary:
 			"phase": {"Running": "Running", "Completed": "Succeeded", "Error": "Failed"}.get(p["st"], "Pending"),
 			# a finished Job in the demo has sat there for a while, as they do
 			"finished": float(p.get("since", 0.0)) - 5400.0 if p["st"] in ["Completed", "Error"] else 0.0,
-			"sec": sim_security(w["name"], w["containers"]), "store": sim_storage(w["name"], w["containers"])})
+			"sec": sim_security(w["name"], w["containers"]), "store": sim_storage(w["name"], w["containers"]),
+			"net": sim_net(w, p, running)})
 	for w in _wl:
 		if w["kind"] == "Job":
 			continue

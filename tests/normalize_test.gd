@@ -520,6 +520,29 @@ line2\" injected: true"]])
 				scene.free()
 	else:
 		print("NOTE model library not present: its checks were skipped")
+	# ---- network facts and VPN gateways
+	var KN = load("res://scripts/kutil.gd")
+	var secret = "wg-private-key-must-never-be-kept-123"
+	var gw_inspect = {"Id": "a".repeat(64), "Name": "/media-gluetun-1", "HostConfig": {"NetworkMode": "media_default", "CapAdd": ["NET_ADMIN"]},
+		"Config": {"Image": "qmcgaw/gluetun:v3", "Env": ["VPN_SERVICE_PROVIDER=mullvad", "VPN_TYPE=wireguard", "SERVER_COUNTRIES=Netherlands",
+			"WIREGUARD_PRIVATE_KEY=" + secret, "OPENVPN_PASSWORD=" + secret]},
+		"NetworkSettings": {"Networks": {"media_default": {"IPAddress": "172.18.0.4"}}}}
+	var gn = KN.container_net(gw_inspect)
+	check.call("gateway: its address inside", gn["addrs"], ["172.18.0.4 (media_default)"])
+	check.call("gateway: provider, type, countries", [gn["vpn"]["provider"], gn["vpn"]["type"], gn["vpn"]["countries"]], ["mullvad", "wireguard", "Netherlands"])
+	check.call("gateway: no key or password is kept", JSON.stringify(gn).contains(secret), false)
+	var dl = KN.container_net({"HostConfig": {"NetworkMode": "container:" + "a".repeat(64)}, "Config": {"Image": "lscr.io/linuxserver/deluge:latest", "Env": []}, "NetworkSettings": {"Networks": {}}})
+	check.call("a container in the gateway's network says so", dl["via"], "a".repeat(64))
+	check.call("and is not itself a gateway", dl["vpn"].is_empty(), true)
+	var pn = KN.pod_net({"containers": [{"name": "gluetun", "image": "qmcgaw/gluetun:v3", "env": [{"name": "VPN_SERVICE_PROVIDER", "value": "protonvpn"},
+		{"name": "WIREGUARD_PRIVATE_KEY", "valueFrom": {"secretKeyRef": {"name": "vpn", "key": "k"}}}]}, {"name": "deluge", "image": "lscr.io/linuxserver/deluge"}]}, {"podIP": "10.42.0.9"})
+	check.call("sidecar: the pod is the gateway, deluge goes through it", [pn["vpn"]["provider"], pn["vpn"]["through"], pn["addrs"]], ["protonvpn", ["deluge"], ["10.42.0.9 (pod)"]])
+	check.call("sidecar: a Secret's value is never fetched", JSON.stringify(pn).contains("secretKeyRef"), false)
+	gn["vpn"]["exit_ip"] = "203.0.113.7"
+	var gp = {"name": "media-gluetun-1", "net": gn}
+	check.call("the inside sign shows the inside address", KN.vpn_inside_text(gp).contains("172.18.0.4"), true)
+	check.call("the outside sign shows the exit address", KN.vpn_outside_text(gp).contains("203.0.113.7"), true)
+	check.call("an exit address is checked before it is shown", [KN.valid_ip("203.0.113.7"), KN.valid_ip("2001:db8::1"), KN.valid_ip("<html>")], [true, true, false])
 	if fails.is_empty():
 		print("ALL CHECKS PASSED")
 	else:

@@ -1,0 +1,319 @@
+# Media server: Jellyfin + VPN, for a single-node homelab cluster (k3s, kind, Docker
+# Desktop): the `media` and `downloads` volumes are ReadWriteOnce and shared by several
+# pods, which only works when those pods land on one node. App settings live in
+# emptyDir volumes: fine to try it, swap them for claims to keep them.
+#
+# Deluge's pod has Gluetun as a sidecar. The containers of a pod share one network, so
+# every byte Deluge sends goes through Gluetun's tunnel. Gluetun needs NET_ADMIN and the
+# tun device (Sentinel will point that out: it is what a VPN client needs).
+#
+# Before applying: create the Secret `vpn` in this namespace with your VPN account, e.g.
+#   kubectl create secret generic vpn --from-literal=VPN_SERVICE_PROVIDER=mullvad \
+#     --from-literal=VPN_TYPE=wireguard --from-literal=WIREGUARD_PRIVATE_KEY=... \
+#     --from-literal=WIREGUARD_ADDRESSES=... --from-literal=SERVER_COUNTRIES=Netherlands
+# KubeFactory never reads that Secret. Without it Gluetun does not start and Deluge has
+# no network, which is the safe failure.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media
+  labels: {kubefactory/app: media-vpn}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests: {storage: 20Gi}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: downloads
+  labels: {kubefactory/app: media-vpn}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests: {storage: 10Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seerr
+  labels: {app: seerr, kubefactory/app: media-vpn}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: seerr}
+  template:
+    metadata:
+      labels: {app: seerr}
+    spec:
+      containers:
+        - name: seerr
+          image: ghcr.io/seerr-team/seerr:latest
+          ports: [{containerPort: 5055}]
+          env:
+            - {name: TZ, value: Etc/UTC}
+          readinessProbe:
+            tcpSocket: {port: 5055}
+            initialDelaySeconds: 15
+          volumeMounts:
+            - {name: config, mountPath: /app/config}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+      volumes:
+        - name: config
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seerr
+  labels: {kubefactory/app: media-vpn}
+spec:
+  type: NodePort
+  selector: {app: seerr}
+  ports: [{port: 5055, targetPort: 5055}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radarr
+  labels: {app: radarr, kubefactory/app: media-vpn}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: radarr}
+  template:
+    metadata:
+      labels: {app: radarr}
+    spec:
+      containers:
+        - name: radarr
+          image: lscr.io/linuxserver/radarr:latest
+          ports: [{containerPort: 7878}]
+          env:
+            - {name: PUID, value: "1000"}
+            - {name: PGID, value: "1000"}
+            - {name: TZ, value: Etc/UTC}
+          readinessProbe:
+            tcpSocket: {port: 7878}
+            initialDelaySeconds: 15
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: media, mountPath: /media}
+            - {name: downloads, mountPath: /downloads}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: media
+          persistentVolumeClaim: {claimName: media}
+        - name: downloads
+          persistentVolumeClaim: {claimName: downloads}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: radarr
+  labels: {kubefactory/app: media-vpn}
+spec:
+  type: ClusterIP
+  selector: {app: radarr}
+  ports: [{port: 7878, targetPort: 7878}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarr
+  labels: {app: sonarr, kubefactory/app: media-vpn}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: sonarr}
+  template:
+    metadata:
+      labels: {app: sonarr}
+    spec:
+      containers:
+        - name: sonarr
+          image: lscr.io/linuxserver/sonarr:latest
+          ports: [{containerPort: 8989}]
+          env:
+            - {name: PUID, value: "1000"}
+            - {name: PGID, value: "1000"}
+            - {name: TZ, value: Etc/UTC}
+          readinessProbe:
+            tcpSocket: {port: 8989}
+            initialDelaySeconds: 15
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: media, mountPath: /media}
+            - {name: downloads, mountPath: /downloads}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: media
+          persistentVolumeClaim: {claimName: media}
+        - name: downloads
+          persistentVolumeClaim: {claimName: downloads}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarr
+  labels: {kubefactory/app: media-vpn}
+spec:
+  type: ClusterIP
+  selector: {app: sonarr}
+  ports: [{port: 8989, targetPort: 8989}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prowlarr
+  labels: {app: prowlarr, kubefactory/app: media-vpn}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: prowlarr}
+  template:
+    metadata:
+      labels: {app: prowlarr}
+    spec:
+      containers:
+        - name: prowlarr
+          image: lscr.io/linuxserver/prowlarr:latest
+          ports: [{containerPort: 9696}]
+          env:
+            - {name: PUID, value: "1000"}
+            - {name: PGID, value: "1000"}
+            - {name: TZ, value: Etc/UTC}
+          readinessProbe:
+            tcpSocket: {port: 9696}
+            initialDelaySeconds: 15
+          volumeMounts:
+            - {name: config, mountPath: /config}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+      volumes:
+        - name: config
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prowlarr
+  labels: {kubefactory/app: media-vpn}
+spec:
+  type: ClusterIP
+  selector: {app: prowlarr}
+  ports: [{port: 9696, targetPort: 9696}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyfin
+  labels: {app: jellyfin, kubefactory/app: media-vpn}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: jellyfin}
+  template:
+    metadata:
+      labels: {app: jellyfin}
+    spec:
+      containers:
+        - name: jellyfin
+          image: lscr.io/linuxserver/jellyfin:latest
+          ports: [{containerPort: 8096}]
+          env:
+            - {name: PUID, value: "1000"}
+            - {name: PGID, value: "1000"}
+            - {name: TZ, value: Etc/UTC}
+          readinessProbe:
+            tcpSocket: {port: 8096}
+            initialDelaySeconds: 15
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: media, mountPath: /media}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: media
+          persistentVolumeClaim: {claimName: media}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin
+  labels: {kubefactory/app: media-vpn}
+spec:
+  type: NodePort
+  selector: {app: jellyfin}
+  ports: [{port: 8096, targetPort: 8096}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deluge
+  labels: {app: deluge, kubefactory/app: media-vpn}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: deluge}
+  template:
+    metadata:
+      labels: {app: deluge}
+    spec:
+      containers:
+        - name: gluetun   # the VPN tunnel: the pod's only way out
+          image: qmcgaw/gluetun:v3
+          securityContext:
+            capabilities: {add: [NET_ADMIN]}
+          envFrom:
+            - secretRef: {name: vpn}
+          env:
+            - {name: FIREWALL_INPUT_PORTS, value: "8112"}   # let the web UI in from the cluster
+          volumeMounts:
+            - {name: tun, mountPath: /dev/net/tun}
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+        - name: deluge   # downloads, only ever through gluetun
+          image: lscr.io/linuxserver/deluge:latest
+          ports: [{containerPort: 8112}]
+          env:
+            - {name: PUID, value: "1000"}
+            - {name: PGID, value: "1000"}
+            - {name: TZ, value: Etc/UTC}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: downloads, mountPath: /downloads}
+          resources:
+            requests: {cpu: 200m, memory: 256Mi}
+      volumes:
+        - name: tun
+          hostPath: {path: /dev/net/tun, type: CharDevice}
+        - name: config
+          emptyDir: {}
+        - name: downloads
+          persistentVolumeClaim: {claimName: downloads}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deluge
+  labels: {kubefactory/app: media-vpn}
+spec:
+  type: ClusterIP
+  selector: {app: deluge}
+  ports: [{port: 8112, targetPort: 8112}]

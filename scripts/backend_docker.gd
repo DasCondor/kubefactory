@@ -86,7 +86,31 @@ func _inspect_all(rows: Array) -> void:
 			continue
 		var fin = str(i.get("State", {}).get("FinishedAt", ""))
 		var finished = 0.0 if fin == "" or fin.begins_with("0001") else Time.get_unix_time_from_datetime_string(fin.get_slice(".", 0))
-		_inspect[str(i.get("Id", ""))] = {"state": str(i.get("State", {}).get("Status", "")), "sec": K.container_security(i), "store": K.container_storage(i), "finished": finished}
+		_inspect[str(i.get("Id", ""))] = {"state": str(i.get("State", {}).get("Status", "")), "sec": K.container_security(i), "store": K.container_storage(i),
+			"net": K.container_net(i), "finished": finished}
+
+# A VPN gateway's outside address: Gluetun writes it to /tmp/gluetun/ip
+# (PUBLICIP_FILE). Read with the container's own `head`, at most every minute,
+# and nothing else: no call out to the internet from here.
+var _exit = {}      # container id -> {"ip", "note", "at"}
+
+func _exit_ip(id: String, running: bool) -> Dictionary:
+	if not running:
+		return {"ip": "", "note": "the VPN container is not running"}
+	var now = Time.get_unix_time_from_system()
+	var e = _exit.get(id, {})
+	if not e.is_empty() and now - float(e["at"]) < 60.0:
+		return e
+	var r = _run(["exec", id, "head", "-c", "64", "/tmp/gluetun/ip"], false)
+	var ip = r.out.strip_edges() if r.code == 0 else ""
+	if ip != "" and K.valid_ip(ip):
+		e = {"ip": ip, "note": "", "at": now}
+	elif r.code == 0:
+		e = {"ip": "", "note": "the tunnel is not up yet (no public address recorded)", "at": now}
+	else:
+		e = {"ip": "", "note": "not readable here" + (" (this host is read-only)" if remote else ""), "at": now}
+	_exit[id] = e
+	return e
 
 func fetch() -> Dictionary:
 	var r = _run(["ps", "-a", "--no-trunc", "--format", "{{json .}}"], false)
@@ -140,7 +164,8 @@ func fetch() -> Dictionary:
 			"phase": "Running" if state == "running" else ("Succeeded" if status == "Completed" else ("Failed" if state in ["exited", "dead"] else "Pending")),
 			"finished": float(_inspect.get(str(c.get("ID", "")), {}).get("finished", 0.0)),
 			"sec": _inspect.get(str(c.get("ID", "")), {}).get("sec", K.empty_security()),
-			"store": _inspect.get(str(c.get("ID", "")), {}).get("store", K.empty_storage())})
+			"store": _inspect.get(str(c.get("ID", "")), {}).get("store", K.empty_storage()),
+			"net": _inspect.get(str(c.get("ID", "")), {}).get("net", K.empty_net()).duplicate(true)})
 		if svc != "":
 			var key = ns + "/" + svc
 			if not wl.has(key):
@@ -149,6 +174,20 @@ func fetch() -> Dictionary:
 			if state == "running":
 				wl[key]["ready"] += 1
 	st.workloads = wl.values()
+	# who goes through whom: a container sharing a VPN gateway's network is
+	# listed on the gateway, and the gateway's outside address is read
+	var by_id = {}
+	for p in st.pods:
+		by_id[p["uid"]] = p
+	for p in st.pods:
+		var via = str(p["net"]["via"])
+		if via != "" and by_id.has(via) and not by_id[via]["net"]["vpn"].is_empty():
+			by_id[via]["net"]["vpn"]["through"].append(p["name"])
+	for p in st.pods:
+		if not p["net"]["vpn"].is_empty():
+			var e = _exit_ip(p["uid"], p["ready"])
+			p["net"]["vpn"]["exit_ip"] = e["ip"]
+			p["net"]["vpn"]["exit_note"] = e["note"]
 	return st
 
 func run_action(a: Dictionary) -> Dictionary:

@@ -45,6 +45,17 @@
   behaviour) and **Cancel**. Nothing changes until you choose.
 
 ### Added
+- **Porter's "Media server: Jellyfin + VPN".** Seerr → Radarr / Sonarr →
+  Prowlarr → Deluge behind Gluetun → Jellyfin, as Compose and Kubernetes
+  files (`apps/media-vpn.*`). The VPN account stays in `apps/vpn.env` or a
+  Secret; KubeFactory never reads it. The media demo world runs it too.
+- **VPN gateways show both sides of the tunnel.** A Gluetun container gets a
+  tunnel with an INSIDE sign (its addresses on your network, what it carries)
+  and an OUTSIDE sign (the address the internet sees, provider, type,
+  countries); containers that use its network are piped into it, and the
+  machine's panel says the same. Only Gluetun's provider, type and countries
+  are read, never its keys. Tests: `tests/live/vpn_docker_test.gd` (throw-away
+  containers), `tests/live/vpn_world_test.gd`, unit tests.
 - **`docs/GO_LIVE_2.0.md`:** what is left before 2.0.0, split into release
   blockers, verification that can ship as a known limitation, and what is out
   of reach.

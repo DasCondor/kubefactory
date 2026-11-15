@@ -361,6 +361,114 @@ static func container_security(i: Dictionary) -> Dictionary:
 						s["all_interfaces"] = true
 	return s
 
+# Network facts about one pod or container, the same shape from every source:
+#   addrs    ["172.18.0.4 (media_default)"]   its own addresses on the inside
+#   via      container id whose network it shares (Docker `container:<id>`,
+#            which is what Compose's `service:gluetun` becomes); "" if its own
+#   vpn      {} or, for a VPN gateway (Gluetun): provider, type, countries
+#            (only those three settings are read: never keys or passwords),
+#            exit_ip (the address the internet sees, "" until read), exit_note,
+#            through [the names whose traffic goes through it]
+# Only what the source states is recorded.
+const VPN_IMAGES = ["gluetun"]
+const VPN_SETTINGS = {"VPN_SERVICE_PROVIDER": "provider", "VPN_TYPE": "type", "SERVER_COUNTRIES": "countries"}
+
+static func empty_net() -> Dictionary:
+	return {"addrs": [], "via": "", "vpn": {}}
+
+static func is_vpn_image(image: String) -> bool:
+	var l = image.to_lower()
+	return VPN_IMAGES.any(func(v): return l.contains(v))
+
+# The three VPN settings worth showing, from "KEY=value" lines; everything
+# else in the environment (keys, passwords, tokens) is never looked at.
+static func vpn_settings(env: Array) -> Dictionary:
+	var v = {"provider": "", "type": "", "countries": "", "exit_ip": "", "exit_note": "", "through": []}
+	for e in env:
+		var s = str(e)
+		var i = s.find("=")
+		if i <= 0:
+			continue
+		var k = s.substr(0, i)
+		if VPN_SETTINGS.has(k):
+			v[VPN_SETTINGS[k]] = s.substr(i + 1).strip_edges().left(80)
+	if v["type"] == "":
+		v["type"] = "openvpn"      # Gluetun's own default when VPN_TYPE is unset
+	return v
+
+# from `docker inspect` of one container
+static func container_net(i: Dictionary) -> Dictionary:
+	var n = empty_net()
+	var hc: Dictionary = i.get("HostConfig", {}) if typeof(i.get("HostConfig")) == TYPE_DICTIONARY else {}
+	var cfg: Dictionary = i.get("Config", {}) if typeof(i.get("Config")) == TYPE_DICTIONARY else {}
+	var mode = str(hc.get("NetworkMode", ""))
+	if mode.begins_with("container:"):
+		n["via"] = mode.trim_prefix("container:")
+	var ns: Dictionary = i.get("NetworkSettings", {}) if typeof(i.get("NetworkSettings")) == TYPE_DICTIONARY else {}
+	var nets = ns.get("Networks", {})
+	if typeof(nets) == TYPE_DICTIONARY:
+		for name in nets:
+			var ip = str(nets[name].get("IPAddress", "")) if typeof(nets[name]) == TYPE_DICTIONARY else ""
+			if ip != "":
+				n["addrs"].append("%s (%s)" % [ip, name])
+	if is_vpn_image(str(cfg.get("Image", ""))):
+		n["vpn"] = vpn_settings(cfg.get("Env", []) if typeof(cfg.get("Env")) == TYPE_ARRAY else [])
+	return n
+
+# from a Kubernetes pod: a Gluetun sidecar carries the whole pod's traffic,
+# since the containers of a pod share one network
+static func pod_net(spec: Dictionary, status: Dictionary) -> Dictionary:
+	var n = empty_net()
+	var ip = str(status.get("podIP", ""))
+	if ip != "":
+		n["addrs"].append("%s (pod)" % ip)
+	var others = []
+	var vpn = {}
+	for c in spec.get("initContainers", []) + spec.get("containers", []):
+		if typeof(c) != TYPE_DICTIONARY:
+			continue
+		if is_vpn_image(str(c.get("image", ""))) and vpn.is_empty():
+			var env = []
+			for e in c.get("env", []):
+				if typeof(e) == TYPE_DICTIONARY and e.has("value"):     # a value from a Secret is never fetched
+					env.append("%s=%s" % [str(e.get("name", "")), str(e["value"])])
+			vpn = vpn_settings(env)
+			vpn["exit_note"] = "not read on Kubernetes yet"
+		else:
+			others.append(str(c.get("name", "")))
+	if not vpn.is_empty():
+		vpn["through"] = others
+		n["vpn"] = vpn
+	return n
+
+# The two sides of a VPN gateway's tunnel, as text (the world's signs, the machine's panel).
+static func vpn_inside_text(p: Dictionary) -> String:
+	var v: Dictionary = p["net"]["vpn"]
+	var lines = ["INSIDE  ·  your network", str(p["name"])]
+	for a in p["net"].get("addrs", []):
+		lines.append(str(a))
+	if p["net"].get("addrs", []).is_empty():
+		lines.append("(no address reported)")
+	if not v.get("through", []).is_empty():
+		lines.append("carries: " + ", ".join(PackedStringArray(v["through"])))
+	return "\n".join(lines)
+
+static func vpn_outside_text(p: Dictionary) -> String:
+	var v: Dictionary = p["net"]["vpn"]
+	var lines = ["OUTSIDE  ·  what the internet sees"]
+	lines.append(str(v["exit_ip"]) if str(v.get("exit_ip", "")) != "" else "address unknown")
+	var how = PackedStringArray([str(v.get("provider", "")), str(v.get("type", "")), str(v.get("countries", ""))].filter(func(s): return s != ""))
+	if not how.is_empty():
+		lines.append("  ·  ".join(how))
+	if str(v.get("exit_note", "")) != "":
+		lines.append(str(v["exit_note"]))
+	return "\n".join(lines)
+
+static func valid_ip(s: String) -> bool:
+	var re = RegEx.new()
+	re.compile("^(\\d{1,3}(\\.\\d{1,3}){3}|[0-9a-fA-F:]{2,39})$")
+	return re.search(s.strip_edges()) != null
+
 # Tables: keep the rows that contain `filter` in any column, then order them by
 # one column. getters: {column id: Callable(row) -> value}. Numbers sort as
 # numbers, everything else as text without regard to case; rows that compare

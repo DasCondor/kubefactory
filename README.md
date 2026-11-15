@@ -161,7 +161,7 @@ in a demo; Porter's bundled app setups remain available.
 | `kubernetes` | Kubernetes cluster | a web shop: frontend, cart, checkout, database, monitoring | checkout crash-loops; one image tag is mistyped |
 | `home-assistant` | Home Assistant | Home Assistant, Mosquitto, Zigbee2MQTT, Z-Wave JS, ESPHome, Node-RED, Frigate, voice (Whisper, Piper), MariaDB, InfluxDB, Grafana | Zigbee2MQTT cannot find its USB stick; one image tag is mistyped |
 | `dev-containers` | Dev containers | a build farm: Gitea, CI server and runners, BuildKit, registry, compile cache, and a dev container each for C++, Rust, Go, Python and Node | a heavy C++ build runs out of memory; one image tag is mistyped |
-| `media` | Media suite | Plex, Overseerr, Sonarr, Radarr, Lidarr, Bazarr, Jackett, Prowlarr, qBittorrent, Tautulli, plus Grafana, Prometheus, cAdvisor and node-exporter | nothing: this one shows it all working |
+| `media` | Media suite | Plex, Overseerr, Sonarr, Radarr, Lidarr, Bazarr, Jackett, Prowlarr, qBittorrent, Tautulli; the Jellyfin stack with Deluge behind a Gluetun VPN; plus Grafana, Prometheus, cAdvisor and node-exporter | nothing: this one shows it all working, VPN tunnel included |
 
 The broken ones are there for Bob: ask him to read the log and he finds the
 missing `/dev/ttyUSB0` or the compiler killed for memory. The cloud-flavoured
@@ -487,6 +487,22 @@ changes to that provider's model.
 <img src="docs/foreman-providers.webp" width="100%" alt="Adding an AI provider">
 <p align="center"><i>Adding an AI provider.</i></p>
 
+### VPN gateways: both sides of the tunnel
+
+A VPN container (Gluetun) shows what it changes. A tunnel rises from its
+machine with two signs: **INSIDE**, by the machine, its addresses on your
+network and the containers whose traffic it carries; **OUTSIDE**, at the top
+of the tunnel, the address the internet sees, with the provider, the VPN type
+and the server countries. On Docker every container that uses Gluetun's
+network (`network_mode: service:gluetun`) gets a line into it, and its panel
+says it has no network of its own. The same two sides are in the machine's
+panel under **NETWORK**.
+
+The outside address is the one Gluetun records itself (`/tmp/gluetun/ip`),
+read with the container's own `head` at most once a minute: KubeFactory makes
+no call to the internet to find it. Of Gluetun's settings only the provider,
+type and countries are read; its keys and passwords never are.
+
 ### Tables
 
 Lists with columns (workloads, clusters, files in a volume, Grafana dashboards
@@ -742,10 +758,11 @@ Beside the HUB stands Porter, a crane-backed robot. Press E to talk. He can:
 <img src="docs/porter.webp" width="100%" alt="Porter, the Portainer dock robot">
 <p align="center"><i>Porter builds complete app setups and installs from app lists.</i></p>
 
-His two big setups:
+His three big setups:
 
 | Setup | What he builds |
 |---|---|
+| **Media server: Jellyfin + VPN** | the arr stack from request to screen: Seerr (requests) → Radarr (films) / Sonarr (TV) → Prowlarr (indexers) → Deluge, which has no network of its own and sends everything through **Gluetun**'s VPN tunnel → Radarr / Sonarr file it → Jellyfin (watch). Your VPN account goes in `apps/vpn.env` (Compose) or a Secret `vpn` (Kubernetes); KubeFactory never reads it |
 | **Media server suite** | Plex (watch), Overseerr (requests), Sonarr / Radarr / Lidarr / Bazarr (TV, films, music, subtitles), **Jackett** (the indexer proxy they search through) with Prowlarr as the alternative, qBittorrent (download client) and Tautulli (Plex statistics), sharing one `media` and one `downloads` volume |
 | **Monitoring dashboard** | Grafana with a ready-made *Containers* dashboard and a generated admin password, Prometheus, cAdvisor (per-container CPU, memory, network) and node-exporter (the host) |
 
