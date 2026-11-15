@@ -60,8 +60,15 @@ func _ready() -> void:
 		var q = str(JavaScriptBridge.eval("window.location.search", true))
 		if q.contains("touch=0"):
 			allowed = false
-		elif q.contains("touch=1"):
+		elif q.contains("touch=1") or _touch_device():
 			set_active(true)
+
+# A phone or tablet: its main pointer is a finger and it cannot hover. Asked of
+# the browser, because a phone's first taps can reach the game as mouse clicks
+# (iOS Safari did), so waiting for a touch event left the desktop layout up.
+static func _touch_device() -> bool:
+	# a string, not a boolean: the boolean did not come back as true in Godot 4.3
+	return str(JavaScriptBridge.eval("matchMedia('(pointer: coarse) and (hover: none)').matches ? 'touch' : 'mouse'", true)) == "touch"
 
 func set_active(on: bool) -> void:
 	on = on and allowed

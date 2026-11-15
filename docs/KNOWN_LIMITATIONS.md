@@ -226,11 +226,19 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
   the Demolisher in hand and nothing destroyed, the menu, switching them off.
   The exported browser build was also opened at phone size with the controls
   on: the dialogs filled the screen and the on-screen ACTION button worked.
-  **No iPhone or Android device was used**, so notch and home-indicator
-  margins, browser toolbars, rotation while playing, frame rate and memory on a
-  phone are all unmeasured. Dialogs other than a machine's screen are scaled
-  up to fill the phone but were designed for a desktop: their text is small,
-  in portrait especially. There is no native mobile build.
+  Touch controls switch on when the browser reports a touch screen (a coarse
+  pointer that cannot hover); `?touch=0` keeps them off. Dialogs fill the
+  screen's width and scroll; on a phone held upright they are drawn sideways,
+  so you turn the phone to read them. They are still desktop layouts, made
+  larger, not phone layouts: text is about 9-10 points on a phone. The menus
+  were checked in the engine at 390 x 844, 844 x 390 and 768 x 1024, including
+  a tap through a sideways dialog; the page in a phone-sized desktop browser
+  showed the same layout, but that browser's simulated taps landed in the
+  wrong place, so taps were checked in the engine only.
+  **A screenshot from a real iPhone showed the problem; the fix has not been
+  tried on one yet.** Notch and home-indicator margins, browser toolbars,
+  rotation while playing, frame rate and memory on a phone are unmeasured.
+  There is no native mobile build.
 - **Usage figures (Metrics view):** Kubernetes reports CPU and memory only;
   network and disk show as unavailable there. The kubectl mode has no usage
   figures.

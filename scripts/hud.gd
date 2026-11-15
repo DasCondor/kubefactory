@@ -565,19 +565,48 @@ func on_state(st: Dictionary) -> void:
 func modal_open() -> bool:
 	return _modal != null
 
-# On a touch screen a dialog is scaled to use the screen it has, so its buttons are as large as they can be.
-func _fit_modal(center: Control, panel: Control) -> void:
-	if not is_instance_valid(panel) or not is_instance_valid(center):
+# On a touch screen a dialog fills the screen's width and scrolls if it is
+# taller, rather than shrinking until it fits: desktop dialogs shrunk onto a
+# phone had 4-6 px text. A phone held upright gets the dialog sideways, along
+# its long edge, so the text is as large as in landscape; turning the phone
+# (or not, with rotation lock on) reads it.
+#
+# The enlargement is the window's interface scale (content_scale_factor), not
+# a scaled picture of the dialog, so text is drawn sharp at its new size. It
+# goes back to the player's own interface size when the dialog closes.
+var _fit_cb = Callable()
+
+func _fit_modal(modal: Control, scroll: ScrollContainer, center: Control, panel: Control) -> void:
+	if modal != _modal or not is_instance_valid(panel) or not is_instance_valid(scroll):
+		return                                   # a dialog that has closed
+	var root = get_tree().root
+	var unscaled = get_viewport().get_visible_rect().size * root.content_scale_factor
+	var sideways = unscaled.y > unscaled.x * 1.6
+	var long_edge = unscaled.y if sideways else unscaled.x
+	var f = clampf(long_edge * 0.98 / maxf(panel.size.x, 1.0), 0.5, 4.0)
+	if absf(root.content_scale_factor - f) > 0.01:
+		root.content_scale_factor = f            # size_changed brings us back here
 		return
 	var vp = get_viewport().get_visible_rect().size
-	var s = minf(vp.x * 0.98 / maxf(panel.size.x, 1.0), vp.y * 0.97 / maxf(panel.size.y, 1.0))
-	center.pivot_offset = center.size * 0.5
-	center.scale = Vector2(s, s)
+	var frame = Vector2(vp.y, vp.x) if sideways else vp
+	scroll.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	scroll.rotation = PI / 2.0 if sideways else 0.0
+	scroll.position = Vector2(vp.x, 0) if sideways else Vector2.ZERO
+	scroll.size = frame
+	center.custom_minimum_size = Vector2(frame.x, maxf(frame.y, panel.size.y + 8.0))
+
+func _player_ui_scale() -> void:
+	get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
 
 func close_modal(recapture: bool = true) -> void:
 	if _modal != null:
 		_modal.queue_free()
 		_modal = null
+		if _fit_cb.is_valid():
+			if get_viewport().size_changed.is_connected(_fit_cb):
+				get_viewport().size_changed.disconnect(_fit_cb)
+			_fit_cb = Callable()
+			_player_ui_scale()           # a touch dialog enlarged the interface
 	_modal_kind = ""
 	_dyn = null
 	_dyn_sig = ""
@@ -600,8 +629,18 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_modal.add_child(dim)
 	var center = CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_modal.add_child(center)
+	var fit = touch_u > 0.0 and kind != "screen"
+	var scroll: ScrollContainer = null
+	if fit:
+		# a scrolling frame, for a dialog taller than the screen
+		scroll = ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_modal.add_child(scroll)
+		scroll.add_child(center)
+	else:
+		center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_modal.add_child(center)
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = size
 	var psb = _sb(BG, ORANGE, 0, 18)
@@ -628,7 +667,10 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	head.add_child(_lbl(title, 22, ORANGE))
 	head.add_child(_spacer())
 	var xb = _btn("  X  ", close_modal)
-	if touch_u > 0.0:
+	if fit:
+		xb.custom_minimum_size = Vector2(64, 52)       # enlarged with the dialog
+		xb.add_theme_font_size_override("font_size", 22)
+	elif touch_u > 0.0:
 		xb.custom_minimum_size = Vector2(touch_u * 1.1, touch_u * 0.9)
 		xb.add_theme_font_size_override("font_size", int(touch_u * 0.3))
 	head.add_child(xb)
@@ -637,8 +679,12 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(body)
 	add_child(_modal)
-	if touch_u > 0.0 and kind != "screen":
-		_fit_modal.call_deferred(center, panel)
+	if fit:
+		# a bound method, not a lambda: Godot 4.3 crashed calling a deferred lambda
+		_fit_cb = _fit_modal.bind(_modal, scroll, center, panel)
+		panel.resized.connect(_fit_cb)                # content grew or shrank
+		get_viewport().size_changed.connect(_fit_cb, CONNECT_DEFERRED)
+		_fit_cb.call_deferred()
 	if sfx != null and not (pad and was_pad):
 		sfx.play("pad" if pad else "click", -12.0)
 	player.enabled = false
