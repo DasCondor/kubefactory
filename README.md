@@ -183,6 +183,7 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 | Backend plugins | [PLUGINS](docs/PLUGINS.md) · [example plugin](examples/plugins/static-world) |
 | Contributing | [CONTRIBUTING](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) |
 | Releases and what changed | [CHANGELOG](docs/CHANGELOG.md) · [Releases](https://github.com/DasCondor/kubefactory/releases) |
+| Signed releases | [CODE_SIGNING](docs/CODE_SIGNING.md) · [Download](#-download) |
 | What is tested, what is not, what is left for 2.0.0 | [KNOWN_LIMITATIONS](docs/KNOWN_LIMITATIONS.md) · [FEATURE_PARITY](docs/FEATURE_PARITY.md) · [GO_LIVE_2.0](docs/GO_LIVE_2.0.md) |
 
 ## 📥 Download
@@ -205,8 +206,10 @@ that ties it to this repository's release workflow and the exact commit:
 gh attestation verify KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz -R DasCondor/kubefactory
 ```
 
-None of the packages is signed with a Windows or Apple developer identity.
-Windows SmartScreen asks for confirmation on first run. On macOS the app is
+None of the packages is signed with a Windows or Apple developer identity yet.
+Windows signing is free through SignPath Foundation once the project is approved
+([CODE_SIGNING](docs/CODE_SIGNING.md)); until then Windows SmartScreen asks for
+confirmation on first run. On macOS the app is
 ad-hoc signed but not notarized, so Gatekeeper blocks a downloaded copy until
 you clear the quarantine flag on the unpacked folder:
 

@@ -8,9 +8,10 @@
 #
 #   gh attestation verify <package> -R DasCondor/kubefactory
 #
-# Nothing is signed with a Windows or Apple developer identity: the Windows
-# exe and the macOS app are not code-signed by a publisher (the macOS app is
-# ad-hoc signed so Apple Silicon will run it), and nothing claims otherwise.
+# Windows: the exes are Authenticode-signed through SignPath once it is set up
+# (docs/CODE_SIGNING.md); until then they are unsigned, and the job says so by
+# skipping the signing steps. macOS: ad-hoc signed only (so Apple Silicon will
+# run it), not notarized. Nothing claims more than that.
 name: release
 
 on:
@@ -31,6 +32,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
+      actions: read          # SignPath fetches the unsigned package from this run
       id-token: write
       attestations: write
     steps:
@@ -71,6 +73,47 @@ jobs:
       - name: Test, export and zip
         shell: pwsh
         run: ./tools/package.ps1
+
+      # Windows code signing through SignPath (docs/CODE_SIGNING.md). Off until the
+      # repository variable SIGNPATH_ORGANIZATION_ID and the secret
+      # SIGNPATH_API_TOKEN exist; without them the package ships unsigned, as before.
+      - name: Upload the unsigned package for signing
+        id: unsigned
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: KubeFactory-windows-unsigned
+          path: dist/*-win64.zip
+
+      - name: Sign KubeFactory.exe, KubeFactory.console.exe and kf-agent.exe
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'kubefactory' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600     # a release signing request may wait for a person to approve it
+          output-artifact-directory: signed
+
+      - name: Use the signed package, and check every exe in it
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem signed -Recurse -Filter "*-win64.zip" | Select-Object -First 1
+          if ($zip -eq $null) { throw "SignPath returned no package" }
+          Copy-Item $zip.FullName "dist/$($zip.Name)" -Force
+          Expand-Archive "dist/$($zip.Name)" check -Force
+          $exes = Get-ChildItem check -Recurse -Filter *.exe
+          foreach ($e in $exes) {
+            $sig = Get-AuthenticodeSignature $e.FullName
+            "{0}: {1} ({2})" -f $e.Name, $sig.Status, $sig.SignerCertificate.Subject
+            if ($sig.Status -ne "Valid") { throw "$($e.Name) is not validly signed" }
+          }
+          $hash = (Get-FileHash "dist/$($zip.Name)" -Algorithm SHA256).Hash.ToLower()
+          [IO.File]::WriteAllText("dist/$($zip.Name).sha256", "$hash  $($zip.Name)`n")
 
       - uses: actions/attest-build-provenance@v2
         with:
