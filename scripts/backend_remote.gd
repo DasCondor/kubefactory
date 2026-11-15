@@ -8,6 +8,10 @@ const K = preload("res://scripts/kutil.gd")
 
 var label = "remote"
 var poll_interval = 1.0
+# WebSocketPeer.close() from a worker thread crashed Godot 4.3 (heap corruption on
+# Windows, SIGSEGV on Linux) when switching away from a server; closing only sends
+# a close frame, so cluster.gd runs this cleanup on the main thread.
+var cleanup_on_main_thread = true
 var caps = {"remove_image": true, "scale": true, "delete_pod": true, "restart": true, "delete_workload": false,
 	"create": true, "cordon": true, "drain": false, "logs": true, "files": true}
 var context = ""
@@ -83,8 +87,11 @@ func _pump() -> void:
 
 func fetch() -> Dictionary:
 	_pump()
-	if _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
-		return {"source": label, "context": context, "error": "the connection to the server closed (code %d)" % _ws.get_close_code(), "failed": true}
+	if not _is_open():
+		_mx.lock()
+		var code = _ws.get_close_code()
+		_mx.unlock()
+		return {"source": label, "context": context, "error": "the connection to the server closed (code %d)" % code, "failed": true}
 	_mx.lock()
 	var st = _state.duplicate(true)
 	_mx.unlock()
@@ -110,10 +117,20 @@ func run_action(a: Dictionary) -> Dictionary:
 		_mx.unlock()
 		if r != null:
 			return r if typeof(r) == TYPE_DICTIONARY else {"ok": false, "msg": "the server's answer was not understood"}
-		if _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		if not _is_open():
 			return {"ok": false, "msg": "the connection to the server closed"}
 		OS.delay_msec(20)
 	return {"ok": false, "msg": "the server did not answer in time"}
 
+# Fetches and actions run on worker threads and cleanup on the main thread:
+# every use of the WebSocketPeer goes through _mx.
+func _is_open() -> bool:
+	_mx.lock()
+	var open = _ws.get_ready_state() == WebSocketPeer.STATE_OPEN
+	_mx.unlock()
+	return open
+
 func cleanup() -> void:
+	_mx.lock()
 	_ws.close(1000, "bye")
+	_mx.unlock()

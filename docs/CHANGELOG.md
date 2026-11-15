@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Switching away from a KubeFactory server no longer crashes the game.**
+  The server connection was closed from a worker thread; Godot 4.3 corrupted
+  its heap (Windows: `0xc0000374` in ntdll; Linux: SIGSEGV) on the first
+  switch to any other source. It now closes on the main thread, and every use
+  of the connection is locked. Test: `tests/live/remote_switch_test.gd`.
+
 ## 2.0.0-beta.1 (2026-11-14)
 
 A beta: not a stable release. See `KNOWN_LIMITATIONS.md` for what has not been tested
