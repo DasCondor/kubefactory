@@ -1,6 +1,6 @@
 # Feature parity
 
-<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.2 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
 
 Two questions: does 2.0 still do everything 1.0.1 did, and how much of the 2.0
 handoff is in?
@@ -96,7 +96,7 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Multiplayer beyond 1.0.1 presence | unsupported |
 | 12 Verification | Unit tests (GDScript, Go), model audit, screenshot runs | done; the tests are in `tests/` and `agent/*_test.go` |
 | | Live acceptance tests, large-scale benchmarks | kind and Docker tests completed; clean-machine, cloud and large-scale tests not completed |
-| 13 Distribution | Windows, Linux and macOS packages with companion and models | published in [2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1); packages have SHA-256 checksums and build-provenance attestations |
+| 13 Distribution | Windows, Linux and macOS packages with companion and models | published in [2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) and [2.0.0-beta.2](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2); packages have SHA-256 checksums and build-provenance attestations |
 | | Platform code signing | macOS is ad-hoc signed; publisher signing and macOS notarization are unavailable |
 
 ## Remaining verification before a stable release

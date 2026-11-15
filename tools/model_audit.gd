@@ -146,7 +146,7 @@ func _write(rows: Array, totals: Dictionary) -> void:
 	var md = PackedStringArray()
 	md.append("# Model audit (library V8)")
 	md.append("")
-	md.append("<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>")
+	md.append("<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.2 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>")
 	md.append("Written by `tools/model_audit.gd`. Do not edit by hand: run the tool again.")
 	md.append("")
 	md.append("- Files checked: **%d** (%d models at up to three tiers)" % [totals["files"], Models.ids().size()])

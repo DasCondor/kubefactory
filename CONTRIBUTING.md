@@ -1,6 +1,6 @@
 # Contributing to KubeFactory
 
-<sub>[KubeFactory](README.md) · [All docs](README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](docs/KNOWN_LIMITATIONS.md)</sub>
+<sub>[KubeFactory](README.md) · [All docs](README.md#-docs-by-topic) · [2.0.0-beta.2 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2) · [Known limitations](docs/KNOWN_LIMITATIONS.md)</sub>
 
 Thanks for wanting to help. KubeFactory is a Godot 4.3 game (GDScript) with a
 Go companion, `kf-agent`. You do not need a cluster for most changes: the
