@@ -55,6 +55,9 @@ class H(BaseHTTPRequestHandler):
             self._send(200, {"version": "1.19.5"})
         elif t == "ListServers":
             self._send(200, SERVERS)
+        elif t == "ListAllContainers":
+            # an older Core: 2.3's name is an unknown variant, so the game must fall back
+            self._send(422, {"error": "unknown variant `ListAllContainers`"})
         elif t == "ListAllDockerContainers":
             self._send(200, CONTAINERS)
         else:

@@ -14,6 +14,7 @@
   of the connection is locked. Test: `tests/live/remote_switch_test.gd`.
 
 ### Changed
+- **Komodo asks for containers by their 2.3 name, ListAllContainers,** and falls back to ListAllDockerContainers when an older Core does not know it.
 - **Rebinding a key that is already in use asks first.** Settings now says
   "E is already bound to Inspect / talk. Move it to Move right?" with
   **Move it here** (the other action loses the key), **Keep both** (the old
