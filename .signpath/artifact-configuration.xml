@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration for the Windows package (docs/CODE_SIGNING.md).
+     The GitHub artifact is a zip holding KubeFactory-<version>-win64.zip, which
+     holds one folder with the game, its console build and the companion.
+     Paste this into the project's artifact configuration on SignPath. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <zip-file path="KubeFactory-*-win64.zip">
+      <directory path="KubeFactory-*-win64">
+        <pe-file path="KubeFactory.exe">
+          <authenticode-sign />
+        </pe-file>
+        <pe-file path="KubeFactory.console.exe">
+          <authenticode-sign />
+        </pe-file>
+        <pe-file path="kf-agent.exe">
+          <authenticode-sign />
+        </pe-file>
+      </directory>
+    </zip-file>
+  </zip-file>
+</artifact-configuration>

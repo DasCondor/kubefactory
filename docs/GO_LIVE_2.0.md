@@ -57,8 +57,10 @@ match a real Core 2.3.4 (old request name).
 
 Stated in the release notes, not worked on for 2.0.0:
 
-- **Code signing.** No Windows publisher certificate and no Apple developer
-  identity: SmartScreen warns, and macOS needs the quarantine flag cleared.
+- **Code signing.** Windows signing is wired to SignPath Foundation's free
+  open-source certificate and switches on once the project is approved
+  ([CODE_SIGNING.md](CODE_SIGNING.md)); until then SmartScreen warns. No Apple
+  developer identity: macOS needs the quarantine flag cleared.
   Packages are checked by SHA-256 and signed build-provenance attestations
   instead.
 - **Unsupported 2.0 handoff items** (see [FEATURE_PARITY.md](FEATURE_PARITY.md)):
