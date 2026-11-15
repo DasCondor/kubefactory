@@ -12,7 +12,8 @@ scale, deploy whole stacks and tear them down, all with a belt of six tools,
 with a crew of robots that watch it for you. Built for personal and homelab use.
 
 [![Play in your browser](https://img.shields.io/badge/▶_Play_in_your_browser-f99549?style=for-the-badge)](https://dascondor.github.io/kubefactory/)
-[![Download for Windows, Linux and macOS](https://img.shields.io/badge/⬇_Download-Windows_·_Linux_·_macOS-2b2f36?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases)
+[![Get 2.0.0-beta.1](https://img.shields.io/badge/⬇_Get_2.0.0--beta.1-pre--release-e3b341?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1)
+[![All releases](https://img.shields.io/badge/All_releases-Windows_·_Linux_·_macOS-2b2f36?style=for-the-badge)](https://github.com/DasCondor/kubefactory/releases)
 
 [![Release](https://img.shields.io/github/v/release/DasCondor/kubefactory?include_prereleases&color=f99549)](https://github.com/DasCondor/kubefactory/releases)
 [![Web demo](https://img.shields.io/github/actions/workflow/status/DasCondor/kubefactory/pages.yml?label=web%20demo)](https://github.com/DasCondor/kubefactory/actions/workflows/pages.yml)
@@ -20,7 +21,7 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 [![License: MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20browser-8b949e)
 
-![Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service belts and a failing pod's alarm](docs/flythrough.webp)
+<img src="docs/flythrough.webp" width="100%" alt="Fly-through of a simulated cluster: the HUB, node platforms, pod machines, service belts and a failing pod's alarm">
 
 [Play](#-play-in-the-browser-sandbox-demo) ·
 [Download](#-download) ·
@@ -37,6 +38,14 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 [All docs](#-docs-by-topic)
 
 </div>
+
+> [!NOTE]
+> **KubeFactory 2.0 is in beta.** [2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) is a pre-release for
+> Windows, Linux and macOS: native Kubernetes without `kubectl`, the Krew and
+> Foreman, read-only Docker hosts and Komodo, server mode, plugins, in-game
+> settings and controller support. What has and has not been tried on real
+> infrastructure is in [Known limitations](docs/KNOWN_LIMITATIONS.md); what is
+> left before 2.0.0 is in the [go-live checklist](docs/GO_LIVE_2.0.md).
 
 ## ✨ Why use it
 
@@ -57,26 +66,44 @@ with a crew of robots that watch it for you. Built for personal and homelab use.
 - 📺 **Screens that show the real thing.** Each machine's screen steps through its application's own page, its metrics, its log and its storage. Click it to open it full size.
 - 💻 **Windows, Linux, macOS and the browser.** Built with Godot 4.3. Every release package carries a checksum and a signed record of how it was built.
 
-## 📸 Screenshots
+## 📸 A quick tour
 
-| | |
-|---|---|
-| ![Overview of a simulated cluster with an alarm beam over a failing pod](docs/overview.webp) Nodes are platforms, pods are machines; red beams mark failing pods | ![A database machine: type plate, the pod's real name with its icon, and its screen](docs/machines.webp) Every machine says what it is: a type plate, the real pod name with an icon for what it runs, and a screen |
-| ![One screen stepping through dashboard, metrics, logs and storage](docs/screens.webp) One screen, four views: dashboard, metrics, logs, storage. `R` steps through them | ![A machine's log opened full size](docs/screen-window.webp) Click a screen to open it full size and switch views there |
-| ![A machine with its storage door open and the file browser beside it](docs/storage.webp) Open a machine's door (`F`) to browse its volumes, read-only | ![The demo's simulated Grafana dashboard, opened full size](docs/demo-grafana.webp) The demo's Grafana and media screens show simulated content, marked as such |
-| ![The six handheld tools, each with its own display](docs/tools.webp) Six tools; each one's display shows what it is pointed at and what the trigger would do | ![Holding the Mk.4 Dismantler on a pod](docs/dismantler.webp) Hold to act: stronger tools take longer |
-| ![The connection wizard listing kubeconfig contexts](docs/connect.webp) Connect with a kubeconfig, no kubectl: `KubeFactory.exe --kubeconfig <file>` | ![The datapad showing cluster warning events as a ledger](docs/datapad.webp) The datapad: logs, events and the audit ledger |
-| ![Bob at his repair stand, with the fix list on the board behind him](docs/bob-stand.webp) Bob's repair stand: the board lists what is broken, and he has something to say about it | ![Bob's fix list](docs/bob.webp) His fix list: what is broken, why, and what to do |
-| ![Bob's case file: the log lines that matter on a build that ran out of memory](docs/bob-case.webp) Bob 2.0 reads the log: the line that killed it, what it means, what to do | ![The demo chooser](docs/demos.webp) Four demo worlds to try everything safely |
-| ![The media suite demo: Plex, the arr apps and Grafana all running](docs/demo-media.webp) The media suite world: Plex, Sonarr, Radarr, Jackett and friends, all healthy | ![Porter, the Portainer dock robot](docs/porter.webp) Porter builds complete app setups and installs from app lists |
-| ![Typed confirmation before deleting a workload](docs/confirm.webp) Mk.5 actions make you type the target's name | ![Two other players shown as robot avatars](docs/multiuser.webp) Other people on the cluster appear as avatars |
-| ![The Krew's operations board with Sentinel's findings](docs/krew-panel.webp) The Krew's board: every finding with its evidence, a proposed fix and its risk | ![Foreman's answer with one checked proposal and one refused](docs/foreman-answer.webp) Foreman: ask in plain words; proposals are checked and need your approval |
-| ![The settings menu with every key rebindable](docs/settings.webp) Settings: keys, controller, field of view, interface size, colour palettes | ![The minimap in the bottom-left corner](docs/minimap.webp) The minimap turns with you; failing machines pulse |
+<img src="docs/overview.webp" width="100%" alt="Overview of a simulated cluster with an alarm beam over a failing pod">
+<p align="center"><i>Nodes are platforms, pods are machines; a red beam marks a failing pod from anywhere in the yard.</i></p>
+
+<img src="docs/machines.webp" width="100%" alt="A database machine: type plate, the pod's real name with its icon, and its screen">
+<p align="center"><i>Every machine says what it is: a type plate, the real pod name with an icon for what it runs, and a screen.</i></p>
+
+<img src="docs/screens.webp" width="100%" alt="One screen stepping through dashboard, metrics, logs and storage">
+<p align="center"><i>One screen, four views: dashboard, metrics, logs and storage. <code>R</code> steps through them.</i></p>
+
+<img src="docs/storage.webp" width="100%" alt="A machine with its storage door open and the file browser beside it">
+<p align="center"><i>Open a machine's door (<code>F</code>) to browse its volumes, read-only.</i></p>
+
+<img src="docs/tools.webp" width="100%" alt="The six handheld tools, each with its own display">
+<p align="center"><i>Six tools, five tiers. Each one's display shows what it is pointed at and what the trigger would do.</i></p>
+
+<img src="docs/confirm.webp" width="100%" alt="Typed confirmation before deleting a workload">
+<p align="center"><i>The strongest actions make you type the target's name.</i></p>
+
+<img src="docs/connect.webp" width="100%" alt="The connection wizard listing kubeconfig contexts">
+<p align="center"><i>Connect with a kubeconfig, no <code>kubectl</code> needed.</i></p>
+
+<img src="docs/datapad.webp" width="100%" alt="The datapad showing cluster warning events as a ledger">
+<p align="center"><i>The datapad: pod logs, cluster events and the audit ledger.</i></p>
+
+<img src="docs/demos.webp" width="100%" alt="The demo chooser">
+<p align="center"><i>Four simulated demo worlds to try everything safely.</i></p>
+
+<img src="docs/demo-media.webp" width="100%" alt="The media suite demo: Plex, the arr apps and Grafana all running">
+<p align="center"><i>The media suite world: Plex, Sonarr, Radarr, Jackett and friends, all healthy.</i></p>
 
 ## 📱 On a phone or tablet (browser demo)
 
-The browser demo has touch controls. They appear the first time you touch the
-screen; a desktop browser with a mouse and keyboard keeps the desktop controls.
+The browser demo has touch controls. They switch on by themselves on a phone or
+tablet; a desktop browser with a mouse and keyboard keeps the desktop controls.
+Menus fill the screen and scroll; on a phone held upright they are drawn
+sideways, so turn the phone to read them.
 
 | Control | What it does |
 |---|---|
@@ -94,10 +121,11 @@ Add `?touch=1` to the address to force the controls on, `?touch=0` to keep
 them off on a laptop with a touch screen. The browser demo is the simulation
 only, and says so on screen the whole time.
 
-![Touch controls in landscape and portrait, and a machine's screen opened full size](docs/mobile.webp)
+<img src="docs/mobile.webp" width="100%" alt="Touch controls in landscape and portrait, and a machine's screen opened full size">
 
-Not yet tried on a real iPhone or Android phone: see
-[docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+Checked at phone and tablet sizes; the latest menu changes have not yet been
+tried on a real iPhone or Android phone. See
+[Known limitations](docs/KNOWN_LIMITATIONS.md).
 
 ## 🌐 Play in the browser (sandbox demo)
 
@@ -159,27 +187,32 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 
 ## 📥 Download
 
-Get the current beta or the latest stable build from the
-[GitHub Releases page](https://github.com/DasCondor/kubefactory/releases).
+**[2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1)** is the current pre-release. The latest stable build
+(1.0.1, Windows only) and every earlier version are on the
+[Releases page](https://github.com/DasCondor/kubefactory/releases).
 
-| Platform | Package | Start it |
+| Platform | 2.0.0-beta.1 | Start it |
 |---|---|---|
-| Windows | `KubeFactory-<version>-win64.zip` | `install.ps1`, or `KubeFactory.exe` |
-| Linux (x86_64) | `KubeFactory-<version>-linux-x86_64.tar.gz` | `./KubeFactory.x86_64` |
-| macOS (Apple Silicon and Intel) | `KubeFactory-<version>-macos.zip` | `KubeFactory.app` (see below) |
+| Windows | [KubeFactory-2.0.0-beta.1-win64.zip](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-win64.zip) (59 MB) | `install.ps1`, or `KubeFactory.exe` |
+| Linux (x86_64) | [KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz) (51 MB) | `./KubeFactory.x86_64` |
+| macOS (Apple Silicon and Intel) | [KubeFactory-2.0.0-beta.1-macos.zip](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-macos.zip) (91 MB) | `KubeFactory.app` (see below) |
 
 **Checking a download.** Every package has a `.sha256`, the release has one
 `SHA256SUMS`, and every package carries a signed build-provenance attestation
 that ties it to this repository's release workflow and the exact commit:
 
-    gh attestation verify KubeFactory-<version>-linux-x86_64.tar.gz -R DasCondor/kubefactory
+```bash
+gh attestation verify KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz -R DasCondor/kubefactory
+```
 
 None of the packages is signed with a Windows or Apple developer identity.
 Windows SmartScreen asks for confirmation on first run. On macOS the app is
 ad-hoc signed but not notarized, so Gatekeeper blocks a downloaded copy until
 you clear the quarantine flag on the unpacked folder:
 
-    xattr -dr com.apple.quarantine KubeFactory-<version>-macos
+```bash
+xattr -dr com.apple.quarantine KubeFactory-2.0.0-beta.1-macos
+```
 
 ## 📦 Install (release build)
 
@@ -190,7 +223,9 @@ both, the options below work the same way (`./KubeFactory.x86_64 -- --demo`).
 
 **Windows:** unzip `KubeFactory-<version>-win64.zip`, then:
 
-    powershell -ExecutionPolicy Bypass -File install.ps1
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
 
 That installs for the current user (no admin rights) to
 `%LOCALAPPDATA%\Programs\KubeFactory` and adds Start Menu entries: KubeFactory,
@@ -201,16 +236,17 @@ You can also just run `KubeFactory.exe` from the unzipped folder.
 
 Command-line options go after `--`:
 
-    KubeFactory.exe --kubeconfig <file>         connect to the cluster in that kubeconfig (YAML or JSON)
-    KubeFactory.exe -- --demo                   built-in simulated cluster (safe to break)
-    KubeFactory.exe -- --sim=aws-eks-prod       or azure-aks-staging, gke-analytics, rancher-edge
-    KubeFactory.exe -- --context=<name>         a specific kubeconfig context
-    KubeFactory.exe -- --read-only              look, don't touch
-    KubeFactory.exe -- --docker --context=<n>   a Docker host, by its Docker context
-    KubeFactory.exe -- --remote=wss://host:7666 a KubeFactory server (token in KF_REMOTE_TOKEN)
-    KubeFactory.exe --headless -- --server      be a server for the others (docs/SERVER.md)
-
-    KubeFactory.exe -- --kubectl-cli            use kubectl instead of the built-in client
+| Command | Does |
+|---|---|
+| `KubeFactory.exe --kubeconfig <file>` | connect to the cluster in that kubeconfig (YAML or JSON) |
+| `KubeFactory.exe -- --demo` | built-in simulated cluster (safe to break) |
+| `KubeFactory.exe -- --sim=aws-eks-prod` | or `azure-aks-staging`, `gke-analytics`, `rancher-edge` |
+| `KubeFactory.exe -- --context=<name>` | a specific kubeconfig context |
+| `KubeFactory.exe -- --read-only` | look, don't touch |
+| `KubeFactory.exe -- --docker --context=<n>` | a Docker host, by its Docker context |
+| `KubeFactory.exe -- --remote=wss://host:7666` | a KubeFactory server (token in `KF_REMOTE_TOKEN`) |
+| `KubeFactory.exe --headless -- --server` | be a server for the others ([SERVER](docs/SERVER.md)) |
+| `KubeFactory.exe -- --kubectl-cli` | use `kubectl` instead of the built-in client |
 
 With no options it connects to your current kube context, then Docker, then the
 simulation. `KubeFactory.console.exe` is the same game with a console window,
@@ -218,7 +254,8 @@ for troubleshooting. `check-requirements.ps1` checks for the optional cloud CLIs
 
 ## 🔌 Connecting to a cluster (no kubectl needed)
 
-> **2.0 is in beta.** Connecting, managing and storage inspection are verified
+> [!IMPORTANT]
+> **2.0 is in beta** ([2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1)). Connecting, managing and storage inspection are verified
 > on a real cluster with running containers (kind) and on a real Docker engine;
 > a user reports k3s working. Not yet tried: any cloud provider, a real AI
 > provider behind Foreman, LiveView on a real application through a
@@ -266,6 +303,7 @@ make the host itself refuse changes, and to avoid giving anything root
 (Docker access is root), run the read-only proxy in
 `deploy/docker-readonly/` on each host and reach it over an SSH tunnel as an
 ordinary user: **[docs/DOCKER_HOSTS.md](docs/DOCKER_HOSTS.md)**.
+
 ### A KubeFactory server: play like a game client
 
 Run KubeFactory once as a server beside your cluster (`--headless -- --server`)
@@ -331,6 +369,12 @@ Every machine has a screen, and it can show four things:
 - The text under the crosshair now sits below the screen you are reading, and
   floating name labels show only from across the yard.
 
+<img src="docs/screen-window.webp" width="100%" alt="A machine's log opened full size">
+<p align="center"><i>Click a screen to open it full size and switch views there.</i></p>
+
+<img src="docs/demo-grafana.webp" width="100%" alt="The demo's simulated Grafana dashboard, opened full size">
+<p align="center"><i>In the demo worlds, Grafana and media screens show simulated content, marked as such.</i></p>
+
 ### Gauge: the resource desk
 
 Meet Gauge beside the logging station, or open **Gauge** from the pause menu.
@@ -342,8 +386,11 @@ read-only and makes no changes; use sustained measurements and workload context
 before adjusting resource settings. You can hide Gauge in the world from the
 pause menu.
 
-![Gauge at the resource desk](docs/gauge-station.webp)
-![Gauge's read-only resource panel](docs/gauge-panel.webp)
+<img src="docs/gauge-station.webp" width="100%" alt="Gauge at the resource desk">
+<p align="center"><i>Gauge at the resource desk.</i></p>
+
+<img src="docs/gauge-panel.webp" width="100%" alt="Gauge's read-only resource panel">
+<p align="center"><i>Gauge's read-only resource panel.</i></p>
 
 ### The Krew: operations center (key `K`)
 
@@ -379,13 +426,26 @@ shows the condition is gone. Findings in system namespaces are lowered one
 level. The board exports to Markdown or JSON in the log folder. Demo findings
 are marked **SIMULATED**.
 
-![The Krew's stations](docs/krew-stations.webp)
-![The same stations as the browser build draws them](docs/krew-stations-browser.webp)
-![The browser's High preset: the library models on the same renderer](docs/web-high.webp)
-![Sentinel's findings in the operations center](docs/krew-panel.webp)
-![Scrappy's cleanup awaiting approval](docs/krew-scrappy.webp)
-![Archie, Forge and Blueprint in the second row](docs/krew-second-row.webp)
-![All eight workers on the board](docs/krew-roster.webp)
+<img src="docs/krew-stations.webp" width="100%" alt="The Krew's stations">
+<p align="center"><i>The Krew's stations past Gauge's desk.</i></p>
+
+<img src="docs/krew-stations-browser.webp" width="100%" alt="The same stations as the browser build draws them">
+<p align="center"><i>The same stations as the browser build draws them.</i></p>
+
+<img src="docs/web-high.webp" width="100%" alt="The browser's High preset: the library models on the same renderer">
+<p align="center"><i>The browser's High preset: the library models on the same renderer.</i></p>
+
+<img src="docs/krew-panel.webp" width="100%" alt="Sentinel's findings in the operations center">
+<p align="center"><i>The Krew's board: every finding with its evidence, a proposed fix and its risk.</i></p>
+
+<img src="docs/krew-scrappy.webp" width="100%" alt="Scrappy's cleanup awaiting approval">
+<p align="center"><i>Scrappy's cleanup waits for your approval.</i></p>
+
+<img src="docs/krew-second-row.webp" width="100%" alt="Archie, Forge and Blueprint in the second row">
+<p align="center"><i>Archie, Forge and Blueprint in the second row.</i></p>
+
+<img src="docs/krew-roster.webp" width="100%" alt="All eight workers on the board">
+<p align="center"><i>All eight workers on the board.</i></p>
 
 ### Foreman: incidents and plain-language questions (key `H`)
 
@@ -415,9 +475,14 @@ changes to that provider's model.
   the game's files or logs. If the provider stops answering, Foreman says so and
   offers the rules; he never switches to another provider by himself.
 
-![Foreman's desk; his figure follows the chosen provider](docs/foreman-station.webp)
-![An answer with one checked proposal and one refused (test provider, simulated world)](docs/foreman-answer.webp)
-![Adding an AI provider](docs/foreman-providers.webp)
+<img src="docs/foreman-station.webp" width="100%" alt="Foreman's desk; his figure follows the chosen provider">
+<p align="center"><i>Foreman's desk; his figure follows the chosen provider.</i></p>
+
+<img src="docs/foreman-answer.webp" width="100%" alt="An answer with one checked proposal and one refused (test provider, simulated world)">
+<p align="center"><i>An answer with one checked proposal and one refused (test provider, simulated world).</i></p>
+
+<img src="docs/foreman-providers.webp" width="100%" alt="Adding an AI provider">
+<p align="center"><i>Adding an AI provider.</i></p>
 
 ### Tables
 
@@ -490,15 +555,15 @@ run them from source with `play.bat --edition=docker` / `--edition=demo`.
 
 ## 💻 Run from source
 
-    tools\setup.ps1    checks / installs the software below (including the engine)
-    play.bat           same options as above, without the leading --
-    play.bat --edition=docker | demo    the Docker or Demo edition
-    tools\package.ps1  runs the tests and builds the release zip + checksum in dist
-                       (-Edition docker | demo builds that edition instead)
-    tools\dev-cluster.ps1            3-node Kubernetes cluster in Docker containers (kind),
-                               with sample workloads, two of them broken on purpose
-    tools\dev-cluster.ps1 -Delete    remove it
-    tools\dev-users.ps1              multi-user setup + two test logins on that cluster
+| Command | Does |
+|---|---|
+| `tools\setup.ps1` | checks / installs the software below (including the engine) |
+| `play.bat` | starts the game; same options as above, without the leading `--` |
+| `play.bat --edition=docker` or `demo` | the Docker or Demo edition |
+| `tools\package.ps1` | runs the tests and builds the release zip and checksum in `dist` (`-Edition docker` or `demo` builds that edition) |
+| `tools\dev-cluster.ps1` | a 3-node Kubernetes cluster in Docker containers (kind), with sample workloads, two of them broken on purpose |
+| `tools\dev-cluster.ps1 -Delete` | removes it |
+| `tools\dev-users.ps1` | multi-user setup and two test logins on that cluster |
 
 ## 🧰 Software
 
@@ -525,7 +590,8 @@ up): node platforms, every machine as a dot in its health colour (failing
 ones pulse), the HUB, the cluster gates, Bob, Porter, Gauge, Foreman and the
 Krew's stations. `N` or the pause menu shows and hides it.
 
-![The minimap, bottom left](docs/minimap.webp)
+<img src="docs/minimap.webp" width="100%" alt="The minimap, bottom left">
+<p align="center"><i>The minimap turns with you; failing machines pulse.</i></p>
 
 | In the game | In the cluster |
 |---|---|
@@ -558,6 +624,9 @@ tier colours mark every button in the panels.
 | 5 | Dismantler | Mk.4 Destructive | hold: delete the pod |
 | 6 | Demolisher | Mk.5 Critical | long hold: delete the whole workload, or drain the node |
 
+<img src="docs/dismantler.webp" width="100%" alt="Holding the Mk.4 Dismantler on a pod">
+<p align="center"><i>Hold to act: stronger tools take longer.</i></p>
+
 Other keys: WASD, Shift sprint, Space jump (double-tap for hoverpack, Ctrl to
 descend), E inspect, MMB copy a machine as blueprint, Tab cluster codex,
 L datapad, G jump to next problem, B belts, F open a machine's storage door,
@@ -584,7 +653,8 @@ Everything is set in the game and saved as you change it; no files to edit.
   colour blindness (Okabe-Ito colours) and a high-contrast one. They change
   lamps, alarm beams, findings and tool tiers; every status is also written.
 
-![Settings: every key rebindable](docs/settings.webp)
+<img src="docs/settings.webp" width="100%" alt="Settings: every key rebindable">
+<p align="center"><i>Settings: keys, controller, field of view, interface size and colour palettes.</i></p>
 
 ## 🎨 Graphics presets
 
@@ -620,7 +690,8 @@ How the recommendation is made: the GPU's name and type, memory and CPU threads
 mid-range discrete GPUs Enhanced, high-end ones Ultra, stepping down a level
 under 16 GB of memory or 8 threads.
 
-![Standard, Enhanced and Ultra side by side: spawn, overview, a platform, and the same panel on each](docs/presets.webp)
+<img src="docs/presets.webp" width="100%" alt="Standard, Enhanced and Ultra side by side: spawn, overview, a platform, and the same panel on each">
+<p align="center"><i>Standard, Enhanced and Ultra side by side.</i></p>
 
 Close-ups of machines, the yard and the skyline are in
 [docs/presets-detail.webp](docs/presets-detail.webp).
@@ -642,6 +713,9 @@ require typing the target's name. See **[ADMIN.md](docs/ADMIN.md)** for setup; `
 creates two test logins on the dev cluster so you can try it in three windows.
 `tools\package.ps1` builds a zip to hand out.
 
+<img src="docs/multiuser.webp" width="100%" alt="Two other players shown as robot avatars">
+<p align="center"><i>Other people on the cluster appear as avatars.</i></p>
+
 ## 🤖 Porter, the Portainer dock worker
 
 Beside the HUB stands Porter, a crane-backed robot. Press E to talk. He can:
@@ -661,6 +735,9 @@ Beside the HUB stands Porter, a crane-backed robot. Press E to talk. He can:
 - **Install Portainer itself** (optional) and open its console. Put your
   Portainer address and an API key in `portainer.json` and its own template
   list shows up as "My Portainer server".
+
+<img src="docs/porter.webp" width="100%" alt="Porter, the Portainer dock robot">
+<p align="center"><i>Porter builds complete app setups and installs from app lists.</i></p>
 
 His two big setups:
 
@@ -696,6 +773,12 @@ Press E on Bob (or his stall) for the full list. For every job he gives:
 | Node cordoned | Mk.2 uncordon |
 | Pod running but restarted 5+ times | a warning to look at before it gets worse |
 
+<img src="docs/bob-stand.webp" width="100%" alt="Bob at his repair stand, with the fix list on the board behind him">
+<p align="center"><i>Bob's repair stand: the board lists what is broken, and he has something to say about it.</i></p>
+
+<img src="docs/bob.webp" width="100%" alt="Bob's fix list">
+<p align="center"><i>His fix list: what is broken, why, and what to do.</i></p>
+
 He also has opinions. Walk up to him and he greets you with a zinger about your
 cluster or a Kubernetes pick-up line, with a fresh one every few seconds; each
 job on the list gets a dry remark of its own, and "Got another one, Bob?" asks
@@ -718,6 +801,9 @@ settings, Secrets and tables, out of memory, full disks, wrong architecture or
 start command, unpullable images, failed mounts and scheduling, probe failures,
 stack traces, and what exit codes 1, 2, 126, 127, 137, 139 and 143 mean.
 
+<img src="docs/bob-case.webp" width="100%" alt="Bob's case file: the log lines that matter on a build that ran out of memory">
+<p align="center"><i>Bob 2.0 reads the log: the line that killed it, what it means, what to do.</i></p>
+
 **Optional settings** live in `bob.json` next to the game (`config\bob.json` from source). Every key is
 optional and the file can be deleted:
 
@@ -732,9 +818,11 @@ optional and the file can be deleted:
 
 A rule of your own teaches him your application's errors:
 
-    {"rules": [{"match": "license (expired|invalid)", "weight": 3,
-                "means": "The licence file is out of date.",
-                "fix": "Renew it and update the app-license Secret."}]}
+```json
+{"rules": [{"match": "license (expired|invalid)", "weight": 3,
+            "means": "The licence file is out of date.",
+            "fix": "Renew it and update the app-license Secret."}]}
+```
 
 `weight` is 3 for a cause, 2 for a strong lead, 1 for a symptom. The built-in
 rules are the `RULES` list in `scripts/bob.gd`. The original design notes are in
@@ -770,50 +858,57 @@ them in `log-providers.json`:
 
 ## 📁 Layout
 
-    play.bat                    start the game from source
-    config/                     the editable settings files (beside the exe once installed)
-    apps/                       Porter's bundled app setups
-    deploy/                     the optional multi-user manifest for a cluster
-    docs/                       admin guide, security notes, licences, screenshots
-    tools/                      setup, packaging, installer, dev cluster, video helpers
-    scripts/main.gd             game loop, tools, input
-    scripts/world.gd            cluster state -> 3D world
-    scripts/platform.gd         node platform        scripts/machine.gd   pod machine
-    scripts/hud.gd              HUD, panels, datapad, Porter's and Bob's conversations
-    scripts/viewmodel.gd        the first-person tool in your hand
-    scripts/gfx.gd              graphics presets and the hardware recommendation
-    scripts/scenery.gd          the Enhanced / Ultra industrial surroundings
-    scripts/bench.gd            the rendering benchmark (tools\bench.ps1 drives it)
-    scripts/kutil.gd            shared helpers, Bob's diagnoses, sign text fitting
-    scripts/bob.gd              Bob 2.0: log and event reading, its rules, bob.json
-    scripts/cluster.gd          polling, actions, audit log
-    agent/                      kf-agent: the native companion (Go): kubeconfig, Kubernetes client, files, LiveView
-    assets/                     the model library (141 models x 3 tiers) and its catalog
-    scripts/backend_native.gd   real clusters through kf-agent (default)
-    scripts/agent.gd            starts and talks to kf-agent      scripts/connections.gd  saved kubeconfig profiles
-    scripts/models.gd           model library loading, doors, screens
-    scripts/liveview.gd         LiveView sessions
-    scripts/backend_kubectl.gd  real clusters via kubectl (--kubectl-cli)   scripts/backend_docker.gd   Docker engine
-    scripts/backend_demo.gd     simulated clusters   scripts/log_sources.gd      log providers
-    scripts/apps.gd             Porter's setups, app lists, install ledger
-    scripts/sfx.gd              synthesised sound    apps/                       bundled app setups
-    scripts/krew.gd             the Krew's rules and findings      scripts/foreman.gd   Foreman: incidents, the AI pipeline
-    scripts/controls.gd         key bindings, controller, key hints scripts/minimap.gd  the minimap
-    scripts/backend_komodo.gd   Komodo (read-only)   scripts/backend_plugin.gd   backend plugins (scripts/plugins.gd: trust)
-    scripts/server.gd           server mode          scripts/backend_remote.gd   a KubeFactory server as a source
-    examples/plugins/           an example backend plugin
-    tests/live/                 in-game tests on the simulation and against throw-away infrastructure
-    tests/normalize_test.gd     parser test:  engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tests/normalize_test.gd
+```text
+play.bat                    start the game from source
+config/                     the editable settings files (beside the exe once installed)
+apps/                       Porter's bundled app setups
+deploy/                     the optional multi-user manifest for a cluster
+docs/                       admin guide, security notes, licences, screenshots
+tools/                      setup, packaging, installer, dev cluster, video helpers
+scripts/main.gd             game loop, tools, input
+scripts/world.gd            cluster state -> 3D world
+scripts/platform.gd         node platform        scripts/machine.gd   pod machine
+scripts/hud.gd              HUD, panels, datapad, Porter's and Bob's conversations
+scripts/viewmodel.gd        the first-person tool in your hand
+scripts/gfx.gd              graphics presets and the hardware recommendation
+scripts/scenery.gd          the Enhanced / Ultra industrial surroundings
+scripts/bench.gd            the rendering benchmark (tools\bench.ps1 drives it)
+scripts/kutil.gd            shared helpers, Bob's diagnoses, sign text fitting
+scripts/bob.gd              Bob 2.0: log and event reading, its rules, bob.json
+scripts/cluster.gd          polling, actions, audit log
+agent/                      kf-agent: the native companion (Go): kubeconfig, Kubernetes client, files, LiveView
+assets/                     the model library (141 models x 3 tiers) and its catalog
+scripts/backend_native.gd   real clusters through kf-agent (default)
+scripts/agent.gd            starts and talks to kf-agent      scripts/connections.gd  saved kubeconfig profiles
+scripts/models.gd           model library loading, doors, screens
+scripts/liveview.gd         LiveView sessions
+scripts/backend_kubectl.gd  real clusters via kubectl (--kubectl-cli)   scripts/backend_docker.gd   Docker engine
+scripts/backend_demo.gd     simulated clusters   scripts/log_sources.gd      log providers
+scripts/apps.gd             Porter's setups, app lists, install ledger
+scripts/sfx.gd              synthesised sound    apps/                       bundled app setups
+scripts/krew.gd             the Krew's rules and findings      scripts/foreman.gd   Foreman: incidents, the AI pipeline
+scripts/controls.gd         key bindings, controller, key hints scripts/minimap.gd  the minimap
+scripts/backend_komodo.gd   Komodo (read-only)   scripts/backend_plugin.gd   backend plugins (scripts/plugins.gd: trust)
+scripts/server.gd           server mode          scripts/backend_remote.gd   a KubeFactory server as a source
+examples/plugins/           an example backend plugin
+tests/live/                 in-game tests on the simulation and against throw-away infrastructure
+tests/normalize_test.gd     parser test:  engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tests/normalize_test.gd
+```
 
 More tests and checks:
 
-    powershell -ExecutionPolicy Bypass -File tools\build-agent.ps1 -Test                                          companion tests (Go)
-    powershell -ExecutionPolicy Bypass -File tools\live-test.ps1                                                  companion against a real, disposable kube-apiserver (no Docker)
-    powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Grafana [-GrafanaVersion 13.0.0]               Grafana provider against a real, disposable Grafana
-    powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Kind                                           companion against a real cluster with running containers (after tools\dev-cluster.ps1)
-    engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tests/live/docker_backend_test.gd           Docker backend against a real throw-away container
-    powershell -ExecutionPolicy Bypass -File tools\live-test.ps1 -Tautulli                                       Tautulli provider against a real, disposable Tautulli
-    engine\Godot_v4.3-stable_win64_console.exe --headless --path . -s tools/model_audit.gd                        audits every model, writes docs/MODEL_AUDIT.md
+| Command | Checks |
+|---|---|
+| `tools\build-agent.ps1 -Test` | the companion's tests (Go) |
+| `tools\live-test.ps1` | the companion against a real, disposable kube-apiserver (no Docker) |
+| `tools\live-test.ps1 -Grafana [-GrafanaVersion 13.0.0]` | the Grafana provider against a real, disposable Grafana |
+| `tools\live-test.ps1 -Kind` | the companion against a real cluster with running containers (after `tools\dev-cluster.ps1`) |
+| `tools\live-test.ps1 -Tautulli` | the Tautulli provider against a real, disposable Tautulli |
+| `godot --headless --path . -s tests/live/docker_backend_test.gd` | the Docker backend against a real throw-away container |
+| `godot --headless --path . -s tools/model_audit.gd` | audits every model and writes `docs/MODEL_AUDIT.md` |
+
+Run the PowerShell scripts with `powershell -ExecutionPolicy Bypass -File <script>`;
+`godot` is `engine\Godot_v4.3-stable_win64_console.exe`.
 
 The model library can be inspected in a browser with the asset reviewer
 (`tools/model-viewer/index.html`, published at
@@ -837,13 +932,16 @@ captures each handheld tool, the signs and Bob's stand, and `--trailer` plays a
 scripted 55-second tour for a video. Record it with Godot's movie writer and
 convert it with Windows' own encoder:
 
-    engine\Godot_v4.3-stable_win64.exe --path . --write-movie out.avi --fixed-fps 60 --resolution 1920x1080 -- --demo --trailer
-    powershell -ExecutionPolicy Bypass -File tools\to_mp4.ps1 out.avi kubefactory.mp4
+```powershell
+engine\Godot_v4.3-stable_win64.exe --path . --write-movie out.avi --fixed-fps 60 --resolution 1920x1080 -- --demo --trailer
+powershell -ExecutionPolicy Bypass -File tools\to_mp4.ps1 out.avi kubefactory.mp4
+```
 
 ## 🔒 Security
 
-KubeFactory has no server and no credentials of its own: it uses your
-kubeconfig and your `docker`, as you. (A kubeconfig you paste into the wizard is
+KubeFactory needs no server, account or credentials of its own: it uses your
+kubeconfig and your `docker`, as you (server mode is optional, see
+[SERVER](docs/SERVER.md)). (A kubeconfig you paste into the wizard is
 saved in your user folder; nothing else is kept.) Your cluster permissions are the security boundary; the
 in-game tiers and confirmations are guard rails. App lists are treated as
 untrusted input. See [SECURITY.md](docs/SECURITY.md) for the details and for how to
@@ -856,8 +954,9 @@ notices for it and for the third-party names used are in
 [THIRDPARTY.md](docs/THIRDPARTY.md). KubeFactory is an independent project and is
 not affiliated with Kubernetes, Portainer, Docker or any cloud provider.
 
-## Support development
+## ☕ Support development
 
-<img src=".github/dascondor-logo.png" alt="DasCondor logo" width="64" height="64">
-
-If this project was useful to you, you can [buy me a coffee](https://buymeacoffee.com/dascondor) to support future work. Contributions are voluntary.
+<p align="center">
+  <img src=".github/dascondor-logo.png" alt="DasCondor logo" width="64" height="64"><br>
+  If this project was useful to you, you can <a href="https://buymeacoffee.com/dascondor">buy me a coffee</a> to support future work. Contributions are voluntary.
+</p>

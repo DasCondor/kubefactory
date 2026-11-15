@@ -1,5 +1,7 @@
 # KubeFactory server
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 Run KubeFactory once as a **server** next to your cluster or Docker engine;
 everyone else connects to it like a game client. Players never hold a
 kubeconfig, a Docker socket or any other credential: the server owns the
@@ -7,9 +9,11 @@ connection and checks every request.
 
 ## Starting it
 
-    KubeFactory --headless -- --server --context=<kube context>
-    KubeFactory --headless -- --server --docker --context=<docker context>
-    KubeFactory --headless -- --server --demo
+```bash
+KubeFactory --headless -- --server --context=<kube context>
+KubeFactory --headless -- --server --docker --context=<docker context>
+KubeFactory --headless -- --server --demo
+```
 
 Options after `--`:
 

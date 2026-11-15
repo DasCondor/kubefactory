@@ -1,5 +1,7 @@
 # Backend plugins
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 A backend plugin adds a new kind of source to KubeFactory: a hypervisor, a
 NAS, a home-automation hub, a cloud API, anything that has "machines". The
 game draws whatever the plugin reports as platforms (nodes), machines (pods),
@@ -27,9 +29,11 @@ copy it into `plugins/` to try it.
 
 ## The folder
 
-    plugins/my-plugin/
-        plugin.json
-        plugin.py        (or any program)
+```text
+plugins/my-plugin/
+    plugin.json
+    plugin.py        (or any program)
+```
 
 `plugin.json`:
 

@@ -1,5 +1,7 @@
 # Known limitations (2.0)
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 Stated plainly so nobody has to find them the hard way. "Not tested" means
 exactly that: the code exists and has not been run against the real thing.
 What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).

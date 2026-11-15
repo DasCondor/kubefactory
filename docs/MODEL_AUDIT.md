@@ -1,5 +1,7 @@
 # Model audit (library V8)
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 Written by `tools/model_audit.gd`. Do not edit by hand: run the tool again.
 
 - Files checked: **423** (141 models at up to three tiers)

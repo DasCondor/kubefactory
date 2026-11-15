@@ -1,5 +1,7 @@
 # Docker hosts without giving KubeFactory root
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 Access to a Docker engine is root on that machine: whoever can talk to the
 socket can start a privileged container. Adding a user to the `docker` group
 is the same thing. If you only want to *look* at your Docker hosts from
@@ -10,7 +12,9 @@ KubeFactory, give it a read-only door instead.
 Every Docker CLI context is a connection on the cluster switcher (Esc >
 Switch cluster). Four hosts are four contexts:
 
-    docker context ls
+```bash
+docker context ls
+```
 
 A context on another machine (a `tcp://` or `ssh://` address) **opens in
 read-only mode**: KubeFactory shows everything and blocks every action. You
@@ -27,7 +31,9 @@ every change. It listens on `127.0.0.1:2375` of that host only.
 
 On each Docker host:
 
-    docker compose -f compose.yaml up -d
+```bash
+docker compose -f compose.yaml up -d
+```
 
 (that one step needs whoever already manages Docker there).
 
@@ -36,13 +42,17 @@ On each Docker host:
 On the machine running KubeFactory, tunnel to each host over SSH as an
 ordinary user, one local port per host:
 
-    ssh -N -L 23751:127.0.0.1:2375 you@host1
-    ssh -N -L 23752:127.0.0.1:2375 you@host2
+```bash
+ssh -N -L 23751:127.0.0.1:2375 you@host1
+ssh -N -L 23752:127.0.0.1:2375 you@host2
+```
 
 and make a context for each:
 
-    docker context create host1 --docker host=tcp://127.0.0.1:23751
-    docker context create host2 --docker host=tcp://127.0.0.1:23752
+```bash
+docker context create host1 --docker host=tcp://127.0.0.1:23751
+docker context create host2 --docker host=tcp://127.0.0.1:23752
+```
 
 The SSH user needs no docker group membership and no sudo: the tunnel only
 reaches the proxy's port. The traffic is encrypted by SSH.

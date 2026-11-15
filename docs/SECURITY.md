@@ -1,5 +1,7 @@
 # Security
 
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+
 ## Reporting a problem
 
 Please report security problems privately through GitHub's
@@ -9,7 +11,8 @@ the Esc menu).
 
 ## What KubeFactory can and cannot do
 
-KubeFactory has no server and no credentials of its own. It talks to
+KubeFactory needs no server and has no credentials of its own (server mode,
+[SERVER.md](SERVER.md), is optional). It talks to
 Kubernetes through its companion program (`kf-agent`, started by the game,
 using your kubeconfig) and to Docker through the `docker` already on your
 machine, as you. It can do exactly what your own account can do, and nothing

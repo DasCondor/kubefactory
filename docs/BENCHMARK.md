@@ -1,4 +1,6 @@
-﻿# Graphics benchmark
+# Graphics benchmark
+
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.1 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
 
 Baseline: release `de600e8`. 1920x1080, vsync off, the `kubernetes` demo world (23 machines), a fixed 18-second camera route.
 GPU: a current mid-range laptop GPU (the model is left out on purpose; `tools\bench.ps1 -ShowGpu` names it). Median of 3 runs each. Reproduce with `tools\bench.ps1`.
