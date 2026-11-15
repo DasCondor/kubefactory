@@ -49,18 +49,18 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | | Type plate, real resource name and container list on the model's own surfaces | verified in simulation |
 | | V6 handheld tools in first person, display facing the operator with real target data | verified in simulation |
 | | Krew display surfaces; rigging and animation of tools and Krew | unsupported |
-| | Asset reviewer hosted at `model-viewer/` | added to the Pages build; verified locally, not deployed |
+| | Asset reviewer hosted at `model-viewer/` | deployed to GitHub Pages; verified locally |
 | | Opening storage doors, stopped by obstacles | verified in simulation |
 | | Read-only storage browser | **verified live** on kind and on a real Docker container; links are never followed |
 | | Porter V3 as minimum standard | machines, Porter and Bob use V3; V2 models are not placed |
 | 02 Docker | Native Docker Engine API | unsupported (docker CLI kept) |
 | | Several Docker hosts (CLI contexts), read-only by default for other machines, read-only proxy recipe | **verified live** through a throw-away read-only proxy: state, `docker inspect`, the image scan, and the host refusing a removal with read-only off. The SSH tunnel and a separate physical host not tested |
-| | Komodo Core, read-only: servers and containers | verified against a mock Komodo built from the komodo_client request and entity shapes (agent tests, in-game test on both renderers). **Not tested** against a real Komodo Core |
+| | Komodo Core, read-only: servers and containers (2.3 request name, with a fallback for older Cores) | verified against a mock Komodo built from the komodo_client request and entity shapes (agent tests, in-game test on both renderers). The read requests were checked against a real Core 2.3.4 by a contributor, with the old request name; the game has **not been played** against a real Core |
 | 02 Kubernetes | Server-side apply, cordon, scale, rollout restart | verified on a real API server |
 | | Drain with pods to evict | **verified live** on the disposable kind cluster |
 | | Exec / terminal, ephemeral debug containers, Helm, CRD browsing | unsupported |
 | 03 World and graphics | Non-regression presets | verified in simulation (`BENCHMARK.md`) |
-| 04 Assets and operator experience | Control center, accessibility options | unsupported beyond what 1.0.1 had |
+| 04 Assets and operator experience | In-game settings: every key and mouse button rebindable, controller support, field of view, interface size, colour-blind palettes, minimap | verified in simulation with simulated controller input (`tests/live/settings_test.gd`, `minimap_test.gd`, both renderers); **not tested** with a physical controller. Controller buttons cannot be rebound |
 | 05 LiveView | Real page on an in-game screen, mouse and keyboard | verified in simulation (local test page) |
 | | Endpoint discovery (Docker published ports, Kubernetes Services) | verified in simulation (unit tests) |
 | | Port-forward for cluster Services | **verified live** (HTTP through a loopback port); LiveView through it not run |
@@ -92,16 +92,12 @@ Nothing was removed. `--kubectl-cli` selects the 1.0.1 Kubernetes path.
 | 10 Autonomy | Policy engine, self-healing, scheduling | unsupported |
 | 11 Security | No credentials in logs, Git or shipped files; browser demo isolated | verified by review and by two tests (`TestInspectListsContextsWithoutSecrets`, `TestBadKubeconfigErrorsDoNotEchoContents`) |
 | | Multiplayer beyond 1.0.1 presence | unsupported |
-| 12 Verification | Unit tests (GDScript, Go), model audit, screenshot runs | done; see the PR description for results |
+| 12 Verification | Unit tests (GDScript, Go), model audit, screenshot runs | done; the tests are in `tests/` and `agent/*_test.go` |
 | | Live acceptance tests, large-scale benchmarks | kind and Docker tests completed; clean-machine, cloud and large-scale tests not completed |
 | 13 Distribution | Windows, Linux and macOS packages with companion and models | published in [2.0.0-beta.1](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.1); packages have SHA-256 checksums and build-provenance attestations |
 | | Platform code signing | macOS is ad-hoc signed; publisher signing and macOS notarization are unavailable |
 
 ## Remaining verification before a stable release
 
-1. Test a cloud provider and its sign-in helper. The native path has been run
-   against kind with running containers, including logs and drain with pods.
-2. Try storage inspection on a distroless image. Live inspection of a pod
-   with a volume has been verified on kind.
-3. Open Grafana through LiveView on Docker and through a port-forward.
-4. Install the zip on a Windows machine that has never had kubectl or Go.
+Tracked, with what blocks 2.0.0 and what can ship as a known limitation, in
+[GO_LIVE_2.0.md](GO_LIVE_2.0.md).
