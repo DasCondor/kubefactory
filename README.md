@@ -140,8 +140,8 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 
 ## 📥 Download
 
-Get the latest build from
-**https://github.com/DasCondor/kubefactory/releases/latest**:
+Get the current beta or the latest stable build from the
+[GitHub Releases page](https://github.com/DasCondor/kubefactory/releases).
 
 | Platform | Package | Start it |
 |---|---|---|

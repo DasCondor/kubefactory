@@ -77,8 +77,13 @@ exactly that: the code exists and has not been run against the real thing.
   (the simulation loads, no script errors), the unit tests pass on the Linux
   engine, and the companion answers there. Not played on a Linux desktop with
   a GPU, and not tested against a real cluster from Linux.
-- **macOS:** the package is built (universal, ad-hoc signed) but has **not
-  been run on a Mac**. It is not notarized.
+- **macOS:** the `2.0.0-dev` player from commit `b0316f4` completed a
+  300-frame GUI startup smoke test on Apple Silicon running macOS 15.6.1
+  with no errors. The package checksum matched, and the bundled companion
+  responded to `ping` and `shutdown`. Both binaries include Apple Silicon
+  and Intel slices. The published beta's companion was also verified, but
+  its player has not been run in a desktop session. Intel startup and
+  gameplay remain unverified. The app is ad-hoc signed and is not notarized.
 - On both, the companion cannot keep tokens and keys yet: it seals them with
   Windows' per-user protection only, so Grafana, Tautulli, AI provider and
   Komodo credentials are refused rather than stored in the clear. Kubeconfig
@@ -277,4 +282,4 @@ exactly that: the code exists and has not been run against the real thing.
 
 See `FEATURE_PARITY.md` for the full table. In short: the autonomy and policy engine,
 self-healing and scheduling, an in-game terminal, a bundled browser engine, a
-native Docker Engine client, and Linux or macOS builds.
+native Docker Engine client.
