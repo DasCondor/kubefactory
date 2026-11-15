@@ -191,11 +191,11 @@ Kubernetes simulations (EKS, AKS, GKE, Rancher) are still at the cluster gates.
 (1.0.1, Windows only) and every earlier version are on the
 [Releases page](https://github.com/DasCondor/kubefactory/releases).
 
-| Platform | 2.0.0-beta.1 | Start it |
+| Platform | Download | Start it |
 |---|---|---|
-| Windows | [KubeFactory-2.0.0-beta.1-win64.zip](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-win64.zip) (59 MB) | `install.ps1`, or `KubeFactory.exe` |
-| Linux (x86_64) | [KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz) (51 MB) | `./KubeFactory.x86_64` |
-| macOS (Apple Silicon and Intel) | [KubeFactory-2.0.0-beta.1-macos.zip](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-macos.zip) (91 MB) | `KubeFactory.app` (see below) |
+| Windows | [**.zip**, 59 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-win64.zip) | `install.ps1` or `KubeFactory.exe` |
+| Linux x86_64 | [**.tar.gz**, 51 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-linux-x86_64.tar.gz) | `./KubeFactory.x86_64` |
+| macOS (Apple Silicon, Intel) | [**.zip**, 91 MB](https://github.com/DasCondor/kubefactory/releases/download/v2.0.0-beta.1/KubeFactory-2.0.0-beta.1-macos.zip) | `KubeFactory.app` (below) |
 
 **Checking a download.** Every package has a `.sha256`, the release has one
 `SHA256SUMS`, and every package carries a signed build-provenance attestation
