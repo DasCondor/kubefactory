@@ -63,9 +63,11 @@ exactly that: the code exists and has not been run against the real thing.
 
 ## Komodo
 
-- **Not tested against a real Komodo Core**: the requests and answers follow
-  the published `komodo_client` source (2.1), and the tests use a stand-in
-  built from it. Komodo versions with a different API may not connect.
+- **The three requests were checked against a real Komodo Core 2.3.4** (four
+  servers, 119 containers): the answers match what the game reads. The game
+  itself has not been played against it yet; the tests use a stand-in built
+  from the published `komodo_client` source. Komodo versions with a different
+  API may not connect.
 - Read-only by design: no restart, deploy or removal through KubeFactory.
 - Shown per server, not per Compose stack (container labels are not in
   Komodo's list); logs, capacity figures and storage doors are not available
