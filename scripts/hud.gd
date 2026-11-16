@@ -922,7 +922,7 @@ func open_vpn() -> void:
 				clients[via] = []
 			clients[via].append(pod)
 	if vpns.is_empty():
-		list.add_child(_lbl("No VPN containers here. Recognised: " + ", ".join(PackedStringArray(K.VPN_REGISTRY.map(func(e): return e["product"]))) + ".", 14, DIM))
+		list.add_child(_wrapped("No VPN containers here. Recognised: " + ", ".join(PackedStringArray(K.VPN_REGISTRY.map(func(e): return e["product"]))) + ".", 14, DIM))
 	for p in vpns:
 		var v: Dictionary = p["net"]["vpn"]
 		var pc = PanelContainer.new()
