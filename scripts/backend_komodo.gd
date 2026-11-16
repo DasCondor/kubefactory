@@ -2,7 +2,8 @@ extends RefCounted
 # Komodo (komo.do), read-only: every server a Komodo Core manages is a
 # platform, every container on it a machine. The companion (agent/komodo.go)
 # holds the API key and sends Komodo only read requests; this backend never
-# offers an action, so changes stay in Komodo itself.
+# offers an action, so changes stay in Komodo itself. Logs are a read too
+# (GetContainerLog); Komodo wants the Logs permission on top of Read for them.
 
 const K = preload("res://scripts/kutil.gd")
 const Agent = preload("res://scripts/agent.gd")
@@ -10,12 +11,13 @@ const Agent = preload("res://scripts/agent.gd")
 var label = "komodo"
 var poll_interval = 6.0
 var caps = {"remove_image": false, "scale": false, "delete_pod": false, "restart": false, "delete_workload": false,
-	"create": false, "cordon": false, "drain": false, "logs": false, "files": false}
+	"create": false, "cordon": false, "drain": false, "logs": true, "files": false}
 var context = ""           # the connection's name
 var conn_id = ""
 var log_cfg = {}
-var providers = [{"id": "kube", "name": "Komodo", "ready": false, "note": "logs are read in Komodo"}]
+var providers = [{"id": "kube", "name": "Komodo", "ready": true, "note": "container logs through Komodo"}]
 var version = ""
+var _server_ids = {}       # server name (a pod's ns) -> Komodo server id, from the last fetch
 
 func probe() -> Dictionary:
 	var r = Agent.request("komodo.test", {"id": conn_id}, 20.0)
@@ -28,6 +30,11 @@ func fetch() -> Dictionary:
 	var r = Agent.request("komodo.state", {"id": conn_id}, 40.0)
 	if not r["ok"]:
 		return {"source": label, "context": context, "error": r["msg"], "failed": true}
+	var ids = {}
+	for s in r["data"].get("servers", []):
+		if typeof(s) == TYPE_DICTIONARY:
+			ids[str(s.get("name", s.get("id", "")))] = str(s.get("id", ""))
+	_server_ids = ids
 	return normalize(r["data"], context)
 
 # Komodo's lists -> the state every backend reports. Static so the tests can feed it.
@@ -71,4 +78,15 @@ static func normalize(d: Dictionary, ctx: String) -> Dictionary:
 	return st
 
 func run_action(a: Dictionary) -> Dictionary:
+	if a["op"] == "logs":
+		var sid = _server_ids.get(str(a.get("ns", "")), "")
+		if sid == "":
+			return {"ok": false, "msg": "Komodo has no server called %s any more" % a.get("ns", "")}
+		var r = Agent.request("komodo.logs", {"id": conn_id, "server": sid, "server_name": str(a.get("ns", "")), "container": str(a.get("container", a["name"])),
+			"tail": int(a.get("tail", 150))}, 25.0)
+		if not r["ok"]:
+			return {"ok": false, "msg": r["msg"]}
+		return {"ok": true, "msg": "", "text": str(r["data"].get("text", ""))}
+	if a["op"] == "events":
+		return {"ok": false, "msg": "Komodo does not keep a container's events: its log is under Logs.", "text": "(Komodo has no events for a container)"}
 	return {"ok": false, "kind": "unsupported", "msg": "A Komodo connection only looks: make changes in Komodo itself.", "data": {}}

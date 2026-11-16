@@ -60,6 +60,16 @@ class H(BaseHTTPRequestHandler):
             self._send(422, {"error": "unknown variant `ListAllContainers`"})
         elif t == "ListAllDockerContainers":
             self._send(200, CONTAINERS)
+        elif t == "GetContainerLog":
+            p = body.get("params", {})
+            if p.get("server") == "s2":
+                # Komodo wants Read plus the Logs permission on the server
+                self._send(500, {"error": "User does not have required permissions on this Server. Must have at least Read permissions, as well as these specific permissions: [Logs]", "trace": []})
+            elif p.get("server") == "s1" and p.get("container") == "immich-server":
+                self._send(200, {"stage": "Get Container Log", "command": "docker logs immich-server --tail %d" % p.get("tail", 0),
+                                 "stdout": "Immich Server is listening on :2283\n", "stderr": "warn: thumbnail queue slow\n", "success": True})
+            else:
+                self._send(400, {"error": "no such container"})
         else:
             self._send(400, {"error": "unknown request"})
 

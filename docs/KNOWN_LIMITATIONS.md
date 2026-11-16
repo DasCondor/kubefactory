@@ -77,8 +77,14 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
   against a real Core. Komodo versions with a different API may not connect.
 - Read-only by design: no restart, deploy or removal through KubeFactory.
 - Shown per server, not per Compose stack (container labels are not in
-  Komodo's list); logs, capacity figures and storage doors are not available
-  over a Komodo connection.
+  Komodo's list); capacity figures, events and storage doors are not
+  available over a Komodo connection. Logs are, when the key's user has
+  Komodo's Logs permission on the server (Read alone is refused); stdout and
+  stderr come apart from Komodo, so a container that writes to both shows
+  stdout first, then stderr, not interleaved.
+- **Logs were checked in the game against a real Komodo Core 2.3.4** by a
+  contributor (Linux build, four servers, 119 containers, four containers'
+  logs in the machine panel).
 
 ## Linux and macOS
 
