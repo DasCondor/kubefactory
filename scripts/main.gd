@@ -385,9 +385,9 @@ func _ready() -> void:
 			_run_flythrough(a.trim_prefix("--flythrough="))
 	player.teleport(Vector3(0, 0.4, 17))
 	_set_mode(0)
-	if not OS.has_feature("web"):   # browsers only grant mouse capture on a click
+	var desktop_startup = not Gfx.web() and OS.get_cmdline_user_args().is_empty()
+	if not Gfx.web() and not desktop_startup:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	_set_icon()
 	# saved per-user settings
 	settings = K.load_settings()
 	hud.settings = settings
@@ -414,12 +414,22 @@ func _ready() -> void:
 			get_window().mode = Window.MODE_FULLSCREEN
 		# on the simulation with no world named: let the player pick one of the demos
 		hud.offer_demos = source == "simulation" and ctx == ""
-		if not bool(settings["welcomed"]):
+		if desktop_startup:
+			hud.open_startup.call_deferred()
+		elif Gfx.web() and hud.offer_demos:
+			hud.open_demos.call_deferred()
+		elif not bool(settings["welcomed"]):
 			hud.open_welcome.call_deferred()
 		elif hud.offer_demos:
 			hud.open_demos.call_deferred()
 	if _web_note != "":
 		hud.notify.call_deferred(_web_note, "warn")
+	if Gfx.web():
+		var startup = JavaScriptBridge.get_interface("kubefactoryStartup")
+		if startup != null:
+			cluster.state_updated.connect(func(_state):
+				await RenderingServer.frame_post_draw
+				startup.ready(), CONNECT_ONE_SHOT)
 	cluster.start(source, ctx, "cli" if kubeconfig != "" else "")
 	if server_port > 0:
 		server = ServerNode.new()
@@ -441,19 +451,6 @@ func _ready() -> void:
 		_run_mptest(mptest)
 	if flyby:
 		_run_flyby()
-
-# Window / taskbar icon, drawn in code: an orange factory block on dark.
-func _set_icon() -> void:
-	var img = Image.create(64, 64, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0.09, 0.1, 0.11))
-	var o = Color(0.98, 0.584, 0.286)
-	img.fill_rect(Rect2i(8, 30, 48, 26), o)
-	img.fill_rect(Rect2i(12, 14, 9, 18), o)
-	img.fill_rect(Rect2i(26, 20, 9, 12), o)
-	img.fill_rect(Rect2i(16, 38, 10, 10), Color(0.3, 0.95, 0.5))
-	img.fill_rect(Rect2i(32, 38, 10, 10), Color(0.09, 0.1, 0.11))
-	img.fill_rect(Rect2i(8, 52, 48, 4), Color(0.2, 0.21, 0.23))
-	DisplayServer.set_icon(img)
 
 func _key(action: String, keys: Array) -> void:
 	InputMap.add_action(action)
@@ -589,7 +586,7 @@ func set_graphics(id: String) -> void:
 		K.save_settings(settings)
 		hud.notify("Switching to %s graphics..." % want.capitalize(), "info")
 		await get_tree().create_timer(0.6).timeout     # let the setting reach the browser's storage
-		JavaScriptBridge.eval("var u = new URL(location.href); u.searchParams.set('gfx', '%s'); location.replace(u.href);" % want)
+		JavaScriptBridge.eval("var u = new URL(location.href); u.searchParams.set('gfx', '%s'); u.searchParams.set('play', '1'); location.replace(u.href);" % want)
 		return
 	settings["graphics"] = id
 	K.save_settings(settings)
@@ -606,31 +603,18 @@ func _web_choice() -> String:
 	return str(settings.get("graphics_web", "standard"))
 
 func _load_web_models() -> void:
-	var layer = CanvasLayer.new()
-	layer.layer = 100
-	add_child(layer)
-	var bg = ColorRect.new()
-	bg.color = Color(0.06, 0.07, 0.08)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(bg)
-	var lbl = Label.new()
-	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 22)
-	lbl.text = "KUBEFACTORY  ·  High graphics\n\nLoading the model library..."
-	layer.add_child(lbl)
 	var wa = WebAssets.new()
 	add_child(wa)
-	wa.progress.connect(func(done, total):
-		lbl.text = "KUBEFACTORY  ·  High graphics\n\nLoading the model library...  %.1f / %.1f MB" % [done / 1048576.0, total / 1048576.0])
+	var startup = JavaScriptBridge.get_interface("kubefactoryStartup")
+	if startup != null:
+		startup.update("Loading High graphics")
+		wa.progress.connect(func(done, total): startup.update("Loading High graphics", done, total))
 	wa.fetch()
 	var res = await wa.finished
 	Gfx.web_high = res[0]
 	print("High graphics: ", res[1], "  library in use: ", Models.available())
 	_web_note = "" if res[0] else "High graphics could not load the model library (%s), so the world is drawn in code." % res[1]
 	wa.queue_free()
-	layer.queue_free()
 # Menus are built for a mouse; with a controller, the left stick moves the
 # pointer, A clicks where it points and the right stick scrolls.
 func _pad_pointer(delta: float) -> void:

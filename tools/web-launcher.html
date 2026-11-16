@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101214">
+  <title>KubeFactory Demo</title>
+  $GODOT_HEAD_INCLUDE
+  <style>
+    :root {
+      color-scheme: dark;
+      font: 16px/1.5 Inter, system-ui, sans-serif;
+      color: #eff2f5;
+      background: #101214;
+      --accent: #ffa255;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; overscroll-behavior: none; }
+    #canvas { position: fixed; inset: 0; display: block; outline: none; touch-action: none; }
+    #launch-menu {
+      min-height: 100dvh;
+      position: relative;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: radial-gradient(ellipse at top, #2d2622, #101214 68%);
+    }
+    .panel {
+      width: min(100%, 36rem);
+      padding: clamp(20px, 5vw, 36px);
+      border: 1px solid #3d4147;
+      border-top: 3px solid var(--accent);
+      border-radius: 14px;
+      background: #1a1e24;
+      box-shadow: 0 16px 54px #0006;
+    }
+    header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+    header img { width: 56px; height: 56px; border-radius: 14px; background: #242930; }
+    h1 { margin: 0; font-size: clamp(1.55rem, 5vw, 2.3rem); line-height: 1.15; }
+    p { margin: 0; color: #bac2cc; }
+    fieldset { padding: 0; margin: 0 0 16px; border: 0; }
+    legend { padding: 0; margin-bottom: 8px; font-size: .86rem; font-weight: 650; }
+    .presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    label {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      padding: 10px;
+      border: 1px solid #4a515b;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    label:has(:checked) { border-color: var(--accent); background: #ffa25514; }
+    input { margin: .35rem 0 0; accent-color: var(--accent); }
+    small { display: block; color: #bac2cc; }
+    button {
+      width: 100%;
+      min-height: 46px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 7px;
+      background: var(--accent);
+      color: #17120f;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover { background: #ffb77c; }
+    :focus-visible { outline: 2px solid #ffd2af; outline-offset: 3px; }
+    .guide { display: inline-block; margin-top: 12px; color: #ffbd87; font-size: .9rem; }
+    progress { display: block; width: 100%; height: 12px; margin-top: 14px; accent-color: var(--accent); }
+    #retry { margin-top: 14px; }
+    @media (max-width: 350px) { .presets { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" tabindex="-1" aria-label="KubeFactory game"></canvas>
+  <main id="launch-menu">
+    <section class="panel" aria-labelledby="launch-title">
+      <header>
+        <img id="brand" alt="" width="56" height="56">
+        <div><h1 id="launch-title">KubeFactory</h1><p>Browser demo</p></div>
+      </header>
+      <form id="launch-form">
+        <fieldset>
+          <legend>Graphics</legend>
+          <div class="presets">
+            <label><input type="radio" name="gfx" value="standard" checked><span><strong>Standard</strong><small>Quickest to load</small></span></label>
+            <label><input type="radio" name="gfx" value="high"><span><strong>High</strong><small>More detailed models</small></span></label>
+          </div>
+        </fieldset>
+        <button type="submit">Play demo</button>
+        <a class="guide" href="https://github.com/DasCondor/kubefactory/wiki">How to play</a>
+      </form>
+      <p id="status" role="status" tabindex="-1" hidden></p>
+      <progress id="progress" max="1" aria-label="Loading progress" hidden></progress>
+      <button type="button" id="retry" hidden>Back to launch menu</button>
+      <noscript><p>Enable JavaScript to launch the demo.</p></noscript>
+    </section>
+  </main>
+  <script>
+    const canvas = document.querySelector('#canvas');
+    const menu = document.querySelector('#launch-menu');
+    const form = document.querySelector('#launch-form');
+    const status = document.querySelector('#status');
+    const progress = document.querySelector('#progress');
+    const retry = document.querySelector('#retry');
+    const url = new URL(location.href);
+    const engineURL = '$GODOT_URL';
+    const config = $GODOT_CONFIG;
+    document.querySelector('#brand').src = engineURL.replace(/\.js$/, '.icon.png');
+    form.elements.gfx.value = url.searchParams.get('gfx') === 'high' ? 'high' : 'standard';
+
+    window.kubefactoryStartup = {
+      update(message, loaded, total) {
+        status.hidden = false;
+        if (status.textContent !== message) status.textContent = message;
+        progress.hidden = false;
+        if (total > 0) progress.value = loaded / total;
+        else progress.removeAttribute('value');
+      },
+      ready() {
+        status.hidden = true;
+        menu.hidden = true;
+        canvas.focus();
+      }
+    };
+
+    async function launch() {
+      url.searchParams.set('gfx', form.elements.gfx.value);
+      url.searchParams.delete('play');
+      history.replaceState(null, '', url);
+      form.hidden = true;
+      kubefactoryStartup.update('Loading demo');
+      status.focus();
+      try {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = engineURL;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('The demo files could not be downloaded.'));
+          document.head.append(script);
+        });
+        const missing = Engine.getMissingFeatures({ threads: false });
+        if (missing.length) throw new Error(missing.join(' '));
+        await new Engine(config).startGame({ canvas, focusCanvas: false, onProgress(loaded, total) {
+          if (loaded && loaded === total) kubefactoryStartup.update('Preparing the factory');
+          else kubefactoryStartup.update('Loading demo', loaded, total);
+        } });
+      } catch (error) {
+        status.textContent = 'Could not start the demo. ' + error.message;
+        progress.hidden = true;
+        retry.hidden = false;
+        retry.focus();
+      }
+    }
+
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      launch();
+    });
+    retry.addEventListener('click', () => location.reload());
+    if (url.searchParams.get('play') === '1') launch();
+  </script>
+</body>
+</html>
