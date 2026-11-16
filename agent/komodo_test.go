@@ -59,6 +59,18 @@ func fakeKomodo(t *testing.T, seen *[]string, newNames bool) *httptest.Server {
 				all = all[:1]
 			}
 			w.Write([]byte("[" + strings.Join(all, ",") + "]"))
+		case "GetContainerLog":
+			// Komodo checks Read plus the Logs permission on the server
+			if req.Params["server"] == "s2" {
+				w.WriteHeader(500)
+				w.Write([]byte(`{"error":"User does not have required permissions on this Server. Must have at least Read permissions, as well as these specific permissions: [Logs]","trace":[]}`))
+				return
+			}
+			if req.Params["server"] != "s1" || req.Params["container"] != "immich-server" || req.Params["tail"] != float64(5000) {
+				w.WriteHeader(400)
+				return
+			}
+			w.Write([]byte(`{"stage":"Get Container Log","command":"docker logs immich-server --tail 5000","stdout":"ready on :2283\n","stderr":"warn: slow disk\n","success":true,"start_ts":1,"end_ts":2}`))
 		default:
 			w.WriteHeader(400)
 		}
@@ -125,6 +137,20 @@ func TestKomodo(t *testing.T) {
 	st, e = call(t, "komodo.state", map[string]any{"id": c23["id"]})
 	if e != nil || len(st["containers"].([]any)) != 2 || strings.Join(seen23, ",") != "ListServers,ListAllContainers" {
 		t.Fatalf("2.3 state: %v %v %v", st, e, seen23)
+	}
+	// a container's log: both streams, the tail capped at Komodo's 5000
+	lg, e := call(t, "komodo.logs", map[string]any{"id": c23["id"], "server": "s1", "container": "immich-server", "tail": 99999})
+	if e != nil || lg["text"] != "ready on :2283\n--- stderr ---\nwarn: slow disk" {
+		t.Fatalf("logs: %v %v", lg, e)
+	}
+	for _, c := range [][3]string{{"", "", "(no log output)"}, {"", "only err\n", "only err"}, {"only out\n", "", "only out"}} {
+		if got := komodoLogText(c[0], c[1]); got != c[2] {
+			t.Fatalf("log text %q %q: %q", c[0], c[1], got)
+		}
+	}
+	// a key without the Logs permission: said plainly, as an auth problem
+	if _, e = call(t, "komodo.logs", map[string]any{"id": c23["id"], "server": "s2", "container": "paperless"}); e == nil || e.Kind != "auth" || !strings.Contains(e.Msg, "Logs permission") {
+		t.Fatalf("logs without permission: %v", e)
 	}
 	call(t, "komodo.remove", map[string]any{"id": c23["id"]})
 	// the whitelist holds even inside the package

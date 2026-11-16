@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+### Added
+
 - Every demo machine has a simulated dashboard. The media world's Heimdall
   directory opens those dashboards and keeps a recent failure list with links
   to Bob's diagnosis. An image-updater pod offers sample updates with approval.
@@ -27,6 +29,13 @@
   are mounted directly to their pod roofs.
 - The bundled media setup includes a Heimdall service. The in-game failure
   directory and image-update exercise are available in the simulation.
+- **Container logs over a Komodo connection.** A machine's panel, the
+  logging station and Bob read a container's log through Komodo
+  (`GetContainerLog`, still a read request; up to Komodo's 5000 lines).
+  Komodo wants the key's user to have the **Logs** permission on the server
+  on top of Read; without it the panel says so instead of showing nothing.
+  Komodo keeps no events for a container, so that choice says that too.
+  Tests: `agent/komodo_test.go`, `tests/live/komodo_test.gd`.
 
 ## 2.0.0-beta.2 (2026-11-15)
 
