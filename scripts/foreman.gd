@@ -61,7 +61,6 @@ var _thread: Thread = null
 
 func _ready() -> void:
 	active = str(K.load_settings().get("foreman_provider", ""))
-	refresh_providers()
 
 func _exit_tree() -> void:
 	_gen += 1

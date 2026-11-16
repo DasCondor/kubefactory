@@ -5,6 +5,30 @@
 ## Unreleased
 
 ### Added
+
+- Every demo machine has a simulated dashboard. The media world's Heimdall
+  directory opens those dashboards and keeps a recent failure list with links
+  to Bob's diagnosis. An image-updater pod offers sample updates with approval.
+- Cluster Codex includes a network and shared-data view and an editable,
+  locally saved flowchart with media and online-shop presets.
+- Media demo pipes show app calls, metrics, file imports and VPN egress.
+  Gluetun sidecars model separate VPN egress for each downloader and search app.
+  Downloads and library data occupy separate simulated claims. Prometheus
+  scrapes a simulated exporter beside Tautulli, which reads playback from Plex.
+- Simulated segments and flowchart nodes support VLAN IDs. Live views display
+  declared VLAN IDs from the `kubefactory.io/vlan-id` annotation and show
+  reported Multus attachments. Live enforcement uses the cluster's own CNI,
+  network policies and VPN configuration. The flowchart saves a local plan.
+- Pipe trunks follow aisles to clear neighboring risers, with slimmer
+  fittings and flow collars. Network filters preserve pipe positions. Pod
+  ports align to machine roofs. Service depots have
+  one pillar for internal Services and two for external Services. The crosshair
+  explains each. The Escape menu scrolls within the viewport.
+- Pod-side pillars sit flush on the platform and identify their container and
+  status when aimed at. Up to four containers per pod have pillars. VPN units
+  are mounted directly to their pod roofs.
+- The bundled media setup includes a Heimdall service. The in-game failure
+  directory and image-update exercise are available in the simulation.
 - **Container logs over a Komodo connection.** A machine's panel, the
   logging station and Bob read a container's log through Komodo
   (`GetContainerLog`, still a read request; up to Komodo's 5000 lines).
@@ -12,6 +36,11 @@
   on top of Read; without it the panel says so instead of showing nothing.
   Komodo keeps no events for a container, so that choice says that too.
   Tests: `agent/komodo_test.go`, `tests/live/komodo_test.gd`.
+
+### Fixed
+
+- Opening a demo leaves the native companion stopped until the operator
+  requests a local feature such as connection discovery or Foreman.
 
 ## 2.0.0-beta.2 (2026-11-15)
 

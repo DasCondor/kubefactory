@@ -1,9 +1,8 @@
 extends Node3D
 # The service belts drawn with the model library's pipe kit (assets/network):
 # pipe_straight for every run, the junction block of conduit_elbow at every
-# corner, and pipe_valve on the drop into each machine. Used wherever the
-# library is (desktop, and the browser's High preset); the browser's Standard
-# preset keeps the belts drawn in code (world.gd).
+# corner, and pipe_valve on each Service drop. Used wherever the model library
+# is available. Other presets use procedural pipes through the same ports.
 #
 # The kit is V2 geometry: the library marks it "legacy geometry, visual rebuild
 # pending". It is placed on purpose, by the operator's choice, and named as such
@@ -15,7 +14,7 @@ extends Node3D
 
 const Models = preload("res://scripts/models.gd")
 
-const CROSS = 3.2            # the kit's tube is 0.13 m across; a belt is a few times that
+const CROSS = 1.25           # flange diameter stays below the spacing of most roof ports
 const PIECE = 6.0            # one straight piece per this many metres of run
 const AXIS_Y = 0.185         # the tube's centre height in the model, above its feet
 
@@ -50,9 +49,9 @@ func _ready() -> void:
 	tint.vertex_color_use_as_albedo = true
 	tint.roughness = 0.45
 	tint.metallic = 0.25
-	# a vertical run has no floor to stand on: the same pipe without its support brackets
-	for spec in [["pipe", "pipe_straight", [], []], ["riser", "pipe_straight", [], ["SupportBracket_"]],
-			["joint", "conduit_elbow", ["Junction_", "JunctionCap_"], []], ["valve", "pipe_valve", [], []]]:
+	# These runs are suspended. The kit's feet and capped junctions are for floor plumbing.
+	for spec in [["pipe", "pipe_straight", [], ["SupportBracket_"]],
+			["joint", "conduit_elbow", ["Junction_"], []], ["valve", "pipe_valve", [], []]]:
 		var meshes = _split(spec[1], spec[2], spec[3])
 		if meshes.is_empty() or meshes[0] == null:
 			return                     # the kit is not there: the caller keeps its code-drawn belts
@@ -99,7 +98,7 @@ static func _lay(a: Vector3, b: Vector3, along_len: float, cross: float) -> Tran
 func build(segs: Array, joints: Array) -> void:
 	if not _ok:
 		return
-	var lists = {"pipe": [], "riser": [], "joint": [], "valve": []}
+	var lists = {"pipe": [], "joint": [], "valve": []}
 	for sg in segs:
 		var a: Vector3 = sg[0]
 		var b: Vector3 = sg[1]
@@ -117,11 +116,10 @@ func build(segs: Array, joints: Array) -> void:
 			b = v0
 			len = a.distance_to(b)
 		var n = maxi(1, int(round(len / PIECE)))
-		var kind = "riser" if absf(b.y - a.y) > 0.5 * len else "pipe"
 		for i in n:
-			lists[kind].append([_lay(a.lerp(b, float(i) / n), a.lerp(b, float(i + 1) / n), 3.0, CROSS), sg[2]])
+			lists["pipe"].append([_lay(a.lerp(b, float(i) / n), a.lerp(b, float(i + 1) / n), 3.0, CROSS), sg[2]])
 	for j in joints:
-		var s = CROSS * 1.15
+		var s = CROSS * 0.68
 		lists["joint"].append([Transform3D(Basis.from_scale(Vector3(s, s, s)), j[0] - Vector3(0, 0.18 * s, 0)), j[1]])
 	for k in lists:
 		var pair = _sets[k]

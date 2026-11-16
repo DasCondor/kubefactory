@@ -248,6 +248,9 @@ func _ready() -> void:
 	foreman.changed.connect(func():
 		world.set_foreman(foreman.identity())
 		hud.on_foreman_changed())
+	cluster.source_changed.connect(func(label, _note):
+		if label != "simulation" and foreman.providers.is_empty():
+			foreman.refresh_providers())
 	cluster.data_ready.connect(func(key, r):
 		if key == "krew:scan":
 			krew.set_scan(r)
@@ -679,7 +682,7 @@ func _set_mode(m: int) -> void:
 # What holding the trigger does with the current tool on the current target.
 # Returns {} or {label, time, act}. Stronger tools take longer to charge.
 func _hold_action(type: String, meta: Dictionary) -> Dictionary:
-	if mode < 3:
+	if mode < 3 or meta.has("container_index"):
 		return {}
 	var st = cluster.state
 	if hud.TOOLS[mode]["mk"] > cluster.max_tier():
@@ -828,7 +831,11 @@ func _tool_readout(type: String, meta: Dictionary, hold: Dictionary) -> String:
 		"pod":
 			var p = K.find_pod(cluster.state, meta["uid"])
 			if p != null:
-				target = "%s\n%s" % [p["name"], p["status"]]
+				var idx = int(meta.get("container_index", -1))
+				if idx >= 0 and idx < p["containers"].size():
+					target = "%s\nContainer %d of %d" % [p["containers"][idx]["name"], idx + 1, p["containers"].size()]
+				else:
+					target = "%s\n%s" % [p["name"], p["status"]]
 		"node":
 			target = "node %s" % meta["name"]
 		"service":
@@ -881,7 +888,7 @@ func touch_aim() -> void:
 
 # Is the crosshair on the screen of the machine it is pointing at?
 func _on_screen(meta: Dictionary) -> bool:
-	if meta.get("type", "") != "pod" or not player.hit.has("pos"):
+	if meta.get("type", "") != "pod" or meta.has("container_index") or not player.hit.has("pos"):
 		return false
 	var m = world.machines.get(str(meta["uid"]))
 	if m == null:
@@ -901,6 +908,16 @@ func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 			var p = K.find_pod(cluster.state, meta["uid"])
 			if p == null:
 				return ""
+			var idx = int(meta.get("container_index", -1))
+			if idx >= 0 and idx < p["containers"].size():
+				var c = p["containers"][idx]
+				var status = str(c.get("reason", ""))
+				if status == "":
+					status = str(c["state"])
+					if c["state"] == "running" and not c["ready"]:
+						status = "Running, waiting for readiness"
+				return "%s · Container %d of %d\n%s · %s\nEach pillar shows one container. [E] inspect pod" % [
+					c["name"], idx + 1, p["containers"].size(), status, p["ns"] + "/" + p["wname"]]
 			var head = "%s\n%s  ·  %s  ·  %s\n" % [p["name"], p["status"], p["ns"], p["node"] if p["node"] != "" else "unscheduled"]
 			if action != "":
 				return head + action
@@ -916,7 +933,7 @@ func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 		"node":
 			return "Node %s\n%s" % [meta["name"], action if action != "" else "[E] node terminal"]
 		"service":
-			return "Service %s / %s\n[E] details" % [meta["ns"], meta["name"]]
+			return "Service %s / %s\n%s\n[E] details" % [meta["ns"], meta["name"], meta.get("pillars", "Routes traffic to selected pods")]
 		"hub":
 			return "THE HUB\n[E] cluster codex"
 		"bob":
@@ -1026,6 +1043,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		_sample()
 	elif ev.is_action_pressed("fire"):
 		var meta = player.hit.get("meta", {})
+		if meta.has("container_index") and mode >= 2:
+			return
 		# a click on a machine's screen opens that screen large, whatever tool is in hand
 		if _on_screen(meta):
 			hud.open_screen(str(meta["uid"]))

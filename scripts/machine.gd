@@ -1,5 +1,5 @@
 extends Node3D
-# One pod = one factory machine. Containers are the tanks bolted to its side.
+# One pod = one factory machine. A status pillar represents each visible container.
 
 const K = preload("res://scripts/kutil.gd")
 const Tex = preload("res://scripts/tex.gd")
@@ -8,6 +8,7 @@ const Sfx = preload("res://scripts/sfx.gd")
 const Gfx = preload("res://scripts/gfx.gd")
 const Models = preload("res://scripts/models.gd")
 const Icons = preload("res://scripts/icons.gd")
+const MAX_PILLARS = 4
 
 static var _m = {}
 static var _merged = {}   # workload colour + detail level -> [core mesh, extra-detail mesh or null]
@@ -185,6 +186,15 @@ func setup(p: Dictionary) -> void:
 	if not _build_model(p, col):
 		_build_classic(col)
 	_finish_setup(p)
+
+func pipe_port(offset: Vector2) -> Vector3:
+	if _tpl.is_empty():
+		return Vector3(-0.5 + offset.x, 4.3, 0.3 + offset.y)
+	var roof: AABB = _tpl.get("roof_bounds", _tpl["bounds"])
+	var center = roof.get_center() * MODEL_SCALE
+	var limit = roof.size * MODEL_SCALE * 0.38
+	return Vector3(center.x + clampf(offset.x, -limit.x, limit.x), roof.end.y * MODEL_SCALE,
+		center.z + clampf(offset.y, -limit.z, limit.z))
 
 # ---- a machine from the model library
 
@@ -705,20 +715,35 @@ func update(p: Dictionary) -> void:
 		if conts.size() > 6:
 			rows.append("+ %d more" % (conts.size() - 6))
 		_plate_text(_list_plate, "\n".join(rows))
-	# Container tanks along the +X side
-	var want = mini(conts.size(), 4)
+	var want = mini(conts.size(), MAX_PILLARS)
+	while _tanks.size() > want:
+		var old = _tanks.pop_back()["stand"]
+		remove_child(old)
+		old.queue_free()
 	while _tanks.size() < want:
 		var i = _tanks.size()
-		var z = -1.5 + i * 1.05
-		_add(_cyl("tank", 0.42, 2.2), Tex.shared("steel"), Vector3(_tank_x, 1.5, z))
-		var ring = _add(_cyl("tank_ring", 0.46, 0.22), Tex.status_glow("warn"), Vector3(_tank_x, 2.3, z))
-		_tanks.append(ring)
+		var stand = StaticBody3D.new()
+		stand.collision_layer = 2
+		stand.collision_mask = 0
+		stand.set_meta("kf", {"type": "pod", "uid": uid, "container_index": i})
+		var target = CollisionShape3D.new()
+		var shape = BoxShape3D.new()
+		shape.size = Vector3(0.74, 1.68, 0.74)
+		target.shape = shape
+		target.position.y = 0.84
+		stand.add_child(target)
+		_add(_cyl("tank_foot", 0.40, 0.12), Tex.shared("dark"), Vector3(0, 0.06, 0), stand)
+		_add(_cyl("tank", 0.34, 1.56), Tex.shared("steel"), Vector3(0, 0.90, 0), stand)
+		var ring = _add(_cyl("tank_ring", 0.37, 0.14), Tex.status_glow("warn"), Vector3(0, 1.38, 0), stand)
+		add_child(stand)
+		_tanks.append({"stand": stand, "ring": ring})
 	for i in want:
+		_tanks[i]["stand"].position = Vector3(_tank_x, 0, (i - (want - 1) * 0.5) * 0.88)
 		var c = conts[i]
 		var ch = "ok" if c["state"] == "running" and c["ready"] else ("warn" if c["state"] != "terminated" else ("done" if c["reason"] == "Completed" else "bad"))
 		if h == "bad":
 			ch = "bad"
-		_tanks[i].material_override = Tex.status_glow(ch)
+		_tanks[i]["ring"].material_override = Tex.status_glow(ch)
 
 func dismantle() -> void:
 	if removing:

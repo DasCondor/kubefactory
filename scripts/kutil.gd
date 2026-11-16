@@ -404,7 +404,11 @@ const VPN_REGISTRY = [
 const DOWNLOADERS = ["qbittorrent", "deluge", "transmission", "sabnzbd", "nzbget", "rtorrent", "rutorrent", "aria2", "jdownloader"]
 
 static func empty_net() -> Dictionary:
-	return {"addrs": [], "via": "", "vpn": {}}
+	return {"addrs": [], "via": "", "vpn": {}, "segments": []}
+
+static func vlan_id(value: Variant) -> int:
+	var text = str(value)
+	return int(text) if text.is_valid_int() and int(text) >= 1 and int(text) <= 4094 else 0
 
 static func _env_map(env: Array) -> Dictionary:
 	var m = {}
@@ -460,6 +464,7 @@ static func container_net(i: Dictionary) -> Dictionary:
 	var nets = ns.get("Networks", {})
 	if typeof(nets) == TYPE_DICTIONARY:
 		for name in nets:
+			n["segments"].append({"name": str(name), "vlan": 0, "interface": ""})
 			var ip = str(nets[name].get("IPAddress", "")) if typeof(nets[name]) == TYPE_DICTIONARY else ""
 			if ip != "":
 				n["addrs"].append("%s (%s)" % [ip, name])
@@ -473,11 +478,20 @@ static func container_net(i: Dictionary) -> Dictionary:
 
 # from a Kubernetes pod: a VPN sidecar carries the whole pod's traffic,
 # since the containers of a pod share one network
-static func pod_net(spec: Dictionary, status: Dictionary) -> Dictionary:
+static func pod_net(spec: Dictionary, status: Dictionary, annotations: Dictionary = {}) -> Dictionary:
 	var n = empty_net()
 	var ip = str(status.get("podIP", ""))
 	if ip != "":
 		n["addrs"].append("%s (pod)" % ip)
+	var primary_vlan = vlan_id(annotations.get("kubefactory.io/vlan-id", ""))
+	if primary_vlan > 0:
+		n["segments"].append({"name": "pod network (declared)", "vlan": primary_vlan, "interface": ""})
+	var attachments = JSON.parse_string(str(annotations.get("k8s.v1.cni.cncf.io/network-status", "[]")))
+	if attachments is Array:
+		for attachment in attachments:
+			if attachment is Dictionary and not bool(attachment.get("default", false)):
+				n["segments"].append({"name": str(attachment.get("name", "")).left(120),
+					"interface": str(attachment.get("interface", "")).left(32), "vlan": vlan_id(attachment.get("vlan", ""))})
 	var others = []
 	var vpn = {}
 	for c in spec.get("initContainers", []) + spec.get("containers", []):
@@ -498,6 +512,11 @@ static func pod_net(spec: Dictionary, status: Dictionary) -> Dictionary:
 		vpn["through"] = others
 		n["vpn"] = vpn
 	return n
+
+static func segment_text(segment: Dictionary) -> String:
+	var vlan = vlan_id(segment.get("vlan", 0))
+	var iface = str(segment.get("interface", ""))
+	return "%s%s%s" % [segment.get("name", ""), " · " + iface if iface != "" else "", " · VLAN %d" % vlan if vlan > 0 else ""]
 
 # The two sides of a VPN gateway's tunnel, as text (the world's signs, the machine's panel).
 static func vpn_inside_text(p: Dictionary) -> String:
@@ -755,7 +774,7 @@ static func tier_of(a: Dictionary, state: Dictionary) -> int:
 			return 2 if w == null or int(a["replicas"]) >= int(w["replicas"]) else 3
 		"cordon":
 			return 3 if a.get("on", true) else 2
-		"restart":
+		"restart", "demo_update_image":
 			return 3
 		"delete_pod", "remove_image":
 			return 4

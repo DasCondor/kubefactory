@@ -123,7 +123,7 @@ line2\" injected: true"]])
 	for app in Apps.APPS:
 		for flavor in ["k8s", "compose"]:
 			check.call("app file %s.%s" % [app["id"], flavor], FileAccess.file_exists("res://apps/%s.%s.yaml" % [app["id"], flavor]) or FileAccess.file_exists(Apps.file_for(app["id"], flavor)), true)
-	check.call("porter offers the media suite", Apps.find("media")["sim"].size(), 10)
+	check.call("porter offers the media suite with Heimdall", Apps.find("media")["sim"].size(), 11)
 	check.call("media suite has jackett", Apps.find("media")["sim"].filter(func(x): return x[1] == "jackett").size(), 1)
 	var Demo = load("res://scripts/backend_demo.gd")
 	var home = Demo.new("homelab-media").fetch()
@@ -201,7 +201,10 @@ line2\" injected: true"]])
 	var DS = load("res://scripts/demo_screens.gd")
 	check.call("a Grafana machine shows the dashboard", DS.kind_of({"containers": [{"image": "grafana/grafana:11.2.0"}]}), "grafana")
 	check.call("Plex and Tautulli machines show streams", DS.kind_of({"containers": [{"image": "plexinc/pms-docker"}]}) + DS.kind_of({"containers": [{"image": "tautulli/tautulli"}]}), "streamsstreams")
-	check.call("any other machine keeps its neutral screen", DS.kind_of({"containers": [{"image": "nginx:1.27"}]}), "")
+	check.call("other demo machines have a pod dashboard", DS.kind_of({"containers": [{"image": "nginx:1.27"}]}), "pod")
+	var vlan_net = K.pod_net({}, {}, {"kubefactory.io/vlan-id": "42",
+		"k8s.v1.cni.cncf.io/network-status": '[{"name":"default","default":true},{"name":"test/backup","interface":"net1","vlan":72},{"name":"test/invalid","vlan":4095}]'})
+	check.call("VLAN tags use the usable 802.1Q range and keep unknown attachments", vlan_net["segments"].map(func(s): return s["vlan"]), [42, 72, 0])
 	var consistent = true
 	for ti in 400:
 		var sa = DS.streams_at(ti * 7.3)

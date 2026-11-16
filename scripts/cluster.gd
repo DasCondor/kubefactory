@@ -148,6 +148,8 @@ static func describe(a: Dictionary) -> String:
 			return "delete pod %s/%s" % [a["ns"], a["name"]]
 		"restart":
 			return "restart %s %s/%s" % [a["kind"], a["ns"], a.get("pod", a["name"])]
+		"demo_update_image":
+			return "apply the simulated image update to %s/%s" % [a["ns"], a["name"]]
 		"delete_workload":
 			return "delete %s %s/%s" % [a["kind"], a["ns"], a["name"]]
 		"create":
