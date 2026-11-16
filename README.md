@@ -58,3 +58,7 @@ and [contribution guide](CONTRIBUTING.md) for setup, building and tests.
 ## License
 
 [MIT](LICENSE). See [third-party notices](docs/THIRDPARTY.md).
+
+## Support KubeFactory
+
+If you’d like to support KubeFactory’s development, [buy me a coffee](https://buymeacoffee.com/dascondor).
