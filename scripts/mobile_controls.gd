@@ -80,8 +80,8 @@ func set_active(on: bool) -> void:
 	if on:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE      # never pointer lock on touch
 		_layout()
-	if hud != null:
-		hud.set_touch(on, _u)
+	elif hud != null:
+		hud.set_touch(false, _u)
 
 func set_allowed(on: bool) -> void:
 	allowed = on
@@ -96,6 +96,8 @@ func _layout() -> void:
 	var win = Vector2(get_window().size)
 	_css = win.x / maxf(_vp.x, 1.0)
 	_u = clampf(52.0 / maxf(_css, 0.05), 56.0, 320.0)
+	if active and hud != null:
+		hud.set_touch(true, _u)
 	# the area clear of notches and home indicators, where the system reports one
 	var safe = DisplayServer.get_display_safe_area()
 	var screen = Vector2(DisplayServer.screen_get_size())
@@ -264,18 +266,17 @@ func _release(id: String) -> void:
 		_picker = false
 		_layout()
 
-# Lift every finger: a dialog opened, the window lost focus, or the screen turned.
+# Cancel touches when a dialog opens, the window loses focus, or the screen turns.
 func _release_all() -> void:
-	for idx in _fingers.keys():
-		_end(idx)
 	_fingers.clear()
+	if _stick != Vector2.ZERO:
+		_set_stick(_stick_at)
 	for id in _down.keys():
 		if id == "action":
 			_fire(false)
 		elif id == "jump":
 			Input.action_release("jump")
 	_down.clear()
-	_stick = Vector2.ZERO
 	for a in ["move_left", "move_right", "move_forward", "move_back", "jump"]:
 		Input.action_release(a)
 

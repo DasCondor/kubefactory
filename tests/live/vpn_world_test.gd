@@ -42,10 +42,30 @@ func _run() -> void:
 	_check("both signs stand in the world", s != null and is_instance_valid(s["inside"]) and is_instance_valid(s["outside"]))
 	if s != null:
 		_check("the inside sign shows the inside address", s["inside"].text.contains(str(gw["net"]["addrs"][0]).get_slice(" ", 0)), s["inside"].text.replace("\n", " | "))
-		_check("the outside sign shows the exit address", s["outside"].text.contains(v["exit_ip"]), s["outside"].text.replace("\n", " | "))
-		_check("the outside sign is at the top of the tunnel", s["outside"].position.y > s["inside"].position.y + 15.0, [s["inside"].position.y, s["outside"].position.y])
+		_check("the outside port identifies its pod and simulated exit address",
+			s["outside"].text.contains(gw["name"]) and s["outside"].text.contains(v["exit_ip"]) and s["outside"].text.contains("SIMULATED"))
 	var tunnel = w._paths.filter(func(pa): return pa["color"] == w.VPN_TUNNEL_COL)
-	_check("a tunnel rises from every gateway", tunnel.size() == 11, tunnel.size())
+	_check("each of the nine gateways has its own pipe to the station", tunnel.size() == 9 and is_instance_valid(w._internet_output), tunnel.size())
+	var station: Node3D = w._internet_output
+	var input_label: Label3D = station.get_node("FactoryInputs")
+	var output_label: Label3D = station.get_node("PublicOutput")
+	_check("inputs and the WWW outlet face opposite directions on opposite sides", input_label.position.z > 0.0 and
+		output_label.position.z < station.get_node("PublicInternetPipe").position.z and
+		is_equal_approx(input_label.rotation.y, 0.0) and is_equal_approx(absf(output_label.rotation.y), PI))
+	var ends = {}
+	for route in tunnel:
+		var end: Vector3 = route["pts"].back()
+		ends[end] = true
+		var signs: Dictionary = w._vpn_signs[route["vpn_uid"]]
+		var pod: Dictionary = w.machines[route["vpn_uid"]].pod
+		var source = w.machines[route["vpn_uid"]]
+		var start: Vector3 = w.to_local(signs["unit"].to_global(Vector3.UP * w.VPN_UNIT_H)) if is_instance_valid(signs["unit"]) else w._vpn_anchor(source)
+		_check("%s runs from its VPN to its labeled port past every platform" % pod["wname"],
+			route["pts"].size() == 4 and start.is_equal_approx(route["pts"].front()) and
+			is_equal_approx(end.z, w._internet_output.position.z) and signs["outside"].position.distance_to(end) < 1.0 and
+			signs["outside"].text.contains(pod["name"]) and
+			w.platforms.values().all(func(pf): return end.z < pf.position.z - pf.depth))
+	_check("no gateways share the same output port", ends.size() == tunnel.size())
 	var machine = w.machines[gw["uid"]]
 	var unit = s.get("unit") if s != null else null
 	_check("the sidecar is seated on and attached to the pod roof",
@@ -67,16 +87,64 @@ func _run() -> void:
 	_check("aiming the Demolisher at an indicator gives no destructive action", not meta.is_empty() and game._hold_action("pod", meta).is_empty())
 	game.mode = mode
 	var feed = w._paths.filter(func(pa): return pa["color"] == w.VPN_FEED_COL)
-	_check("a direct pipe seats against each sidecar", feed.size() == tunnel.size() and feed[0]["pts"].size() == 4, feed.size())
+	_check("eight sidecars keep their direct feeds", feed.filter(func(pa): return not pa.has("vpn_join") and pa["pts"].size() == 4).size() == 8)
 	var st = game.cluster.state
+	var shared = st["pods"].filter(func(p): return p["wname"] == w.Topology.SHARED_VPN)[0]
 	var protected = st["pods"].filter(func(p): return w.Topology.protects(p["ns"], p["wname"]))
-	_check("all downloaders and search apps use their own VPN", protected.size() == 11 and protected.all(func(p): return not p["net"]["vpn"].is_empty()))
+	var members = protected.filter(func(p): return p["net"]["via"] == shared["uid"])
+	_check("Sonarr, Radarr, and Prowlarr use the same gateway", members.size() == 3 and
+		members.all(func(p): return p["name"] in shared["net"]["vpn"]["through"]), shared["net"]["vpn"]["through"])
+	_check("all eleven downloaders and search apps still have a VPN", protected.size() == 11 and
+		protected.all(func(p): return not p["net"]["vpn"].is_empty() or p["net"]["via"] == shared["uid"]))
+	_check("three pods feed the shared gateway through one collector", feed.filter(func(pa): return pa.get("vpn_join") == "branch" and pa["vpn_uid"] == shared["uid"]).size() == 3 and
+		feed.filter(func(pa): return pa.get("vpn_join") == "riser" and pa["vpn_uid"] == shared["uid"]).size() == 1)
 	var links: Array = st["links"]
 	_check("Tautulli reads Plex and Prometheus reads the simulated exporter",
 		links.any(func(l): return l["from_name"] == "media/tautulli" and l["to_name"] == "media/plex") and
 		links.any(func(l): return l["from_name"] == "monitoring/prometheus" and l["to_name"] == "media/tautulli"))
 	_check("file transfers get separate animated pipes", w._paths.any(func(pa): return pa.get("kind") == "Files" and pa["n"] > 0))
 	_check("each placed pod has a demo screen", w.machines.keys().all(func(uid): return game.demo_screens.has(uid)))
+	var sonarr = members.filter(func(p): return p["wname"] == "sonarr")[0]
+	var sonarr_screen = game.demo_screens._screens[sonarr["uid"]]["panel"]
+	_check("the Sonarr dashboard shows its shared VPN and service port", sonarr_screen.route.contains("arr-vpn") and
+		sonarr_screen.ports.any(func(r): return r["port"] == "8989/TCP" and r["health"] == "ok"))
+	var deluge_screen = game.demo_screens._screens[gw["uid"]]["panel"]
+	var shared_downloads = sonarr_screen.disks.filter(func(d): return d["label"] == "media-vpn · downloads")[0]
+	_check("Sonarr and Deluge see the same download volume and one used-space total", shared_downloads in deluge_screen.disks and
+		shared_downloads["used"] == 3145728 and shared_downloads["capacity"] == 10737418240 and shared_downloads["containers"].size() == 3)
+	game.hud.open_shared_disks(sonarr["uid"])
+	var disk_text = "\n".join(PackedStringArray(game.hud._modal.find_children("*", "Label", true, false).map(func(l): return l.text)))
+	_check("shared disk details include every mount and exclude similarly named disks in other namespaces",
+		disk_text.contains("deluge") and disk_text.contains("radarr") and disk_text.contains("Read-only") and disk_text.contains("Read/write") and
+		not disk_text.contains("qbittorrent"))
+	if OS.get_environment("KF_SHOTS") != "":
+		DirAccess.make_dir_recursive_absolute(OS.get_environment("KF_SHOTS"))
+		await create_timer(0.3).timeout
+		root.get_texture().get_image().save_png(OS.get_environment("KF_SHOTS").path_join("shared_disk_space.png"))
+	game.hud.open_ports()
+	var port_text = "\n".join(PackedStringArray(game.hud._modal.find_children("*", "Label", true, false).map(func(l): return l.text)))
+	_check("the cluster port view distinguishes the failed health service and ready apps",
+		port_text.contains("9101/TCP") and port_text.contains("0/1 pods ready") and port_text.contains("1/1 pods ready"))
+	if OS.get_environment("KF_SHOTS") != "":
+		DirAccess.make_dir_recursive_absolute(OS.get_environment("KF_SHOTS"))
+		await process_frame
+		root.get_texture().get_image().save_png(OS.get_environment("KF_SHOTS").path_join("demo_port_readiness.png"))
+	game.hud.open_screen(sonarr["uid"])
+	var port_tab = game.hud._modal.find_children("*", "Button", true, false).filter(func(b): return b.text == "Ports")[0]
+	port_tab.pressed.emit()
+	await process_frame
+	_check("the dashboard Ports tab switches the pod's display too", game.demo_screens.view_of(sonarr["uid"]) == 2)
+	game.demo_screens.set_view(sonarr["uid"], 0)
+	if OS.get_environment("KF_SHOTS") != "":
+		game.hud.open_screen(sonarr["uid"])
+		await create_timer(0.3).timeout
+		root.get_texture().get_image().save_png(OS.get_environment("KF_SHOTS").path_join("sonarr_dashboard.png"))
+	var disks_tab = game.hud._modal.find_children("*", "Button", true, false).filter(func(b): return b.text == "Shared disks")[0]
+	disks_tab.pressed.emit()
+	var mount_details = game.hud._modal.find_children("*", "Button", true, false).filter(func(b): return b.text == "Mount details")[0]
+	mount_details.pressed.emit()
+	_check("the dashboard's mount details open the pod's shared disk list", game.hud._modal_kind == "shared_disks" and game.hud._modal_arg == sonarr["uid"])
+	game.demo_screens.set_view(sonarr["uid"], 0)
 	game.hud.open_liveview()
 	await process_frame
 	_check("demo dashboard directory works without the desktop companion", game.hud._modal.find_children("*", "Button", true, false).size() == w.machines.size() + 1)
@@ -85,6 +153,27 @@ func _run() -> void:
 	var vtext = "\n".join(PackedStringArray(game.hud._modal.find_children("*", "Label", true, false).map(func(l): return l.text)))
 	_check("the VPN panel shows both sides", vtext.contains("INSIDE") and vtext.contains(v["exit_ip"]))
 	_check("the VPN list includes qBittorrent and detects no unprotected downloaders", vtext.contains("qbittorrent") and vtext.contains("No unprotected downloaders detected"))
+	_check("the shared VPN lists all three app pods", members.all(func(p): return vtext.contains(p["name"])))
+	var inspect_app = game.hud._modal.find_children("*", "OptionButton", true, false)[0]
+	_check("each shared app can be opened from its VPN", inspect_app.item_count == 4)
+	inspect_app.item_selected.emit(1)
+	_check("inspecting a VPN app opens its pod", game.hud._modal_kind == "pod" and game.hud._modal_arg in members.map(func(p): return p["uid"]))
+	game.hud.open_vpn()
+	for uid in [shared["uid"], gw["uid"]]:
+		var pick_route = game.hud._modal.find_children("*", "CheckBox", true, false).filter(func(c): return c.get_meta("vpn_uid", "") == uid)[0]
+		pick_route.button_pressed = true
+		var show_selected = game.hud._modal.find_children("*", "Button", true, false).filter(func(b): return b.text == "Show selected VPN routes")[0]
+		show_selected.pressed.emit()
+		_check("the factory shows only the selected gateways and their app feeds", w.vpn_selection.size() == (1 if uid == shared["uid"] else 2) and
+			w._paths.size() == (5 if uid == shared["uid"] else 7) and
+			w._paths.all(func(pa): return w.vpn_selection.has(pa["vpn_uid"])))
+		game.hud.open_vpn()
+	var show_all = game.hud._modal.find_children("*", "Button", true, false).filter(func(b): return b.text == "Show all VPN routes")[0]
+	show_all.pressed.emit()
+	_check("show all restores all nine gateway pipes", w.vpn_selection.is_empty() and w._paths.filter(func(pa): return pa["color"] == w.VPN_TUNNEL_COL).size() == 9)
+	w.pipe_filter = "All"
+	w.apply_state(st)
+	game.hud.open_vpn()
 	if OS.get_environment("KF_SHOTS") != "":
 		DirAccess.make_dir_recursive_absolute(OS.get_environment("KF_SHOTS"))
 		root.get_texture().get_image().save_png(OS.get_environment("KF_SHOTS").path_join("vpn_panel_list.png"))
@@ -97,6 +186,19 @@ func _run() -> void:
 	await process_frame
 	var net_text = "\n".join(PackedStringArray(game.hud._modal.find_children("*", "Label", true, false).map(func(l): return l.text)))
 	_check("Deluge shows the VPN, VLAN and shared downloads mount", net_text.contains("VLAN 30") and net_text.contains("Gluetun") and net_text.contains("/downloads") and not net_text.contains("media/qbittorrent"))
+	_check("the network panel names Internet Output as the VPN pipe destination", net_text.contains("Gluetun → Internet Output"))
+	var picker = game.hud._modal.find_children("*", "OptionButton", true, false)[0]
+	var option = -1
+	for i in picker.item_count:
+		if picker.get_item_text(i) == "Internet Output":
+			option = i
+	_check("the network panel can isolate the Internet pipes", option >= 0)
+	if option >= 0:
+		var vpn_paths: Array = w._paths.filter(func(p): return p.has("vpn_uid") or p["color"] == w.VPN_FEED_COL)
+		picker.item_selected.emit(option)
+		var routes = func(paths): return paths.map(func(p): return [p.get("vpn_uid"), p["pts"]])
+		_check("Internet Output keeps the same gateway routes and hides other pipes", routes.call(w._paths) == routes.call(vpn_paths) and w._internet_output.visible)
+		picker.item_selected.emit(0)
 	game.hud.open_blueprint_graph()
 	await process_frame
 	var graph = game.hud._modal.find_children("*", "GraphEdit", true, false)[0]
@@ -126,14 +228,29 @@ func _run() -> void:
 		root.get_texture().get_image().save_png(dir.path_join("vpn_panel.png"))
 		var m = w.machines[gw["uid"]]
 		var c = m.get_parent().position + m.position
+		var output: Vector3 = w._internet_output.position
+		var port: Vector3 = w._vpn_signs[gw["uid"]]["outside"].position
 		game.hud.close_modal(false)
+		w.pipe_filter = "Internet Output"
+		w.apply_state(game.cluster.state)
 		game.player.flying = true
 		var from = centre + Vector3(2.7, -1.1, 1.7)
-		for view in [["vpn_tunnel", c + Vector3(-9, 9, 16), c + Vector3(1.4, 14, -1)], ["vpn_inside", c + Vector3(-3.5, 5, 9), c + Vector3(1.2, 6.5, -0.5)],
-				["vpn_outside", c + Vector3(-6, 24, 12), c + Vector3(1.4, 28, -1)], ["container_pillars", from, centre]]:
+		for view in [["internet_output", output + Vector3(30, 22, 32), output + Vector3(0, 6, -3)],
+				["internet_public_side", output + Vector3(22, 14, -24), output + Vector3(0, 5, -3)],
+				["internet_port", port + Vector3(1.8, 0.5, 5), port], ["vpn_inside", c + Vector3(-3.5, 5, 9), c + Vector3(1.2, 6.5, -0.5)],
+				["container_pillars", from, centre]]:
 			game.player.teleport(view[1], view[2])
 			await create_timer(1.3).timeout
 			root.get_texture().get_image().save_png(dir.path_join(view[0] + ".png"))
+		w.vpn_selection[shared["uid"]] = true
+		w.apply_state(game.cluster.state)
+		var target: Vector3 = w.machines[shared["uid"]].global_position
+		for member in members:
+			target += w.machines[member["uid"]].global_position
+		target /= members.size() + 1.0
+		game.player.teleport(target + Vector3(14, 40, 30), target + Vector3(0, 12, 0))
+		await create_timer(1.3).timeout
+		root.get_texture().get_image().save_png(dir.path_join("shared_vpn_routes.png"))
 	_finish(game, path, before)
 
 func demo_failure(game) -> bool:

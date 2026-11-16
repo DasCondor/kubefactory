@@ -11,8 +11,15 @@
   to Bob's diagnosis. An image-updater pod offers sample updates with approval.
 - Cluster Codex includes a network and shared-data view and an editable,
   locally saved flowchart with media and online-shop presets.
+- Ports and Readiness shows configured Service ports and host bindings beside
+  backend readiness. Each demo dashboard has a Ports tab, and app overviews
+  show container state and the app's VPN route.
+- Shared Disk Space lists the containers mounting the same backing volume and
+  reports used and free space once per demo volume. The shared-disk view also
+  appears on demo dashboards.
 - Media demo pipes show app calls, metrics, file imports and VPN egress.
-  Gluetun sidecars model separate VPN egress for each downloader and search app.
+  In the Jellyfin demo, Sonarr, Radarr, and Prowlarr use a shared Gluetun
+  gateway. The other downloaders and search apps use their own sidecars.
   Downloads and library data occupy separate simulated claims. Prometheus
   scrapes a simulated exporter beside Tautulli, which reads playback from Plex.
 - Simulated segments and flowchart nodes support VLAN IDs. Live views display
@@ -38,6 +45,12 @@
   Tests: `agent/komodo_test.go`, `tests/live/komodo_test.gd`.
 
 ### Fixed
+
+- VPN pipes enter labeled ports on the factory side of the Internet Output
+  station. One WWW outlet leaves from the public side. The VPN panel lists each
+  gateway's apps and can trace one, several, or all gateways in the factory.
+- Turning a phone cancels held touches and refits the open menu or dashboard.
+  The browser demo uses the browser's default safe area around screen notches.
 
 - Opening a demo leaves the native companion stopped until the operator
   requests a local feature such as connection discovery or Foreman.

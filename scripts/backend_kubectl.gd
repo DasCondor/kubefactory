@@ -302,11 +302,15 @@ static func normalize(list: Dictionary, ctx: String) -> Dictionary:
 					"image": _first_image(spec)})
 			"Service":
 				var ports = []
+				var node_ports = {}
 				for p in spec.get("ports", []):
-					ports.append("%d/%s" % [int(p.get("port", 0)), str(p.get("protocol", "TCP"))])
+					var port = "%d/%s" % [int(p.get("port", 0)), str(p.get("protocol", "TCP"))]
+					ports.append(port)
+					if int(p.get("nodePort", 0)) > 0:
+						node_ports[port] = "%d/%s" % [int(p["nodePort"]), str(p.get("protocol", "TCP"))]
 				var sel = spec.get("selector", {})
 				st.services.append({"name": nm, "ns": ns, "type": str(spec.get("type", "ClusterIP")),
-					"cluster_ip": str(spec.get("clusterIP", "")), "ports": ",".join(PackedStringArray(ports)),
+					"cluster_ip": str(spec.get("clusterIP", "")), "ports": ",".join(PackedStringArray(ports)), "node_ports": node_ports,
 					"selector": sel if typeof(sel) == TYPE_DICTIONARY else {}})
 	for n in st.nodes:
 		n["cpu_req"] = req_cpu.get(n["name"], 0.0)

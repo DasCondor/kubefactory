@@ -37,7 +37,7 @@ func _run() -> void:
 	var upright = win.y > win.x * 1.6
 	print("window ", win, "  (upright)" if upright else "  (sideways)", "  interface scale ", own)
 	var shots = OS.get_environment("KF_SHOTS")
-	for d in [["welcome", hud.open_welcome], ["demos", hud.open_demos], ["foreman", hud.open_foreman], ["krew", hud.open_krew], ["settings", hud.open_settings], ["pause", hud.open_pause]]:
+	for d in [["welcome", hud.open_welcome], ["demos", hud.open_demos], ["foreman", hud.open_foreman], ["krew", hud.open_krew], ["settings", hud.open_settings], ["pause", hud.open_pause], ["vpn", hud.open_vpn]]:
 		d[1].call()
 		for i in 8:
 			await process_frame
@@ -81,6 +81,38 @@ func _run() -> void:
 	hud.close_modal()
 	await process_frame
 	_check("closing restores the player's interface size", is_equal_approx(root.content_scale_factor, own), root.content_scale_factor)
+	var portrait = Vector2i(mini(root.size.x, root.size.y), maxi(root.size.x, root.size.y))
+	var landscape = Vector2i(portrait.y, portrait.x)
+	root.size = portrait
+	for i in 8:
+		await process_frame
+	var touch = game.touch
+	touch._begin(0, touch._buttons["menu"]["rect"].get_center())
+	root.size = landscape
+	for i in 8:
+		await process_frame
+	touch._end(0)
+	_check("rotation cancels a held Menu touch without opening a dialog", touch.active and not hud.modal_open() and touch._fingers.is_empty())
+	touch._begin(0, touch._buttons["menu"]["rect"].get_center())
+	touch._end(0)
+	_check("a fresh landscape tap still opens the menu", hud._modal_kind == "pause")
+	var uid = game.cluster.state["pods"][0]["uid"]
+	for dialog in [["pause", hud.open_pause], ["vpn", hud.open_vpn], ["dashboard", func(): hud.open_screen(uid)]]:
+		dialog[1].call()
+		var modal: Control = hud._modal
+		var scroll = modal.get_child(1)
+		for size in [portrait, landscape]:
+			root.size = size
+			for i in 12:
+				await process_frame
+			var turned = size == portrait
+			_check("%s reflows when turned %s" % [dialog[0], "upright" if turned else "sideways"],
+				hud._modal == modal and touch.active and is_equal_approx(hud.touch_u, touch._u) and
+				is_equal_approx(scroll.rotation, PI / 2.0 if turned else 0.0), scroll.rotation)
+			if shots != "":
+				root.get_texture().get_image().save_png(shots.path_join("rotated_%s_%s.png" % [dialog[0], "portrait" if turned else "landscape"]))
+		hud.close_modal()
+		await process_frame
 	game.queue_free()
 	await process_frame
 	if before == "":
