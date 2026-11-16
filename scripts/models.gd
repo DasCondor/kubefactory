@@ -238,6 +238,9 @@ static func template(id: String, t: String = "") -> Dictionary:
 		else:
 			core.append(p)
 	var res = {"id": id, "tier": t, "bounds": _aabb(parts)}
+	var roof_parts = parts.filter(func(part): return str(part[0]).begins_with("Roof_"))
+	if not roof_parts.is_empty():
+		res["roof_bounds"] = _aabb(roof_parts)
 	for pair in [["LiveViewSurface", "screen"], ["ResourceNameSurface", "name_surface"], ["ContainerListSurface", "list_surface"]]:
 		var a = anchors.get(pair[0])
 		if typeof(a) == TYPE_DICTIONARY and a.has("position") and a.has("size"):

@@ -12,6 +12,7 @@ const Gfx = preload("res://scripts/gfx.gd")
 const Controls = preload("res://scripts/controls.gd")
 const Scenery = preload("res://scripts/scenery.gd")
 const Models = preload("res://scripts/models.gd")
+const Topology = preload("res://scripts/demo_topology.gd")
 const Pipes = preload("res://scripts/pipes.gd")
 
 const FRONT_Z = -46.0
@@ -70,8 +71,8 @@ var _item_mm: MultiMeshInstance3D
 var _item_spacing = 4.0
 var _pipes: Node3D = null       # the library's pipe kit, when the library is in use
 var _pipe_mode = false          # belts drawn as pipes (flow collars ride them) or as code-drawn tracks
-var _item_box: Mesh
 var _item_ring: Mesh
+var pipe_filter = "All"
 var _hub_label: Label3D
 var _hologram: Node3D
 var _log_label: Label3D
@@ -114,12 +115,11 @@ func _ready() -> void:
 	_build_krew_stations()
 	_belt_mm = _make_mm(Vector3.ONE, Tex.mat(Color.WHITE, 0.6, 0.4))
 	_item_mm = _make_mm(Vector3(0.5, 0.5, 0.5), Tex.mat(Color.WHITE, 0.5, 0.1))
-	_item_box = _item_mm.multimesh.mesh
 	# on pipes, what flows is a glowing collar sliding along the tube
 	var ring = CylinderMesh.new()
-	ring.top_radius = 0.42
-	ring.bottom_radius = 0.42
-	ring.height = 0.16
+	ring.top_radius = 0.125
+	ring.bottom_radius = 0.125
+	ring.height = 0.12
 	ring.radial_segments = 16
 	ring.rings = 1
 	var rm = StandardMaterial3D.new()       # unshaded: the Service's colour at full strength, like a lit band
@@ -871,11 +871,11 @@ func _build_bob() -> void:
 	_box(Vector3(0.32, 0.08, 0.06), white, Vector3(0, 0.14, 0.26), _bob_head)
 	_box(Vector3(0.36, 0.13, 0.07), white, Vector3(0, 0.04, 0.24), _bob_head)
 	# cane, planted beside him
-	_box(Vector3(0.05, 1.02, 0.05), wood_dark, Vector3(0.6, 0.51, 0.3), bfig)
-	_box(Vector3(0.05, 0.05, 0.2), wood_dark, Vector3(0.6, 1.02, 0.24), bfig)
+	_box(Vector3(0.05, 0.94, 0.05), wood_dark, Vector3(0.56, 0.47, 0.23), bfig)
+	_box(Vector3(0.05, 0.05, 0.16), wood_dark, Vector3(0.56, 0.92, 0.16), bfig)
 	# wrench in the other hand
 	_bob_wrench = Node3D.new()
-	_bob_wrench.position = Vector3(-0.54, 0.0, 0.1)
+	_bob_wrench.position = Vector3(-0.56, -0.02, 0.18)
 	torso.add_child(_bob_wrench)
 	_box(Vector3(0.05, 0.5, 0.03), steel, Vector3(0, 0.2, 0), _bob_wrench)
 	_box(Vector3(0.16, 0.1, 0.035), steel, Vector3(0, 0.48, 0), _bob_wrench)
@@ -1265,10 +1265,13 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 			add_child(d)
 			var col = K.hue_color("svc:" + s["ns"] + "/" + s["name"], 0.6, 0.85)
 			_box(Vector3(3.6, 0.3, 3.6), Tex.shared("dark"), Vector3(0, 0.15, 0), d)
-			_box(Vector3(3.0, 2.6, 3.0), Tex.body(col), Vector3(0, 1.6, 0), d)
+			var external = s["type"] in ["LoadBalancer", "NodePort"]
+			for x in ([-0.94, 0.94] if external else [0.0]):
+				_box(Vector3(0.85, 2.56, 0.85), Tex.body(col), Vector3(x, 1.58, 0), d)
 			_box(Vector3(3.2, 0.25, 3.2), Tex.shared("dark"), Vector3(0, 3.0, 0), d)
 			_box(Vector3(2.4, 1.3, 0.1), Tex.shared("board"), Vector3(0, 1.8, 1.52), d)
-			_solid(Vector3(3.6, 3.2, 3.6), Vector3(0, 1.6, 0), {"type": "service", "ns": s["ns"], "name": s["name"]}, d)
+			_solid(Vector3(3.6, 3.2, 3.6), Vector3(0, 1.6, 0), {"type": "service", "ns": s["ns"], "name": s["name"],
+				"pillars": "Two pillars · externally exposed Service (" + s["type"] + ")" if external else "One pillar · in-cluster Service (" + s["type"] + ")"}, d)
 			var l = Label3D.new()
 			l.text = "%s\n%s\n%s" % [s["name"], s["type"], s["ports"]]
 			l.font_size = 30
@@ -1290,17 +1293,17 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 			_depots[s["ns"] + "/" + s["name"]] = d
 	# Belt routes: depot -> lift -> trunk -> drop onto every selected machine
 	var paths = []
-	var bsig = "" if show_belts else "off"
+	var bsig = pipe_filter if show_belts else "off"
 	if show_belts:
+		var infrastructure = pipe_filter in ["All", "Services and VPN"]
 		for i in svcs.size():
+			if not infrastructure:
+				break
 			var s = svcs[i]
 			var d = _depots[s["ns"] + "/" + s["name"]]
-			# every service rides its own track: its own height, its own lane back from
-			# the depots, and its own offset on the run down to a machine. Tracks only
-			# meet where the routing really does, i.e. two services selecting one pod.
+			# Stay in front of the platforms until the route reaches the target's aisle.
 			var h = 12.0 + i * 0.7
-			var lz = YARD_Z - 3.0 - i * 1.4
-			var lane = Vector3(((i % 5) - 2) * 0.55, 0, (int(i / 5.0) % 3 - 1) * 0.55)
+			var lz = (YARD_Z + FRONT_Z) * 0.5
 			var col = K.hue_color("svc:" + s["ns"] + "/" + s["name"], 0.6, 0.85)
 			for p in pods:
 				if p["ns"] != s["ns"] or not K.selects(s["selector"], p["labels"]):
@@ -1308,12 +1311,13 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 				var m = machines.get(p["uid"])
 				if m == null:
 					continue
-				var mp = m.get_parent().position + m.position + Vector3(-0.5, 0, 0.3) + lane
+				var mp = _machine_port(m, Vector2(-0.7 + (i % 3) * 0.37, 0.93))
+				var aisle = _pipe_aisle(m)
 				var sx = d.position.x
 				var pts = [Vector3(sx, 3.1, YARD_Z), Vector3(sx, h, YARD_Z), Vector3(sx, h, lz),
-					Vector3(mp.x, h, lz), Vector3(mp.x, h, mp.z), Vector3(mp.x, mp.y + 4.3, mp.z)]
-				paths.append({"pts": pts, "color": col})
-				bsig += str(pts[0]) + str(pts[4]) + str(h)
+					Vector3(aisle.x, h, lz), Vector3(aisle.x, h, mp.z), Vector3(mp.x, h, mp.z), mp]
+				paths.append({"pts": pts, "color": col, "service": i})
+				bsig += str(pts)
 		# VPNs: a direct pipe from the VPN to each container it carries, and the
 		# tunnel rising from the VPN to where the internet sees it.
 		#  - Docker: a container that uses a VPN container's network gets a pipe
@@ -1321,26 +1325,53 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 		#  - a sidecar (Kubernetes, the demo): the VPN is a unit on the pod's roof,
 		#    piped straight into the machine it carries
 		#  - an image with the VPN built in: only the tunnel
+		var lane_index = 0
 		for p in pods:
 			var gw = machines.get(str(p.get("net", {}).get("via", "")))
 			var m = machines.get(p["uid"])
 			if gw != null and m != null and gw != m and not gw.pod.get("net", {}).get("vpn", {}).is_empty():
-				var a = _vpn_anchor(m)
-				var b = _vpn_anchor(gw)
-				var hop = maxf(a.y, b.y) + VPN_HOP
-				var pts = [a, Vector3(a.x, hop, a.z), Vector3(b.x, hop, a.z), Vector3(b.x, hop, b.z), b]
-				paths.append({"pts": pts, "color": VPN_FEED_COL})
-				bsig += "feed" + str(a) + str(b)
+				var height = 12.0 + (svcs.size() + lane_index) * 0.7
+				lane_index += 1
+				if infrastructure:
+					var pts = _aisle_route(m, gw, _vpn_anchor(m), _vpn_anchor(gw), height)
+					paths.append({"pts": pts, "color": VPN_FEED_COL})
+					bsig += "feed" + str(pts)
+			if not infrastructure:
+				continue
 			var v: Dictionary = p.get("net", {}).get("vpn", {})
 			if m != null and not v.is_empty():
 				var b = _vpn_anchor(m)
 				if str(v.get("sidecar", "")) != "":
-					var roof = _vpn_roof(m)
-					paths.append({"pts": [b + Vector3(-0.6, 0.35, 0), Vector3(roof.x, b.y + 0.35, b.z), Vector3(roof.x, b.y + 0.35, roof.z)], "color": VPN_FEED_COL})
-					b += Vector3(0, VPN_UNIT_H, 0)
+					var port = _machine_port(m, Vector2(-0.29, -0.65))
+					var inlet = to_local(m.to_global(m.pipe_port(VPN_ROOF_OFFSET) + Vector3(-VPN_UNIT_WIDTH * 0.5, 0.48, 0)))
+					paths.append({"pts": [port, Vector3(port.x, inlet.y, port.z), Vector3(port.x, inlet.y, inlet.z), inlet],
+						"color": VPN_FEED_COL, "valve": false})
+					b = to_local(m.to_global(m.pipe_port(VPN_ROOF_OFFSET) + Vector3(0, VPN_UNIT_H, 0)))
 					bsig += "side" + str(b)
 				paths.append({"pts": [b, Vector3(b.x, VPN_TUNNEL_H, b.z)], "color": VPN_TUNNEL_COL, "valve": false})
 				bsig += "tunnel" + str(b)
+		var shown = {}
+		for p in pods:
+			shown[p["uid"]] = true
+		var ports = {}
+		for link in st.get("links", []):
+			if not shown.has(link["from"]) or not shown.has(link["to"]):
+				continue
+			var from = machines.get(link["from"])
+			var to = machines.get(link["to"])
+			if from == null or to == null:
+				continue
+			var a = _app_pipe_port(from, ports)
+			var b = _app_pipe_port(to, ports)
+			var height = 12.0 + (svcs.size() + lane_index) * 0.7
+			lane_index += 1
+			# Reserve the same ports and height even when this kind is hidden.
+			if pipe_filter != "All" and pipe_filter != link["kind"]:
+				continue
+			var pts = _aisle_route(from, to, a, b, height)
+			var color: Color = Topology.COLORS[link["kind"]]
+			paths.append({"pts": pts, "color": color, "valve": false, "flow": link["ready"], "kind": link["kind"]})
+			bsig += str(pts) + str(color) + str(link["ready"])
 	if bsig != _belt_sig:
 		_belt_sig = bsig
 		_rebuild_belts(paths)
@@ -1351,52 +1382,69 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 # INSIDE, by the gateway: its addresses on your network and what goes through
 # it. OUTSIDE, at the top of the tunnel: the address the internet sees. The
 # signs show whether or not the pipelines are (B only hides the pipes).
-const VPN_HOP = 1.6          # a direct VPN pipe runs this far above the taller machine
 const VPN_UNIT_H = 1.0       # the sidecar's unit on the pod's roof
+const VPN_UNIT_WIDTH = 0.92
+const VPN_ROOF_OFFSET = Vector2(0.51, -0.37)
 const VPN_TUNNEL_H = 26.0
 const VPN_FEED_COL = Color(0.62, 0.42, 0.95)
 const VPN_TUNNEL_COL = Color(0.95, 0.72, 0.22)
 var _vpn_signs = {}      # VPN uid -> {inside, outside, unit, sig}
 
 # where a VPN line leaves a machine: the top, clear of the Service drops
-func _vpn_anchor(m: Node3D) -> Vector3:
-	var top = float(m.get("_top")) if m.get("_top") != null and float(m.get("_top")) > 0.5 else 4.3
-	return m.get_parent().position + m.position + Vector3(1.4, top, -0.9)
+func _machine_port(m: Node3D, offset: Vector2) -> Vector3:
+	return to_local(m.to_global(m.pipe_port(offset)))
 
-func _vpn_roof(m: Node3D) -> Vector3:
-	var top = float(m.get("_top")) if m.get("_top") != null and float(m.get("_top")) > 0.5 else 4.3
-	return m.get_parent().position + m.position + Vector3(0, top, 0)
+func _pipe_aisle(m: Node3D) -> Vector3:
+	return to_local(m.global_position) + Vector3(-Platform.PITCH / 2.0, 0, Platform.PITCH / 2.0)
+
+func _aisle_route(from: Node3D, to: Node3D, a: Vector3, b: Vector3, height: float) -> Array:
+	var a_lane = _pipe_aisle(from)
+	var b_lane = _pipe_aisle(to)
+	var pts = [a, Vector3(a.x, height, a.z), Vector3(a_lane.x, height, a.z)]
+	if not is_equal_approx(a_lane.x, b_lane.x):
+		pts.append(Vector3(a_lane.x, height, a_lane.z))
+		pts.append(Vector3(b_lane.x, height, a_lane.z))
+	pts.append_array([Vector3(b_lane.x, height, b.z), Vector3(b.x, height, b.z), b])
+	return pts
+
+func _app_pipe_port(m: Node3D, ports: Dictionary) -> Vector3:
+	var index = int(ports.get(m.uid, 0))
+	ports[m.uid] = index + 1
+	# Leave the forward strip of the roof for Service drops and their fittings.
+	return _machine_port(m, Vector2(-0.92 + 0.38 * floori(index / 6.0), -0.87 + 0.27 * (index % 6)))
+
+func _vpn_anchor(m: Node3D) -> Vector3:
+	return _machine_port(m, VPN_ROOF_OFFSET)
 
 # A sidecar VPN, drawn as what it is: its own small unit on the pod's roof.
-func _vpn_unit(at: Vector3, v: Dictionary) -> Node3D:
+func _vpn_unit(m: Node3D, v: Dictionary) -> Node3D:
 	var u = Node3D.new()
-	u.position = at
-	add_child(u)
-	_box(Vector3(1.2, VPN_UNIT_H, 1.2), Tex.shared("dark"), Vector3(0, VPN_UNIT_H * 0.5, 0), u)
-	_box(Vector3(1.24, 0.12, 1.24), Tex.glow(VPN_TUNNEL_COL, 1.2), Vector3(0, VPN_UNIT_H * 0.8, 0), u)
+	u.position = m.pipe_port(VPN_ROOF_OFFSET)
+	m.add_child(u)
+	_box(Vector3(1.02, 0.10, 1.02), Tex.shared("steel"), Vector3(0, 0.05, 0), u)
+	_box(Vector3(VPN_UNIT_WIDTH, VPN_UNIT_H - 0.10, VPN_UNIT_WIDTH), Tex.shared("dark"), Vector3(0, (VPN_UNIT_H + 0.10) * 0.5, 0), u)
+	_box(Vector3(VPN_UNIT_WIDTH + 0.04, 0.08, VPN_UNIT_WIDTH + 0.04), Tex.glow(VPN_TUNNEL_COL, 1.2), Vector3(0, VPN_UNIT_H * 0.79, 0), u)
 	var l = Label3D.new()
 	l.text = "VPN\n%s" % str(v.get("sidecar", ""))
 	l.font_size = 36
 	l.pixel_size = 0.006
 	l.outline_size = 6
 	l.modulate = VPN_TUNNEL_COL.lightened(0.3)
-	l.position = Vector3(0, VPN_UNIT_H * 0.4, 0.62)
+	l.position = Vector3(0, VPN_UNIT_H * 0.4, VPN_UNIT_WIDTH * 0.5 + 0.012)
+	K.fit_label(l, VPN_UNIT_WIDTH * 0.88, 0.48, 0.006)
 	u.add_child(l)
 	return u
 
-func _vpn_sign(col: Color) -> Label3D:
+func _vpn_sign(col: Color, distance: float) -> Label3D:
 	var l = Label3D.new()
 	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	l.font_size = 64
-	l.pixel_size = 0.011
-	l.outline_size = 16
+	l.font_size = 44
+	l.pixel_size = 0.005
+	l.outline_size = 9
 	l.outline_modulate = Color(0.02, 0.02, 0.04, 0.95)
 	l.modulate = col
-	l.visibility_range_end = 160.0
-	# drawn over the pipes around it: the addresses are what the sign is for
-	l.no_depth_test = true
-	l.render_priority = 10
-	l.outline_render_priority = 9
+	l.visibility_range_begin = 1.6
+	l.visibility_range_end = distance
 	add_child(l)
 	return l
 
@@ -1409,32 +1457,34 @@ func _update_vpn_signs(pods: Array) -> void:
 		seen[p["uid"]] = true
 		var s = _vpn_signs.get(p["uid"])
 		if s == null:
-			s = {"inside": _vpn_sign(VPN_FEED_COL.lightened(0.35)), "outside": _vpn_sign(VPN_TUNNEL_COL.lightened(0.2)), "unit": null, "sig": ""}
+			s = {"inside": _vpn_sign(VPN_FEED_COL.lightened(0.35), 22.0),
+				"outside": _vpn_sign(VPN_TUNNEL_COL.lightened(0.2), 34.0), "unit": null, "sig": ""}
 			_vpn_signs[p["uid"]] = s
 		var b = _vpn_anchor(m)
 		var side = str(p["net"]["vpn"].get("sidecar", "")) != ""
-		if side and s["unit"] == null:
-			s["unit"] = _vpn_unit(b, p["net"]["vpn"])
-		elif side:
-			s["unit"].position = b
-		elif s["unit"] != null:
-			s["unit"].queue_free()
-			s["unit"] = null
+		var unit = s["unit"]
+		if is_instance_valid(unit) and (not side or unit.get_parent() != m):
+			unit.queue_free()
+			unit = null
 		if side:
-			b += Vector3(0, VPN_UNIT_H, 0)
-		s["inside"].position = b + Vector3(0, 3.2, 0)
+			if not is_instance_valid(unit):
+				unit = _vpn_unit(m, p["net"]["vpn"])
+			b = to_local(unit.to_global(Vector3.UP * VPN_UNIT_H))
+		s["unit"] = unit if is_instance_valid(unit) else null
+		s["inside"].position = b + Vector3(0, 2.0, 0)
 		s["outside"].position = Vector3(b.x, VPN_TUNNEL_H + 2.6, b.z)
 		var inside = K.vpn_inside_text(p)
 		var outside = K.vpn_outside_text(p)
 		if inside + outside != s["sig"]:
 			s["sig"] = inside + outside
 			s["inside"].text = inside
+			K.fit_label(s["inside"], 2.9, 0.85, 0.004)
 			s["outside"].text = outside
 	for uid in _vpn_signs.keys():
 		if not seen.has(uid):
 			_vpn_signs[uid]["inside"].queue_free()
 			_vpn_signs[uid]["outside"].queue_free()
-			if _vpn_signs[uid]["unit"] != null:
+			if is_instance_valid(_vpn_signs[uid]["unit"]):
 				_vpn_signs[uid]["unit"].queue_free()
 			_vpn_signs.erase(uid)
 
@@ -1452,9 +1502,13 @@ func _rebuild_belts(paths: Array) -> void:
 			cum.append(cum[i - 1] + a.distance_to(b))
 			if a.distance_to(b) < 0.01:
 				continue
+			var is_drop = i == pts.size() - 1 and path.get("valve", true)
 			var key = str(a) + str(b)
-			if not segs.has(key):
-				segs[key] = [a, b, path["color"], i == pts.size() - 1 and path.get("valve", true)]     # the last one drops into the machine
+			if path.has("service") and not is_drop:
+				# Branches from the same starting point share one piece of trunk.
+				key = "%s:%s:%s" % [path["service"], a, (b - a).normalized()]
+			if not segs.has(key) or a.distance_squared_to(b) > a.distance_squared_to(segs[key][1]):
+				segs[key] = [a, b, path["color"], is_drop]
 			if i < pts.size() - 1:
 				joints[str(b)] = [b, path["color"]]                      # a corner
 		path["cum"] = cum
@@ -1465,27 +1519,33 @@ func _rebuild_belts(paths: Array) -> void:
 		add_child(_pipes)
 	_pipe_mode = _pipes != null and _pipes.ready_to_use()
 	_belt_mm.visible = not _pipe_mode
-	_item_mm.multimesh.mesh = _item_ring if _pipe_mode else _item_box
+	_item_mm.multimesh.mesh = _item_ring
 	if _pipe_mode:
 		_pipes.build(segs.values().map(func(sg): return [sg[0], sg[1], sg[2].darkened(0.1), sg[3]]), joints.values())
 	var mm = _belt_mm.multimesh
+	if not _pipe_mode and not (mm.mesh is CylinderMesh):
+		var tube = CylinderMesh.new()
+		tube.top_radius = 0.081
+		tube.bottom_radius = 0.081
+		tube.height = 1.0
+		tube.radial_segments = 8
+		tube.material = mm.mesh.material
+		mm.mesh = tube
 	mm.instance_count = 0 if _pipe_mode else segs.size()
 	var i = 0
 	for sg in ([] if _pipe_mode else segs.values()):
 		var a: Vector3 = sg[0]
 		var b: Vector3 = sg[1]
-		var d = (b - a).abs()
-		var vertical = d.y > 0.01
-		var w = 0.45 if vertical else 0.9
-		var size = Vector3(maxf(d.x + w, w), maxf(d.y, 0.14), maxf(d.z + w, w))
-		mm.set_instance_transform(i, Transform3D(Basis.from_scale(size), (a + b) / 2.0))
+		var delta = b - a
+		var basis = Basis(Quaternion(Vector3.UP, delta.normalized())) * Basis.from_scale(Vector3(1, delta.length() + 0.12, 1))
+		mm.set_instance_transform(i, Transform3D(basis, (a + b) / 2.0))
 		mm.set_instance_color(i, sg[2].darkened(0.55))
 		i += 1
 	_item_spacing = maxf(4.0, total / 2500.0)
 	var count = 0
 	for path in paths:
 		path["first"] = count
-		path["n"] = int(path["cum"][path["cum"].size() - 1] / _item_spacing)
+		path["n"] = int(path["cum"][path["cum"].size() - 1] / _item_spacing) if path.get("flow", true) else 0
 		count += path["n"]
 	_item_mm.multimesh.instance_count = count
 	for path in paths:
@@ -1503,7 +1563,8 @@ func _process(delta: float) -> void:
 	# Bob: slow breathing, a nod now and then, the wrench ticking in his hand
 	_bob_body.position.y = sin(_t * 1.2) * 0.015
 	_bob_head.rotation.x = 0.06 + sin(_t * 0.7) * 0.05
-	_bob_wrench.rotation.z = 0.5 + sin(_t * 2.1) * 0.22
+	_bob_wrench.rotation.z = 1.03 + sin(_t * 2.1) * 0.08
+	_bob_wrench.rotation.x = 0.45
 	if player != null:
 		var bd = player.global_position - _bob.global_position
 		var bwant = atan2(bd.x, bd.z) if bd.length() < 30.0 else 0.0
@@ -1534,12 +1595,11 @@ func _process(delta: float) -> void:
 			var f = (dist - cum[seg - 1]) / maxf(cum[seg] - cum[seg - 1], 0.001)
 			var pos = pts[seg - 1].lerp(pts[seg], clampf(f, 0.0, 1.0))
 			var basis = Basis.IDENTITY
-			if _pipe_mode:
-				var d: Vector3 = pts[seg] - pts[seg - 1]
-				if absf(d.y) < 0.01:     # the collar's axis (Y) along a level run
-					basis = Basis(Vector3.BACK if absf(d.x) > absf(d.z) else Vector3.RIGHT, PI / 2.0)
-			else:
-				pos += Vector3(0, 0.33, 0)
+			var d: Vector3 = pts[seg] - pts[seg - 1]
+			if d.length_squared() > 0.0001:
+				basis = Basis(Quaternion(Vector3.UP, d.normalized()))
+			if path.get("kind") == "Files":
+				basis *= Basis.from_scale(Vector3(1.35, 1.8, 1.35))
 			mm.set_instance_transform(path["first"] + k, Transform3D(basis, pos))
 
 # Where to stand (in the aisle beside it) and where to look, as [pos, look_at].

@@ -16,6 +16,8 @@ const Gfx = preload("res://scripts/gfx.gd")
 const Controls = preload("res://scripts/controls.gd")
 const Minimap = preload("res://scripts/minimap.gd")
 const Models = preload("res://scripts/models.gd")
+const Topology = preload("res://scripts/demo_topology.gd")
+const FlowPlanner = preload("res://scripts/flow_planner.gd")
 const Agent = preload("res://scripts/agent.gd")
 const Native = preload("res://scripts/backend_native.gd")
 const Connections = preload("res://scripts/connections.gd")
@@ -901,7 +903,7 @@ func open_vpn() -> void:
 		pc.add_theme_stylebox_override("panel", sb)
 		var col = _col(4)
 		pc.add_child(col)
-		var head = _row(10)
+		var head = _col(5) if narrow else _row(10)
 		var kind = {"gateway": "gateway: other containers use its network", "built-in": "VPN built into the app's own image"}.get(str(v.get("role", "")), "")
 		if str(v.get("sidecar", "")) != "":
 			kind = "sidecar: carries its whole pod"
@@ -937,11 +939,12 @@ func open_vpn() -> void:
 			continue
 		if p["containers"].any(func(c): return K.is_downloader(str(c.get("image", "")))):
 			exposed.append(str(p["name"]))
-	list.add_child(_lbl("DOWNLOADERS NOT BEHIND A VPN", 13, DIM))
-	var ex = _lbl(", ".join(PackedStringArray(exposed)) if not exposed.is_empty() else "None: every downloader here goes through a VPN (or there are none).", 14, K.health_color("warn") if not exposed.is_empty() else DIM)
+	list.add_child(_lbl("DOWNLOADERS WITHOUT A DETECTED VPN", 13, DIM))
+	var ex = _lbl(", ".join(PackedStringArray(exposed)) if not exposed.is_empty() else "No unprotected downloaders detected.", 14, K.health_color("warn") if not exposed.is_empty() else DIM)
 	ex.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ex.custom_minimum_size.x = tw - 30
 	list.add_child(ex)
+	body.add_child(_btn("Network and shared data", open_network))
 
 # Its network: its own addresses, the VPN gateway it goes through, or, for a
 # gateway, both sides of the tunnel.
@@ -951,7 +954,7 @@ func _pod_network(p: Dictionary) -> void:
 		return
 	var v: Dictionary = net.get("vpn", {})
 	var via = str(net.get("via", ""))
-	if v.is_empty() and via == "" and net.get("addrs", []).is_empty():
+	if v.is_empty() and via == "" and net.get("addrs", []).is_empty() and net.get("segments", []).is_empty():
 		return
 	_dyn.add_child(_lbl("NETWORK", 13, DIM))
 	if via != "":
@@ -975,6 +978,85 @@ func _pod_network(p: Dictionary) -> void:
 		_dyn.add_child(outside)
 	else:
 		_dyn.add_child(_lbl("Addresses:  " + ", ".join(PackedStringArray(net.get("addrs", []))), 14))
+	for segment in net.get("segments", []):
+		_dyn.add_child(_wrapped(K.segment_text(segment), 13, DIM))
+	_dyn.add_child(_btn("Connections and shared data", func(): open_network(p["uid"])))
+
+func _wrapped(value: String, px: int = 14, color: Color = TXT) -> Label:
+	var label = _lbl(value, px, color)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return label
+
+func open_network(uid: String = "") -> void:
+	var body = _open_modal("network", uid, "NETWORK AND SHARED DATA", Vector2(820, 660))
+	var state: Dictionary = cluster.state
+	var sim: bool = state.get("source") == "simulation"
+	if sim and not state.get("links", []).is_empty():
+		var controls = _row(10)
+		controls.add_child(_lbl("SHOW IN THE FACTORY", 13, DIM))
+		var pick = OptionButton.new()
+		var filters = ["All", "Services and VPN", "API", "Metrics", "Files"]
+		for filter in filters:
+			pick.add_item(filter)
+		pick.select(maxi(0, filters.find(world.pipe_filter)))
+		pick.item_selected.connect(func(index):
+			world.pipe_filter = filters[index]
+			world.apply_state(cluster.state))
+		controls.add_child(pick)
+		body.add_child(controls)
+	var sc = ScrollContainer.new()
+	sc.custom_minimum_size.y = 490
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(8)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	list.add_child(_wrapped("SIMULATED · Only configured demo routes are shown. Arrows follow requests, scrapes or files."
+		if sim else "Configured network attachments, Service selectors and detected VPNs. Application traffic requires flow telemetry.", 14, DIM))
+	for kind in ["API", "Metrics", "Files"]:
+		var heading_added = false
+		for link in state.get("links", []):
+			if link["kind"] != kind or (uid != "" and uid not in [link["from"], link["to"]]):
+				continue
+			if not heading_added:
+				list.add_child(_lbl(kind.to_upper(), 14, Topology.COLORS[kind]))
+				heading_added = true
+			list.add_child(_wrapped("%s → %s · %s%s" % [link["from_name"], link["to_name"], link["what"], "" if link["ready"] else " · offline"]))
+	if sim and state.get("context") == "homelab-media":
+		list.add_child(_wrapped("Orange pipes show file imports. Downloaders write to /downloads. Arr apps import into /media. Plex and Jellyfin read the library.", 13, Topology.COLORS["Files"]))
+	list.add_child(_lbl("NETWORK ATTACHMENTS", 14, ORANGE))
+	var pods: Array = state.get("pods", [])
+	for pod in pods:
+		if uid != "" and pod["uid"] != uid:
+			continue
+		var net: Dictionary = pod.get("net", {})
+		var items = []
+		for segment in net.get("segments", []):
+			items.append(K.segment_text(segment))
+		var vpn: Dictionary = net.get("vpn", {})
+		if not vpn.is_empty():
+			items.append("VPN egress → %s" % vpn.get("product", "VPN"))
+		elif str(net.get("via", "")) != "":
+			var via = K.find_pod(state, str(net["via"]))
+			items.append("Network shared with " + str(via["name"] if via != null else net["via"]))
+		if not sim:
+			for svc in state.get("services", []):
+				if svc["ns"] == pod["ns"] and K.selects(svc["selector"], pod["labels"]):
+					items.append("Service " + str(svc["name"]) + " → pod")
+		if sim:
+			var mounts = Topology.volumes(pod["ns"], pod["wname"])
+			for claim in mounts:
+				var peers = []
+				for peer in pods:
+					if peer["uid"] != pod["uid"] and peer["ns"] == pod["ns"] and Topology.volumes(peer["ns"], peer["wname"]).has(claim):
+						if peer["wname"] not in peers:
+							peers.append(peer["wname"])
+				items.append("/%s (%s), shared with %s" % [claim, "read-only" if mounts[claim] else "read/write", ", ".join(peers)])
+		if not items.is_empty():
+			list.add_child(_wrapped("%s · %s" % [Topology.key(pod) if sim else pod["name"], "  |  ".join(items)]))
+	body.add_child(_btn("VPN tunnels", open_vpn))
 
 func _fill_pod() -> void:
 	var st = cluster.state
@@ -1155,7 +1237,8 @@ func open_codex() -> void:
 		_fill_codex())
 	top.add_child(pick)
 	top.add_child(_spacer())
-	top.add_child(_lbl("The namespace filter also hides other namespaces' machines in the world.", 13, DIM))
+	top.add_child(_btn("Network and storage", open_network))
+	top.add_child(_btn("Build a flowchart", open_blueprint_graph))
 	body.add_child(top)
 	body.add_child(_table_head("codex", [["kind", "KIND", 100], ["ns", "NAMESPACE", 130], ["name", "WORKLOAD", 210], ["ready", "READY", 70], ["image", "IMAGE", 270]],
 		func(): _fill_codex(), cluster.state["workloads"].size()))
@@ -1168,6 +1251,27 @@ func open_codex() -> void:
 	sc.add_child(_dyn)
 	body.add_child(sc)
 	_fill_codex()
+
+func open_blueprint_graph() -> void:
+	var body = _open_modal("planner", null, "CLUSTER CONTROL  //  FLOWCHART", Vector2(1160, 685))
+	body.add_child(_wrapped("Plan app calls, metrics, file movement and VPN egress. VLAN fields record the intended tags.", 14, DIM))
+	var toolbar = HFlowContainer.new()
+	body.add_child(toolbar)
+	var planner = FlowPlanner.new()
+	planner.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(planner)
+	var saved = settings.get("flowchart", {})
+	if saved is Dictionary and saved.has("nodes"):
+		planner.restore(saved)
+	else:
+		planner.load_preset(cluster.state.get("context") == "homelab-media")
+	toolbar.add_child(_btn("Media preset", func(): planner.load_preset(true)))
+	toolbar.add_child(_btn("Shop preset", func(): planner.load_preset(false)))
+	toolbar.add_child(_btn("Add workload", planner.add_workload))
+	toolbar.add_child(_btn("Remove selected", planner.remove_selected))
+	toolbar.add_child(_btn("Save locally", func():
+		_save_setting("flowchart", planner.snapshot())
+		planner.status.text = "Saved this flowchart on this device.", "primary"))
 
 func _namespaces() -> Array:
 	var seen = {}
@@ -1631,6 +1735,24 @@ var _lv_move_t = 0
 
 func open_liveview() -> void:
 	var body = _open_modal("livelist", null, "LIVEVIEW", Vector2(1000, 640))
+	var src = cluster.backend.label if cluster.backend != null else ""
+	if src == "simulation":
+		var intro = _wrapped("SIMULATED · Choose a pod to open its demo dashboard.", 15, DIM)
+		body.add_child(intro)
+		var demo_scroll = ScrollContainer.new()
+		demo_scroll.custom_minimum_size.y = 480
+		demo_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		demo_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		var demo_rows = _col(6)
+		demo_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		demo_scroll.add_child(demo_rows)
+		body.add_child(demo_scroll)
+		for ds in demo_screens.screens():
+			var row = _row(10)
+			row.add_child(_wrapped(str(ds["name"])))
+			row.add_child(_btn("View", func(): open_screen(str(ds["uid"])), "primary"))
+			demo_rows.add_child(row)
+		return
 	var intro = _lbl("Open a running application's own web page on a screen. It is the real page, drawn by this computer's browser engine in a private, throw-away profile, and it takes your mouse and keyboard.", 13, DIM)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.custom_minimum_size.x = 950
@@ -1641,7 +1763,6 @@ func open_liveview() -> void:
 		l.custom_minimum_size.x = 950
 		body.add_child(l)
 		return
-	var src = cluster.backend.label if cluster.backend != null else ""
 	var mr = _row(8)
 	mr.add_child(_lbl("ADDRESS", 12, DIM))
 	var url = LineEdit.new()
@@ -1680,21 +1801,6 @@ func open_liveview() -> void:
 				open_liveview()))
 			list.add_child(r)
 	list.add_child(_lbl("DISCOVERED ENDPOINTS", 13, ORANGE))
-	if src == "simulation":
-		var l = _lbl("This is a simulated cluster. Its services have no real application behind them, so LiveView has no page to open here. The Grafana and media machines in this world show demo content on their screens instead, each marked SIMULATED. Connect Docker or a Kubernetes cluster, or type an address above, for the real thing.", 14, K.health_color("warn"))
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.custom_minimum_size.x = 930
-		list.add_child(l)
-		if demo_screens != null:
-			list.add_child(_lbl("DEMO SCREENS IN THIS WORLD", 13, ORANGE))
-			for ds in demo_screens.screens():
-				var r = _row(10)
-				r.add_child(_fixed(_lbl(str(ds["name"]), 14), 420))
-				r.add_child(_lbl("simulated dashboard" if ds["kind"] == "grafana" else "simulated stream activity", 12, DIM))
-				r.add_child(_spacer())
-				r.add_child(_btn("View", func(): open_screen(str(ds["uid"])), "primary"))
-				list.add_child(r)
-		return
 	var eps = live.endpoints(cluster.state, src)
 	if eps.is_empty():
 		list.add_child(_lbl("Nothing that looks like a web endpoint was found (Docker published ports, Kubernetes Services).", 14, DIM))
@@ -3592,8 +3698,32 @@ func open_graphics() -> void:
 # ----- pause menu
 
 func open_pause() -> void:
-	var body = _open_modal("pause", null, "KUBEFACTORY  %s" % version, Vector2(480, 540))
-	body.add_child(_btn("Resume", close_modal, "primary"))
+	var viewport_size = get_viewport().get_visible_rect().size
+	var height = clampf(viewport_size.y * 0.85, 270, 720)
+	var width = clampf(viewport_size.x * 0.9, 300, 530)
+	if touch_u > 0.0:
+		width = 530
+		height = clampf(width * minf(viewport_size.x, viewport_size.y) / maxf(viewport_size.x, viewport_size.y) * 0.98, 170, 550)
+	var frame = _open_modal("pause", null, "KUBEFACTORY  %s" % version, Vector2(width, height))
+	var header := frame.get_parent().get_child(0)
+	var close_button: Button = header.get_child(header.get_child_count() - 1)
+	if touch_u > 0.0:
+		close_button.custom_minimum_size = Vector2(42, 34)
+		close_button.add_theme_font_size_override("font_size", 16)
+	var resume = _btn("Resume", close_modal, "primary")
+	resume.custom_minimum_size.y = 34
+	frame.add_child(resume)
+	var menu = ScrollContainer.new()
+	menu.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	menu.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	frame.add_child(menu)
+	var body = _col(8)
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu.add_child(body)
+	body.add_child(_wrapped("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
+	body.add_child(_btn("Settings", open_settings, "primary"))
+	body.add_child(_btn("Demo worlds", open_demos))
+	body.add_child(_btn("Network and shared data", open_network))
 	if touch != null:
 		body.add_child(_btn("Touch controls:  %s" % ("ON" if touch.allowed else "OFF"), func():
 			touch.set_allowed(not touch.allowed)
@@ -3611,12 +3741,8 @@ func open_pause() -> void:
 			body.add_child(sr)
 			var th = _lbl("Left thumb: move.  Drag the view: look.  ACTION: what the crosshair offers (hold it for a tool's action).  JUMP twice: hoverpack.  AIM: face the nearest machine ahead.", 12, DIM)
 			th.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			th.custom_minimum_size.x = 440
 			body.add_child(th)
-	body.add_child(_lbl("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
-	body.add_child(_btn("Switch cluster  (AWS / Azure / GCP / Rancher / Docker ...)", open_clusters))
-	body.add_child(_btn("Demo worlds  (Kubernetes / Home Assistant / Dev containers / Media)", open_demos))
-	body.add_child(_btn("Settings  (controls, controller, display, accessibility)", open_settings, "primary"))
+	body.add_child(_btn("Switch cluster", open_clusters))
 	body.add_child(_btn("Minimap:  %s   (N)" % ("ON" if bool(settings.get("minimap", true)) else "OFF"), func():
 		toggle_minimap()
 		open_pause()))
@@ -3640,7 +3766,7 @@ func open_pause() -> void:
 		body.add_child(_btn("Graphics  (%s)" % Gfx.WEB_NAMES[1 if Gfx.web_high else 0], open_graphics))
 	elif not Gfx.lite():
 		body.add_child(_btn("Graphics  (%s)" % (Gfx.NAMES[Gfx.level] + (", automatic" if Gfx.chosen == "auto" else "")), open_graphics))
-	body.add_child(_btn("Conveyor belts:  %s" % ("ON" if world.show_belts else "OFF"), func():
+	body.add_child(_btn("Pipelines:  %s" % ("ON" if world.show_belts else "OFF"), func():
 		world.show_belts = not world.show_belts
 		world.apply_state(cluster.state)
 		_save_setting("belts", world.show_belts)
@@ -3672,7 +3798,12 @@ func open_pause() -> void:
 	body.add_child(sr)
 	body.add_child(_btn("How to play", open_welcome))
 	body.add_child(_spacer())
-	body.add_child(_btn("Quit to desktop", func(): get_tree().quit(), "danger"))
+	if not Gfx.web():
+		body.add_child(_btn("Quit to desktop", func(): get_tree().quit(), "danger"))
+	if touch_u > 0.0:
+		for child in body.get_children():
+			if child is Button:
+				child.custom_minimum_size.y = 30
 
 # ----- LiveView providers: Grafana and Tautulli (scripts/providers.gd, agent/providers.go)
 #
@@ -4075,6 +4206,48 @@ func _touch_size(b: Button) -> Button:
 func open_demo_screen(uid: String) -> void:
 	open_screen(uid)
 
+func _open_heimdall() -> void:
+	var body = _open_modal("heimdall", null, "HEIMDALL  //  MEDIA LAB", Vector2(760, 650))
+	var sc = ScrollContainer.new()
+	sc.custom_minimum_size.y = 530
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var rows = _col(8)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(rows)
+	body.add_child(sc)
+	rows.add_child(_lbl("RECENT FAILURES · THIS SIMULATION SESSION", 14, ORANGE))
+	var failures: Array = demo_screens.recent_failures.values()
+	failures.reverse()
+	if failures.is_empty():
+		rows.add_child(_lbl("No failures recorded.", 14, DIM))
+	for failure in failures:
+		rows.add_child(_wrapped("%s · %s" % [Topology.key(failure), failure["status"]]))
+		if K.find_pod(cluster.state, failure["uid"]) != null:
+			rows.add_child(_btn("Open diagnosis", func(): open_bob_case(failure["uid"])))
+	rows.add_child(_lbl("APPLICATIONS", 14, ORANGE))
+	var tiles = HFlowContainer.new()
+	rows.add_child(tiles)
+	var seen = {}
+	for pod in cluster.state.get("pods", []):
+		var id = Topology.key(pod)
+		if pod["ns"] in ["media", "media-vpn", "monitoring"] and not seen.has(id) and pod["wname"] != "heimdall":
+			seen[id] = true
+			tiles.add_child(_btn(id, func(): open_screen(pod["uid"])))
+
+func _open_image_updates() -> void:
+	var body = _open_modal("demo_updates", null, "SIMULATED IMAGE UPDATES", Vector2(740, 460))
+	body.add_child(_wrapped("Practice reviewing an image change and replacing a pod. These sample tags are local to the simulation.", 14, DIM))
+	var updates: Array = cluster.state.get("image_updates", [])
+	if updates.is_empty():
+		body.add_child(_lbl("No sample updates pending.", 14, DIM))
+	for update in updates:
+		body.add_child(_wrapped("%s/%s\n%s → %s" % [update["ns"], update["name"], update["current"], update["next"]]))
+		body.add_child(_btn("Apply simulated update", func():
+			_confirm("Replace this workload's simulated image and roll its pods?", func():
+				cluster.act({"op": "demo_update_image", "ns": update["ns"], "kind": update["kind"], "name": update["name"], "current": update["current"]})),
+			"mk3", not cluster.read_only and cluster.max_tier(update["ns"]) >= 3))
+
 func open_screen(uid: String) -> void:
 	var p = K.find_pod(cluster.state, uid)
 	if p == null or screens == null:
@@ -4125,15 +4298,19 @@ func open_screen(uid: String) -> void:
 			for ds in demo_screens.screens():
 				if ds["uid"] == uid:
 					kind = str(ds["kind"])
-			var bar = _row(8)
-			bar.add_child(_lbl("Demo content from this simulated cluster, not a real page.   VIEW", 13, DIM))
+			var bar = HFlowContainer.new()
+			bar.add_child(_lbl("SIMULATED", 13, DIM))
 			var views: Array = demo_screens.VIEWS[kind]
 			for i in views.size():
 				bar.add_child(_btn(str(views[i]), func():
 					demo_screens.set_view(uid, i)
 					open_screen(uid), "primary" if demo_screens.view_of(uid) == i else "normal"))
-			bar.add_child(_spacer())
 			bar.add_child(_btn("All LiveView", func(): open_liveview()))
+			bar.add_child(_btn("Connections", func(): open_network(uid)))
+			if kind == "heimdall":
+				bar.add_child(_btn("Open app directory", _open_heimdall))
+			elif p.get("wname") == "image-updater":
+				bar.add_child(_btn("Review simulated image updates", _open_image_updates))
 			body.add_child(bar)
 			var panel: Control = demo_screens.make_panel(uid)
 			panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(tvp.x * 0.9, maxf(tvp.y * 0.9 - touch_u * 3.4, 300.0))

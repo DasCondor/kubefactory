@@ -329,14 +329,11 @@ spec:
             initialDelaySeconds: 15
           volumeMounts:
             - {name: config, mountPath: /config}
-            - {name: downloads, mountPath: /downloads}
           resources:
             requests: {cpu: 100m, memory: 256Mi}
       volumes:
         - name: config
           emptyDir: {}
-        - name: downloads
-          persistentVolumeClaim: {claimName: downloads}
 ---
 apiVersion: v1
 kind: Service
@@ -476,3 +473,55 @@ metadata:
 spec:
   selector: {app: tautulli}
   ports: [{port: 8181, targetPort: 8181}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: heimdall-config
+  labels: {kubefactory/app: media}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests: {storage: 1Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heimdall
+  labels: {app: heimdall, kubefactory/app: media}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: heimdall}
+  template:
+    metadata:
+      labels: {app: heimdall}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: heimdall
+          image: lscr.io/linuxserver/heimdall:latest
+          ports: [{containerPort: 80}]
+          env:
+            - {name: PUID, value: "1000"}
+            - {name: PGID, value: "1000"}
+            - {name: TZ, value: Etc/UTC}
+          readinessProbe:
+            tcpSocket: {port: 80}
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+      volumes:
+        - name: config
+          persistentVolumeClaim: {claimName: heimdall-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: heimdall
+  labels: {kubefactory/app: media}
+spec:
+  selector: {app: heimdall}
+  ports: [{port: 80, targetPort: 80}]

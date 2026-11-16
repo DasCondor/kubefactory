@@ -21,7 +21,8 @@ const Models = preload("res://scripts/models.gd")
 
 const SIZE = Vector2i(640, 448)
 const HISTORY = 40
-const VIEWS = {"grafana": ["Cluster overview", "Nodes"], "streams": ["Activity", "Bandwidth"]}
+const VIEWS = {"grafana": ["Cluster overview", "Nodes"], "streams": ["Activity", "Bandwidth"],
+	"pod": ["Overview", "Connections"], "heimdall": ["Apps", "Recent failures"]}
 
 var world = null
 var live = null
@@ -32,19 +33,22 @@ var _screens = {}      # machine uid -> {kind, vp, panel, name}
 var _cpu_hist = []     # share of CPU requested, one sample per state update
 var _bw_hist = []      # simulated total bandwidth (kbps), one sample per state update
 var _figures = {}
+var recent_failures = {}
 var _t = 0.0
 
 # What a simulated machine's screen shows: "grafana", "streams" or "".
 static func kind_of(pod: Dictionary) -> String:
+	if pod.get("wname") == "heimdall":
+		return "heimdall"
 	var conts: Array = pod.get("containers", [])
 	if conts.is_empty():
-		return ""
+		return "pod"
 	var img = Models.image_name(str(conts[0].get("image", "")))
 	if img == "grafana":
 		return "grafana"
-	if img in ["plex", "pms-docker", "tautulli"]:
+	if img in ["plex", "pms-docker", "tautulli", "jellyfin"]:
 		return "streams"
-	return ""
+	return "pod"
 
 # Simulated stream activity at time t (seconds): a few streams that come and go.
 # Deterministic, so a test can say what it should be.
@@ -102,8 +106,10 @@ func view_of(uid: String) -> int:
 
 func set_view(uid: String, v: int) -> void:
 	if _screens.has(uid):
-		_screens[uid]["panel"].view = v
-		_screens[uid]["panel"].queue_redraw()
+		var screen = _screens[uid]
+		screen["panel"].view = v
+		screen["panel"].queue_redraw()
+		screen["vp"].render_target_update_mode = SubViewport.UPDATE_ONCE
 
 # A second, larger copy of a machine's panel for the window (same data, same view).
 func make_panel(uid: String) -> Control:
@@ -119,6 +125,7 @@ func clear() -> void:
 		_drop(uid)
 	_cpu_hist.clear()
 	_bw_hist.clear()
+	recent_failures.clear()
 
 func _drop(uid: String) -> void:
 	var s = _screens[uid]
@@ -153,32 +160,47 @@ func sync(state: Dictionary) -> void:
 		if h.size() > HISTORY:
 			h.pop_front()
 	var want = {}
+	var connections = {}
+	for l in state.get("links", []):
+		for side in ["from", "to"]:
+			var id: String = l[side]
+			if not connections.has(id):
+				connections[id] = []
+			connections[id].append("%s %s · %s" % ["→" if side == "from" else "←", l["to_name" if side == "from" else "from_name"], l["kind"]])
 	for p in state.get("pods", []):
 		var kind = kind_of(p)
-		if kind != "" and world.machines.has(str(p["uid"])):
-			want[str(p["uid"])] = [kind, str(p["name"])]
+		if p.get("health") == "bad":
+			recent_failures[p["uid"]] = p
+			if recent_failures.size() > 20:
+				recent_failures.erase(recent_failures.keys()[0])
+		if world.machines.has(str(p["uid"])):
+			want[str(p["uid"])] = [kind, str(p["name"]), p]
 	for uid in _screens.keys():
 		if not want.has(uid):
 			_drop(uid)
 	for uid in want:
 		if not _screens.has(uid):
 			var vp = SubViewport.new()
-			vp.size = SIZE
+			vp.size = Vector2i(320, 224) if want[uid][0] == "pod" else SIZE
 			vp.transparent_bg = false
 			vp.gui_disable_input = true
-			vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 			add_child(vp)
 			var panel = ScreenPanel.new()
 			panel.kind = want[uid][0]
-			panel.size = Vector2(SIZE)
+			panel.size = Vector2(vp.size)
 			vp.add_child(panel)
 			_screens[uid] = {"kind": want[uid][0], "vp": vp, "panel": panel, "name": want[uid][1]}
 		var s = _screens[uid]
+		s["panel"].pod = want[uid][2]
+		s["panel"].connections = connections.get(uid, [])
+		s["panel"].failures = recent_failures.values()
 		s["panel"].figures = _figures
 		s["panel"].history = _cpu_hist
 		s["panel"].bw_history = _bw_hist
 		s["panel"].streams = st
 		s["panel"].queue_redraw()
+		s["vp"].render_target_update_mode = SubViewport.UPDATE_ONCE
 		if not _taken(uid):
 			world.machines[uid].set_screen_texture(s["vp"].get_texture())
 
@@ -195,6 +217,9 @@ class ScreenPanel extends Control:
 	var history = []
 	var bw_history = []
 	var streams = {}
+	var pod = {}
+	var connections = []
+	var failures = []
 	var source: Control = null     # the window's copy mirrors the machine's panel
 
 	const BG = Color(0.067, 0.082, 0.102)
@@ -214,6 +239,9 @@ class ScreenPanel extends Control:
 			history = source.history
 			bw_history = source.bw_history
 			streams = source.streams
+			pod = source.pod
+			connections = source.connections
+			failures = source.failures
 			queue_redraw()
 
 	func _text(pos: Vector2, s: String, px: int, col: Color, width: float = -1.0, align: int = HORIZONTAL_ALIGNMENT_LEFT) -> void:
@@ -244,9 +272,11 @@ class ScreenPanel extends Control:
 		# the banner: on every panel, always
 		draw_rect(Rect2(0, 0, 640, 36), Color(0.22, 0.15, 0.05))
 		_text(Vector2(12, 26), "SIMULATED", 22, ORANGE)
-		_text(Vector2(150, 25), "demo content, not a real " + ("Grafana" if kind == "grafana" else "media server"), 17, Color(0.9, 0.78, 0.6))
-		_text(Vector2(12, 70), VIEWS_OF[kind][view], 26, TXT)
-		if kind == "grafana":
+		_text(Vector2(150, 25), str(pod.get("wname", "Demo workload")), 17, Color(0.9, 0.78, 0.6), 470)
+		_text(Vector2(12, 70), VIEWS.get(kind, ["Overview", "Connections"])[view], 26, TXT)
+		if kind == "pod" or kind == "heimdall":
+			_pod_panel()
+		elif kind == "grafana":
 			if view == 0:
 				_overview()
 			else:
@@ -256,7 +286,27 @@ class ScreenPanel extends Control:
 		else:
 			_bandwidth()
 
-	const VIEWS_OF = {"grafana": ["Cluster overview", "Nodes"], "streams": ["Media activity", "Bandwidth"], "": ["", ""]}
+	func _pod_panel() -> void:
+		var lines = []
+		if kind == "heimdall":
+			lines = ["Plex · Jellyfin · Requests", "Downloads · Indexers · Library", "Tautulli · Prometheus · Grafana"] if view == 0 else failures.map(func(p): return "%s · %s" % [p["wname"], p["status"]])
+			if lines.is_empty():
+				lines.append("No failures recorded in this session")
+		elif view == 0:
+			lines = ["%s · %d restarts" % [pod.get("status", ""), pod.get("restarts", 0)],
+				"Namespace: " + str(pod.get("ns", "")), "Node: " + str(pod.get("node", ""))]
+			for c in pod.get("containers", []):
+				lines.append("%s · %s" % [c["name"], c["state"]])
+		else:
+			lines = connections.duplicate()
+			if not pod.get("net", {}).get("vpn", {}).is_empty():
+				lines.push_front("→ Gluetun · VPN egress")
+			if lines.is_empty():
+				lines.append("No application links are defined for this workload")
+		for i in mini(lines.size(), 7):
+			var y = 84 + i * 49
+			draw_rect(Rect2(12, y, 616, 44), CARD)
+			_text(Vector2(26, y + 30), str(lines[i]), 20, TXT, 585)
 
 	func _overview() -> void:
 		var chart = Rect2(12, 84, 616, 176)

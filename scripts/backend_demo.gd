@@ -4,12 +4,15 @@ extends RefCounted
 
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
+const Topology = preload("res://scripts/demo_topology.gd")
 const GI = 1073741824.0
 
 var label = "simulation"
 var poll_interval = 1.0
 var caps = {"remove_image": true, "scale": true, "delete_pod": true, "restart": true, "delete_workload": true,
-	"create": true, "cordon": true, "drain": true, "logs": true, "files": true}
+	"create": true, "cordon": true, "drain": true, "logs": true, "files": true, "demo_update_image": true}
+const DEMO_UPDATES = {"media/heimdall": "lscr.io/linuxserver/heimdall:demo-reviewed",
+	"media/library-check": "kubefactory/demo-library-check:1"}
 var context = "helmsman-sim"
 
 var _mx = Mutex.new()
@@ -56,7 +59,7 @@ const DEMO_TYPES = [
 	{"id": "dev-containers", "flavor": "dev-containers", "name": "Dev containers",
 		"desc": "A build farm for compiling: Gitea, CI server and runners, BuildKit, a registry, compile caches, and a dev container per language (C++, Rust, Go, Python, Node). One heavy build keeps running out of memory."},
 	{"id": "media", "flavor": "homelab-media", "name": "Media suite",
-		"desc": "A home media server, all healthy: Plex, Overseerr, Sonarr, Radarr, Lidarr, Bazarr, Jackett, Prowlarr, qBittorrent and Tautulli; beside it the Jellyfin stack (Seerr, Radarr, Sonarr, Prowlarr, Deluge behind a Gluetun VPN); watched by Grafana, Prometheus, cAdvisor and node-exporter."},
+		"desc": "A k3s media lab with Plex, Jellyfin, Heimdall, and Grafana. Follow requests, index searches, VPN egress, downloads, library imports and playback metrics."},
 ]
 
 static func demo_flavor(id: String) -> String:
@@ -145,6 +148,9 @@ func _seed_media() -> void:
 			_add_wl(s[0], app_id, s[1], conts, s[3], 1.0 if heavy else 0.25, 2.0 if heavy else 0.4)
 			if s[4] != "":
 				_add_svc(app_id, s[1], "LoadBalancer" if s[1] in ["plex", "grafana", "overseerr"] else "ClusterIP", s[4], s[1])
+
+	_add_wl("Deployment", "media", "image-updater", [["reviewer", "kubefactory/demo-image-updater:1"]], 1, 0.1, 0.1)
+	_add_wl("Deployment", "media", "library-check", [["check", "kubefactory/demo-library-check:latset"]], 1, 0.1, 0.1, "badimage")
 
 # One simple workload with its Service: [kind, name, image, replicas, port, cpu, mem Gi].
 func _stack(ns: String, rows: Array) -> void:
@@ -243,7 +249,6 @@ const SIM_SECURITY = {
 	"matter-server": {"host_network": true},
 	"plex": {"host_network": true},
 	"nightly-engine-build": {"host_paths": ["/var/run/docker.sock"], "docker_socket": true, "caps": ["builder: SYS_ADMIN"]},
-	"qbittorrent": {"host_ports": [6881], "all_interfaces": true},
 	# Gluetun, Deluge's VPN sidecar, needs what any VPN client needs
 	"deluge": {"caps": ["gluetun: NET_ADMIN"], "host_paths": ["/dev/net/tun"]},
 }
@@ -262,6 +267,9 @@ const SIM_VPN = {"VPN_SERVICE_PROVIDER": "mullvad", "VPN_TYPE": "wireguard", "SE
 
 static func sim_net(w: Dictionary, p: Dictionary, running: bool) -> Dictionary:
 	var n = K.empty_net()
+	var vlan = int(Topology.SEGMENTS.get(w["ns"], 0))
+	if vlan > 0:
+		n["segments"] = [{"name": w["ns"], "vlan": vlan, "interface": "eth0"}]
 	if str(p.get("ip", "")) != "" and str(p.get("node", "")) != "":
 		n["addrs"].append("%s (pod)" % p["ip"])
 	var others = []
@@ -313,6 +321,10 @@ static func sim_security(wname: String, containers: Array) -> Dictionary:
 	return s
 
 func _add_wl(kind, ns, wname, containers, replicas, cpu, mem_gi, quirk = "", crashlog = []):
+	if context == "homelab-media" and Topology.protects(ns, wname) and not containers.any(func(c): return K.is_vpn_image(str(c[1]))):
+		containers = containers + [["gluetun", Topology.VPN_IMAGE]]
+	if context == "homelab-media" and ns == "media" and wname == "tautulli":
+		containers = containers + [["metrics-exporter", "kubefactory/demo-tautulli-exporter:1"]]
 	_wl.append({"kind": kind, "ns": ns, "name": wname, "containers": containers, "replicas": replicas,
 		"cpu": cpu, "mem": mem_gi * GI, "quirk": quirk, "crashlog": crashlog, "hash": _rand_id(9), "ordinal": 0, "spawned": false})
 
@@ -458,6 +470,8 @@ func fetch() -> Dictionary:
 				cstate = "terminated"
 			conts.append({"name": c[0], "image": c[1], "state": cstate,
 				"reason": "" if running else p["st"], "ready": running, "restarts": p["restarts"]})
+		var store = sim_storage(w["name"], w["containers"])
+		store["persistent"].append_array(Topology.volumes(w["ns"], w["name"]).keys())
 		st.pods.append({"uid": p["uid"], "name": p["name"], "ns": w["ns"], "node": p["node"], "status": p["st"],
 			"ready": running, "health": K.health_of(p["st"], running), "restarts": p["restarts"],
 			"wkind": w["kind"], "wname": w["name"], "ip": p["ip"] if p["node"] != "" else "",
@@ -465,7 +479,7 @@ func fetch() -> Dictionary:
 			"phase": {"Running": "Running", "Completed": "Succeeded", "Error": "Failed"}.get(p["st"], "Pending"),
 			# a finished Job in the demo has sat there for a while, as they do
 			"finished": float(p.get("since", 0.0)) - 5400.0 if p["st"] in ["Completed", "Error"] else 0.0,
-			"sec": sim_security(w["name"], w["containers"]), "store": sim_storage(w["name"], w["containers"]),
+			"sec": sim_security(w["name"], w["containers"]), "store": store,
 			"net": sim_net(w, p, running)})
 	for w in _wl:
 		if w["kind"] == "Job":
@@ -480,8 +494,15 @@ func fetch() -> Dictionary:
 		st.workloads.append({"kind": w["kind"], "name": w["name"], "ns": w["ns"],
 			"replicas": total if w["kind"] == "DaemonSet" else w["replicas"], "ready": ready,
 			"image": w["containers"][0][1]})
+		if context == "homelab-media":
+			var next = str(DEMO_UPDATES.get(Topology.key({"ns": w["ns"], "wname": w["name"]}), ""))
+			if next != "" and next != w["containers"][0][1]:
+				if not st.has("image_updates"):
+					st["image_updates"] = []
+				st["image_updates"].append({"ns": w["ns"], "name": w["name"], "kind": w["kind"], "current": w["containers"][0][1], "next": next})
 	for s in _svcs:
 		st.services.append(s.duplicate(true))
+	st["links"] = Topology.links(st)
 	_mx.unlock()
 	return st
 
@@ -499,6 +520,11 @@ func _sim_mounts(p: Dictionary) -> Array:
 	var w = p["wl"]
 	var c = str(w["containers"][0][0])
 	var res = []
+	var shared = Topology.volumes(w["ns"], w["name"])
+	for claim in shared:
+		res.append({"container": c, "path": "/" + claim, "read_only": shared[claim], "volume": claim, "type": "pvc", "claim": claim,
+			"pv": "pvc-%s-%s" % [w["ns"], claim], "storage_class": "demo", "capacity": "10Gi" if claim == "downloads" else "20Gi",
+			"phase": "Bound", "readable": true, "running": p["st"] == "Running"})
 	var dd = _data_dir(str(w["name"]), str(w["containers"][0][1]))
 	if dd != "" and str(w["name"]) in SIM_EPHEMERAL:
 		res.append({"container": c, "path": dd, "read_only": false, "volume": "data", "type": "emptydir", "claim": "", "readable": true, "running": p["st"] == "Running"})
@@ -542,6 +568,11 @@ func _sim_files(a: Dictionary) -> Dictionary:
 			tree = {"": [["config.yaml", "file", 412], ["logging.yaml", "file", 180]]}
 		_:
 			tree = {"": [["ca.crt", "file", 1107], ["namespace", "file", 4], ["token", "file", 1024]]}
+	if m["volume"] == "downloads":
+		tree = {"": [["complete", "dir", 4096]], "complete": [["Sample-Episode.mkv", "file", 1048576], ["Sample-Movie.mkv", "file", 2097152]]}
+	elif m["volume"] == "media":
+		tree = {"": [["series", "dir", 4096], ["movies", "dir", 4096], ["music", "dir", 4096]],
+			"series": [["Sample-Episode.mkv", "file", 1048576], ["Sample-Episode.en.srt", "file", 160]], "movies": [["Sample-Movie.mkv", "file", 2097152]], "music": []}
 	if a["op"] == "file_list":
 		if not tree.has(rel):
 			return {"ok": false, "kind": "notfound", "msg": "%s is not a directory" % full, "data": {}}
@@ -665,6 +696,15 @@ func _action(a: Dictionary) -> Dictionary:
 	if not special.is_empty():
 		return special
 	match a["op"]:
+		"demo_update_image":
+			var w = _find_wl(a["ns"], a["kind"], a["name"])
+			var candidate = str(DEMO_UPDATES.get(a["ns"] + "/" + a["name"], ""))
+			if context != "homelab-media" or w == null or candidate == "" or w["containers"][0][1] != a.get("current"):
+				return {"ok": false, "msg": "The simulated image recommendation is no longer available."}
+			w["containers"][0][1] = candidate
+			if w["quirk"] == "badimage":
+				w["quirk"] = ""
+			return _action({"op": "restart", "ns": a["ns"], "kind": a["kind"], "name": a["name"]})
 		"scale":
 			var w = _find_wl(a["ns"], a["kind"], a["name"])
 			if w == null:
