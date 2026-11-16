@@ -1,11 +1,19 @@
 extends RefCounted
 
 const VPN_IMAGE = "qmcgaw/gluetun:v3"
+const SHARED_VPN = "arr-vpn"
+const SHARED_VPN_APPS = ["sonarr", "radarr", "prowlarr"]
 const VPN_APPS = {
 	"media": ["qbittorrent", "jackett", "prowlarr", "sonarr", "radarr", "lidarr", "bazarr"],
 	"media-vpn": ["deluge", "prowlarr", "sonarr", "radarr"]
 }
 const SEGMENTS = {"media": 20, "media-vpn": 30, "monitoring": 40, "shop": 50}
+const SHARED_FILES = {
+	"downloads": {"": [["complete", "dir", 4096]], "complete": [["Sample-Episode.mkv", "file", 1048576], ["Sample-Movie.mkv", "file", 2097152]]},
+	"media": {"": [["series", "dir", 4096], ["movies", "dir", 4096], ["music", "dir", 4096]],
+		"series": [["Sample-Episode.mkv", "file", 1048576], ["Sample-Episode.en.srt", "file", 160]],
+		"movies": [["Sample-Movie.mkv", "file", 2097152]], "music": []}
+}
 const COLORS = {"API": Color(0.29, 0.8, 0.96), "Metrics": Color(0.43, 0.88, 0.50),
 	"Files": Color(1.0, 0.59, 0.24), "VPN": Color(0.73, 0.51, 0.98)}
 const MEDIA = [
@@ -59,6 +67,9 @@ static func key(p: Dictionary) -> String:
 static func protects(ns: String, name: String) -> bool:
 	return name in VPN_APPS.get(ns, [])
 
+static func uses_shared_vpn(ns: String, name: String) -> bool:
+	return ns == "media-vpn" and name in SHARED_VPN_APPS
+
 static func volumes(ns: String, name: String) -> Dictionary:
 	if ns not in ["media", "media-vpn"]:
 		return {}
@@ -72,12 +83,22 @@ static func volumes(ns: String, name: String) -> Dictionary:
 		return {"media": true}
 	return {}
 
+static func disk(claim: String) -> Dictionary:
+	var entries: Dictionary = SHARED_FILES[claim]
+	var used = 0
+	for dir in entries.values():
+		for file in dir:
+			if file[1] == "file":
+				used += int(file[2])
+	return {"entries": entries, "capacity": (10 if claim == "downloads" else 20) * 1073741824, "used": used}
+
 static func preset(media: bool) -> Array:
 	var rows = MEDIA.duplicate(true) if media else SHOP.duplicate(true)
 	if media:
 		for ns in VPN_APPS:
 			for name in VPN_APPS[ns]:
-				rows.append([ns + "/" + name, ns + "/" + name + " · Gluetun", "VPN", "Internet egress"])
+				var gateway = ns + "/" + SHARED_VPN if uses_shared_vpn(ns, name) else ns + "/" + name + " · Gluetun"
+				rows.append([ns + "/" + name, gateway, "VPN", "Internet egress"])
 	return rows
 
 static func links(state: Dictionary) -> Array:

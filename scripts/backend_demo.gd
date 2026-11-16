@@ -149,8 +149,10 @@ func _seed_media() -> void:
 			if s[4] != "":
 				_add_svc(app_id, s[1], "LoadBalancer" if s[1] in ["plex", "grafana", "overseerr"] else "ClusterIP", s[4], s[1])
 
+	_add_wl("Deployment", "media-vpn", Topology.SHARED_VPN, [["gluetun", Topology.VPN_IMAGE]], 1, 0.25, 0.4)
 	_add_wl("Deployment", "media", "image-updater", [["reviewer", "kubefactory/demo-image-updater:1"]], 1, 0.1, 0.1)
 	_add_wl("Deployment", "media", "library-check", [["check", "kubefactory/demo-library-check:latset"]], 1, 0.1, 0.1, "badimage")
+	_add_svc("media", "library-check", "ClusterIP", "9101/TCP", "library-check")
 
 # One simple workload with its Service: [kind, name, image, replicas, port, cpu, mem Gi].
 func _stack(ns: String, rows: Array) -> void:
@@ -287,7 +289,7 @@ static func sim_net(w: Dictionary, p: Dictionary, running: bool) -> Dictionary:
 			env.append("%s=%s" % [k, SIM_VPN[k]])
 		var v = K.vpn_settings(env, K.vpn_entry("qmcgaw/gluetun"))
 		v["through"] = others
-		v["sidecar"] = side
+		v["sidecar"] = side if not others.is_empty() else ""
 		v["can_check"] = running
 		v["exit_ip"] = "203.0.113.%d" % (40 + abs(str(p["uid"]).hash()) % 200) if running else ""
 		v["exit_note"] = "SIMULATED" if running else "the VPN container is not running"
@@ -321,7 +323,7 @@ static func sim_security(wname: String, containers: Array) -> Dictionary:
 	return s
 
 func _add_wl(kind, ns, wname, containers, replicas, cpu, mem_gi, quirk = "", crashlog = []):
-	if context == "homelab-media" and Topology.protects(ns, wname) and not containers.any(func(c): return K.is_vpn_image(str(c[1]))):
+	if context == "homelab-media" and Topology.protects(ns, wname) and not Topology.uses_shared_vpn(ns, wname) and not containers.any(func(c): return K.is_vpn_image(str(c[1]))):
 		containers = containers + [["gluetun", Topology.VPN_IMAGE]]
 	if context == "homelab-media" and ns == "media" and wname == "tautulli":
 		containers = containers + [["metrics-exporter", "kubefactory/demo-tautulli-exporter:1"]]
@@ -471,7 +473,12 @@ func fetch() -> Dictionary:
 			conts.append({"name": c[0], "image": c[1], "state": cstate,
 				"reason": "" if running else p["st"], "ready": running, "restarts": p["restarts"]})
 		var store = sim_storage(w["name"], w["containers"])
-		store["persistent"].append_array(Topology.volumes(w["ns"], w["name"]).keys())
+		var mounts = Topology.volumes(w["ns"], w["name"])
+		for claim in mounts:
+			var disk = Topology.disk(claim)
+			store["persistent"].append(claim)
+			store["shared_mounts"].append({"kind": "pvc", "name": claim, "container": conts[0]["name"],
+				"path": "/" + claim, "read_only": mounts[claim], "capacity": disk["capacity"], "used": disk["used"]})
 		st.pods.append({"uid": p["uid"], "name": p["name"], "ns": w["ns"], "node": p["node"], "status": p["st"],
 			"ready": running, "health": K.health_of(p["st"], running), "restarts": p["restarts"],
 			"wkind": w["kind"], "wname": w["name"], "ip": p["ip"] if p["node"] != "" else "",
@@ -481,6 +488,8 @@ func fetch() -> Dictionary:
 			"finished": float(p.get("since", 0.0)) - 5400.0 if p["st"] in ["Completed", "Error"] else 0.0,
 			"sec": sim_security(w["name"], w["containers"]), "store": store,
 			"net": sim_net(w, p, running)})
+	if context == "homelab-media":
+		_link_shared_vpn(st.pods)
 	for w in _wl:
 		if w["kind"] == "Job":
 			continue
@@ -506,6 +515,20 @@ func fetch() -> Dictionary:
 	_mx.unlock()
 	return st
 
+func _link_shared_vpn(pods: Array) -> void:
+	var gateway = null
+	for p in pods:
+		if p["ns"] == "media-vpn" and p["wname"] == Topology.SHARED_VPN and not p["net"]["vpn"].is_empty():
+			gateway = p
+			if p["ready"]:
+				break
+	if gateway == null:
+		return
+	for p in pods:
+		if Topology.uses_shared_vpn(p["ns"], p["wname"]) and p["net"]["vpn"].is_empty():
+			p["net"]["via"] = gateway["uid"]
+			gateway["net"]["vpn"]["through"].append(p["name"])
+
 func _find_wl(ns: String, kind: String, wname: String) -> Variant:
 	for w in _wl:
 		if w["ns"] == ns and w["kind"] == kind and w["name"] == wname:
@@ -522,8 +545,10 @@ func _sim_mounts(p: Dictionary) -> Array:
 	var res = []
 	var shared = Topology.volumes(w["ns"], w["name"])
 	for claim in shared:
+		var disk = Topology.disk(claim)
 		res.append({"container": c, "path": "/" + claim, "read_only": shared[claim], "volume": claim, "type": "pvc", "claim": claim,
-			"pv": "pvc-%s-%s" % [w["ns"], claim], "storage_class": "demo", "capacity": "10Gi" if claim == "downloads" else "20Gi",
+			"pv": "pvc-%s-%s" % [w["ns"], claim], "storage_class": "demo", "capacity": "%dGi" % (disk["capacity"] / GI),
+			"usage": K.shared_disk_usage(disk),
 			"phase": "Bound", "readable": true, "running": p["st"] == "Running"})
 	var dd = _data_dir(str(w["name"]), str(w["containers"][0][1]))
 	if dd != "" and str(w["name"]) in SIM_EPHEMERAL:
@@ -568,11 +593,8 @@ func _sim_files(a: Dictionary) -> Dictionary:
 			tree = {"": [["config.yaml", "file", 412], ["logging.yaml", "file", 180]]}
 		_:
 			tree = {"": [["ca.crt", "file", 1107], ["namespace", "file", 4], ["token", "file", 1024]]}
-	if m["volume"] == "downloads":
-		tree = {"": [["complete", "dir", 4096]], "complete": [["Sample-Episode.mkv", "file", 1048576], ["Sample-Movie.mkv", "file", 2097152]]}
-	elif m["volume"] == "media":
-		tree = {"": [["series", "dir", 4096], ["movies", "dir", 4096], ["music", "dir", 4096]],
-			"series": [["Sample-Episode.mkv", "file", 1048576], ["Sample-Episode.en.srt", "file", 160]], "movies": [["Sample-Movie.mkv", "file", 2097152]], "music": []}
+	if Topology.SHARED_FILES.has(m["volume"]):
+		tree = Topology.SHARED_FILES[m["volume"]]
 	if a["op"] == "file_list":
 		if not tree.has(rel):
 			return {"ok": false, "kind": "notfound", "msg": "%s is not a directory" % full, "data": {}}

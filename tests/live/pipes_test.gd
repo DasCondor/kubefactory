@@ -26,7 +26,12 @@ func _pipe_crossings(paths: Array) -> Array:
 			var a: Vector3 = pts[i - 1]
 			var b: Vector3 = pts[i]
 			if a.distance_squared_to(b) > 0.05 * 0.05:
-				segments.append([a.min(b), a.max(b), id])
+				var join = ""
+				if i == pts.size() - 1 and path.get("vpn_join") == "branch":
+					join = "branch"
+				if i == 1 and path.get("vpn_join") == "riser":
+					join = "riser"
+				segments.append([a.min(b), a.max(b), id, path.get("vpn_uid"), join])
 	var crossings = []
 	for i in segments.size():
 		var a = segments[i]
@@ -39,6 +44,8 @@ func _pipe_crossings(paths: Array) -> Array:
 			var ba: Vector3 = b[0] - a[1]
 			var gap = ab.max(ba).max(Vector3.ZERO)
 			if gap.length_squared() < PIPE_CLEARANCE * PIPE_CLEARANCE:
+				if gap.is_zero_approx() and a[3] == b[3] and [a[4], b[4]].has("branch") and [a[4], b[4]].has("riser"):
+					continue # a client pipe joins its own VPN's shared riser
 				crossings.append("%s meets %s (gap %.3f)" % [a, b, gap.length()])
 	return crossings
 

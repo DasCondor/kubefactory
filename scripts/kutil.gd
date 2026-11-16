@@ -245,26 +245,44 @@ static func floating_tag(image: String) -> bool:
 #   binds       [host paths]              a host folder (survives, but tied to that host)
 #   known       bool                      false when the source said nothing about storage
 static func empty_storage() -> Dictionary:
-	return {"persistent": [], "scratch": [], "anonymous": [], "binds": [], "known": false}
+	return {"persistent": [], "scratch": [], "anonymous": [], "binds": [], "shared_mounts": [], "known": false}
 
 static func pod_storage(spec: Dictionary) -> Dictionary:
 	var s = empty_storage()
 	s["known"] = true
+	var sources = {}
 	for v in spec.get("volumes", []):
 		if typeof(v) != TYPE_DICTIONARY:
 			continue
 		var nm = str(v.get("name", ""))
 		if typeof(v.get("persistentVolumeClaim")) == TYPE_DICTIONARY:
-			s["persistent"].append(str(v["persistentVolumeClaim"].get("claimName", nm)))
+			var claim: Dictionary = v["persistentVolumeClaim"]
+			var name = str(claim.get("claimName", nm))
+			s["persistent"].append(name)
+			sources[nm] = {"kind": "pvc", "name": name, "read_only": claim.get("readOnly", false)}
 		elif typeof(v.get("ephemeral")) == TYPE_DICTIONARY or typeof(v.get("emptyDir")) == TYPE_DICTIONARY:
 			s["scratch"].append(nm)
 		elif typeof(v.get("hostPath")) == TYPE_DICTIONARY:
-			s["binds"].append(str(v["hostPath"].get("path", "")))
+			var path = str(v["hostPath"].get("path", ""))
+			s["binds"].append(path)
+			if not is_socket_path(path):
+				sources[nm] = {"kind": "bind", "name": path, "read_only": false}
 		else:
 			for k in ["nfs", "csi", "iscsi", "cephfs", "rbd", "glusterfs", "azureFile", "azureDisk", "awsElasticBlockStore", "gcePersistentDisk"]:
 				if v.has(k):
 					s["persistent"].append(nm)
 					break
+	for c in spec.get("initContainers", []) + spec.get("containers", []):
+		if not c is Dictionary:
+			continue
+		for mount in c.get("volumeMounts", []):
+			if not mount is Dictionary or not sources.has(mount.get("name", "")):
+				continue
+			var source: Dictionary = sources[mount["name"]].duplicate()
+			source["container"] = str(c.get("name", ""))
+			source["path"] = str(mount.get("mountPath", ""))
+			source["read_only"] = source["read_only"] or mount.get("readOnly", false)
+			s["shared_mounts"].append(source)
 	return s
 
 static func container_storage(i: Dictionary) -> Dictionary:
@@ -275,19 +293,55 @@ static func container_storage(i: Dictionary) -> Dictionary:
 	for m in (i.get("Mounts", []) if typeof(i.get("Mounts")) == TYPE_ARRAY else []):
 		if typeof(m) != TYPE_DICTIONARY:
 			continue
+		var source = ""
 		match str(m.get("Type", "")):
 			"volume":
 				var nm = str(m.get("Name", ""))
+				source = nm
 				if hex.search(nm) != null:
 					s["anonymous"].append(nm.left(12) + " at " + str(m.get("Destination", "")))
 				else:
 					s["persistent"].append(nm)
 			"bind":
 				if not is_socket_path(str(m.get("Source", ""))):
-					s["binds"].append(str(m.get("Source", "")))
+					source = str(m.get("Source", ""))
+					s["binds"].append(source)
 			"tmpfs":
 				s["scratch"].append(str(m.get("Destination", "")))
+		if source != "":
+			s["shared_mounts"].append({"kind": str(m["Type"]), "name": source, "container": str(i.get("Name", "")).trim_prefix("/"),
+				"path": str(m.get("Destination", "")), "read_only": not m.get("RW", true)})
 	return s
+
+static func shared_disks(state: Dictionary) -> Array:
+	var disks = {}
+	for p in state.get("pods", []):
+		for m in p.get("store", {}).get("shared_mounts", []):
+			if not m is Dictionary:
+				continue
+			var kind = str(m.get("kind", ""))
+			var scope = str(p.get("ns", "") if kind == "pvc" else p.get("node", ""))
+			var name = str(m.get("name", ""))
+			var path = str(m.get("path", ""))
+			if kind not in ["pvc", "volume", "bind"] or scope.is_empty() or name.is_empty() or path.is_empty():
+				continue
+			var id = JSON.stringify([kind, scope, name])
+			if not disks.has(id):
+				disks[id] = {"label": "%s · %s" % [scope, tidy_text(name)], "mounts": [], "containers": {},
+					"capacity": m.get("capacity"), "used": m.get("used")}
+			var disk: Dictionary = disks[id]
+			var container = str(m.get("container", ""))
+			disk["containers"][[p["uid"], container]] = true
+			disk["mounts"].append({"uid": p["uid"], "pod": p["name"], "container": container,
+				"path": path, "read_only": bool(m.get("read_only", false))})
+	var shared = disks.values().filter(func(d): return d["containers"].size() > 1)
+	shared.sort_custom(func(a, b): return a["label"] < b["label"])
+	return shared
+
+static func shared_disk_usage(disk: Dictionary) -> String:
+	if typeof(disk["used"]) not in [TYPE_INT, TYPE_FLOAT] or typeof(disk["capacity"]) not in [TYPE_INT, TYPE_FLOAT]:
+		return "Disk usage unreported"
+	return "%s used of %s · %s free" % [fmt_bytes(disk["used"]), fmt_bytes(disk["capacity"]), fmt_bytes(maxf(0, disk["capacity"] - disk["used"]))]
 
 # from a Kubernetes pod spec
 static func pod_security(spec: Dictionary) -> Dictionary:
@@ -757,6 +811,41 @@ static func selects(selector: Dictionary, labels: Dictionary) -> bool:
 		if str(labels.get(k, "\u0000")) != str(selector[k]):
 			return false
 	return true
+
+# Port exposure is configuration. Readiness comes from the state we already have.
+static func port_rows(state: Dictionary) -> Array:
+	var pods: Array = state.get("pods", [])
+	var rows = []
+	for svc in state.get("services", []):
+		var selector: Dictionary = svc.get("selector", {})
+		var targets = pods.filter(func(p): return p["ns"] == svc["ns"] and selects(selector, p.get("labels", {})))
+		var ready = targets.filter(func(p): return p.get("ready", false)).size()
+		var status = "Backends unreported"
+		var health = "warn"
+		if not selector.is_empty():
+			status = "No matching pods" if targets.is_empty() else "%d/%d pods ready" % [ready, targets.size()]
+			health = "bad" if ready == 0 else ("ok" if ready == targets.size() else "warn")
+		var scope: String = {"LoadBalancer": "Load balancer", "NodePort": "Node port", "ExternalName": "External DNS"}.get(svc.get("type", ""), "Cluster only")
+		for port in str(svc.get("ports", "")).split(",", false):
+			var node_port = svc.get("node_ports", {}).get(port)
+			rows.append({"name": "%s/%s" % [svc["ns"], svc["name"]], "port": "%s → %s" % [node_port, port] if node_port != null else port,
+				"scope": scope, "status": status, "health": health, "pods": targets.map(func(p): return p["uid"])})
+	for pod in pods:
+		var bindings = str(pod.get("ip", "")).split(",", false) if state.get("source") == "docker" else PackedStringArray()
+		var ready: bool = pod.get("ready", false)
+		var healthy: bool = ready and pod.get("health", "ok") == "ok"
+		var status = "Container running" if healthy else ("Container unhealthy" if ready else "Container offline")
+		var health = "ok" if healthy else "bad"
+		for binding in bindings:
+			rows.append({"name": str(pod["name"]), "port": binding.strip_edges(), "scope": "Published host port" if "->" in binding else "Container only",
+				"status": status, "health": health, "pods": [pod["uid"]]})
+		if bindings.is_empty():
+			for port in pod.get("sec", {}).get("host_ports", []):
+				rows.append({"name": str(pod["name"]), "port": str(port), "scope": "Host port",
+					"status": "Pod ready" if healthy else "Pod not ready", "health": health, "pods": [pod["uid"]]})
+	var rank = {"bad": 0, "warn": 1, "ok": 2}
+	rows.sort_custom(func(a, b): return rank[a["health"]] < rank[b["health"]] if a["health"] != b["health"] else a["name"] + a["port"] < b["name"] + b["port"])
+	return rows
 
 # ---- multi-user: action tiers and policy
 

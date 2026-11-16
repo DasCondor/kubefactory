@@ -636,7 +636,7 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_modal.add_child(dim)
 	var center = CenterContainer.new()
-	var fit = touch_u > 0.0 and kind != "screen"
+	var fit = touch_u > 0.0
 	var scroll: ScrollContainer = null
 	if fit:
 		# a scrolling frame, for a dialog taller than the screen
@@ -708,6 +708,8 @@ func _refresh_modal() -> void:
 			_fill_node()
 		"service":
 			_fill_service()
+		"ports":
+			_fill_ports()
 		"bob":
 			_fill_bob()
 		"gauge":
@@ -874,14 +876,26 @@ func _vpn_check(p: Dictionary) -> void:
 	notify("Asking from inside %s's tunnel..." % p["name"], "info")
 	cluster.act({"op": "vpn_check", "ns": p["ns"], "name": p["name"], "pod": p["uid"], "key": "vpn:" + str(p["uid"])})
 
+func _show_vpn_routes(selected: Dictionary) -> void:
+	world.vpn_selection = selected.duplicate()
+	world.pipe_filter = "Internet Output"
+	world.ns_filter = ""
+	world.show_belts = true
+	world.apply_state(cluster.state)
+	close_modal()
+
 func open_vpn() -> void:
 	var body = _open_modal("vpn", null, "VPN  //  TUNNELS", Vector2(1100, 760) if touch_u <= 0.0 else Vector2(760, 900))
 	var narrow = touch_u > 0.0
 	var tw = 700 if narrow else 1040
 	var pods: Array = cluster.state.get("pods", [])
 	var vpns = pods.filter(func(p): return not p.get("net", {}).get("vpn", {}).is_empty())
+	vpns.sort_custom(func(a, b):
+		var a_count: int = a["net"]["vpn"].get("through", []).size()
+		var b_count: int = b["net"]["vpn"].get("through", []).size()
+		return a_count > b_count if a_count != b_count else a["name"] < b["name"])
 	var sim = str(cluster.state.get("source", "")) == "simulation"
-	var intro = _lbl("Each VPN with both sides of its tunnel: INSIDE, its addresses on your network and what it carries; OUTSIDE, the address the internet sees. Only the VPN's provider, type and countries are read from its settings, never its keys." +
+	var intro = _lbl("Each gateway lists the apps it carries and the exit address the internet sees. Select one or more VPNs to trace their routes to the WWW outlet." +
 		("   SIMULATED: the demo's addresses are invented." if sim else ""), 13, DIM)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.custom_minimum_size.x = tw
@@ -893,6 +907,20 @@ func open_vpn() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.add_child(list)
 	body.add_child(sc)
+	var selected: Dictionary = world.vpn_selection.duplicate()
+	var actions = _row(8)
+	var trace: Button
+	if not vpns.is_empty():
+		trace = _btn("Show selected VPN routes", func(): _show_vpn_routes(selected), "primary", not selected.is_empty())
+		actions.add_child(trace)
+		actions.add_child(_btn("Show all VPN routes", func(): _show_vpn_routes({})))
+	var clients = {}
+	for pod in pods:
+		var via = str(pod.get("net", {}).get("via", ""))
+		if via != "":
+			if not clients.has(via):
+				clients[via] = []
+			clients[via].append(pod)
 	if vpns.is_empty():
 		list.add_child(_lbl("No VPN containers here. Recognised: " + ", ".join(PackedStringArray(K.VPN_REGISTRY.map(func(e): return e["product"]))) + ".", 14, DIM))
 	for p in vpns:
@@ -920,11 +948,28 @@ func open_vpn() -> void:
 					close_modal()
 					player.teleport(spot[0], spot[1])))
 		col.add_child(head)
+		var pick_route = _check("Select VPN route", selected.has(spot_uid), func(on):
+			if on:
+				selected[spot_uid] = true
+			else:
+				selected.erase(spot_uid)
+			trace.disabled = selected.is_empty())
+		pick_route.set_meta("vpn_uid", spot_uid)
+		col.add_child(pick_route)
 		for t in [[K.vpn_inside_text(p), Color(0.75, 0.6, 1.0)], [K.vpn_outside_text(p), Color(0.95, 0.75, 0.3)]]:
 			var l = _lbl(t[0].replace("\n", "     "), 14, t[1])
 			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			l.custom_minimum_size.x = tw - 30
 			col.add_child(l)
+		if clients.has(spot_uid):
+			var names = ["Inspect an app on this VPN"]
+			for client in clients[spot_uid]:
+				names.append("%s/%s" % [client["ns"], client["name"]])
+			var pick_app = _pick(names, names[0], func(label):
+				var index = names.find(label)
+				if index > 0:
+					open_pod(clients[spot_uid][index - 1]["uid"]))
+			col.add_child(pick_app)
 		if _vpn_checked.has(spot_uid):
 			col.add_child(_lbl("Checked just now from inside the tunnel:  " + _vpn_checked[spot_uid], 14, K.health_color("ok")))
 		list.add_child(pc)
@@ -944,7 +989,8 @@ func open_vpn() -> void:
 	ex.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ex.custom_minimum_size.x = tw - 30
 	list.add_child(ex)
-	body.add_child(_btn("Network and shared data", open_network))
+	actions.add_child(_btn("Network and shared data", open_network))
+	body.add_child(actions)
 
 # Its network: its own addresses, the VPN gateway it goes through, or, for a
 # gateway, both sides of the tunnel.
@@ -961,7 +1007,9 @@ func _pod_network(p: Dictionary) -> void:
 		var gw = K.find_pod(cluster.state, via)
 		var gname = str(gw["name"]) if gw != null else via.left(12)
 		var behind = gw != null and not gw.get("net", {}).get("vpn", {}).is_empty()
-		_dyn.add_child(_lbl("Has no network of its own: uses %s's%s. Everything it sends leaves through %s." % [gname, " VPN tunnel" if behind else " network", gname],
+		var route = "SIMULATED · Internet traffic goes through %s." % gname if cluster.state.get("source") == "simulation" else \
+			"Has no network of its own: uses %s's%s. Everything it sends leaves through %s." % [gname, " VPN tunnel" if behind else " network", gname]
+		_dyn.add_child(_lbl(route,
 			14, Color(0.75, 0.6, 1.0) if behind else TXT))
 		if behind:
 			_dyn.add_child(_lbl("Outside, the internet sees:  " + (str(gw["net"]["vpn"]["exit_ip"]) if str(gw["net"]["vpn"].get("exit_ip", "")) != "" else "(unknown: " + str(gw["net"]["vpn"].get("exit_note", "")) + ")"), 14, Color(0.95, 0.75, 0.3)))
@@ -992,11 +1040,15 @@ func open_network(uid: String = "") -> void:
 	var body = _open_modal("network", uid, "NETWORK AND SHARED DATA", Vector2(820, 660))
 	var state: Dictionary = cluster.state
 	var sim: bool = state.get("source") == "simulation"
-	if sim and not state.get("links", []).is_empty():
+	var pods: Array = state.get("pods", [])
+	var show_app_flows: bool = sim and not state.get("links", []).is_empty()
+	if show_app_flows or pods.any(func(p): return not p.get("net", {}).get("vpn", {}).is_empty()):
 		var controls = _row(10)
 		controls.add_child(_lbl("SHOW IN THE FACTORY", 13, DIM))
 		var pick = OptionButton.new()
-		var filters = ["All", "Services and VPN", "API", "Metrics", "Files"]
+		var filters = ["All", "Services and VPN", "Internet Output"]
+		if show_app_flows:
+			filters.append_array(["API", "Metrics", "Files"])
 		for filter in filters:
 			pick.add_item(filter)
 		pick.select(maxi(0, filters.find(world.pipe_filter)))
@@ -1027,7 +1079,6 @@ func open_network(uid: String = "") -> void:
 	if sim and state.get("context") == "homelab-media":
 		list.add_child(_wrapped("Orange pipes show file imports. Downloaders write to /downloads. Arr apps import into /media. Plex and Jellyfin read the library.", 13, Topology.COLORS["Files"]))
 	list.add_child(_lbl("NETWORK ATTACHMENTS", 14, ORANGE))
-	var pods: Array = state.get("pods", [])
 	for pod in pods:
 		if uid != "" and pod["uid"] != uid:
 			continue
@@ -1037,10 +1088,13 @@ func open_network(uid: String = "") -> void:
 			items.append(K.segment_text(segment))
 		var vpn: Dictionary = net.get("vpn", {})
 		if not vpn.is_empty():
-			items.append("VPN egress → %s" % vpn.get("product", "VPN"))
+			items.append("VPN egress → %s → Internet Output" % vpn.get("product", "VPN"))
 		elif str(net.get("via", "")) != "":
 			var via = K.find_pod(state, str(net["via"]))
-			items.append("Network shared with " + str(via["name"] if via != null else net["via"]))
+			if not sim:
+				items.append("Network shared with " + str(via["name"] if via != null else net["via"]))
+			if via != null and not via.get("net", {}).get("vpn", {}).is_empty():
+				items.append("VPN egress → %s → Internet Output" % via["name"])
 		if not sim:
 			for svc in state.get("services", []):
 				if svc["ns"] == pod["ns"] and K.selects(svc["selector"], pod["labels"]):
@@ -1056,7 +1110,77 @@ func open_network(uid: String = "") -> void:
 				items.append("/%s (%s), shared with %s" % [claim, "read-only" if mounts[claim] else "read/write", ", ".join(peers)])
 		if not items.is_empty():
 			list.add_child(_wrapped("%s · %s" % [Topology.key(pod) if sim else pod["name"], "  |  ".join(items)]))
-	body.add_child(_btn("VPN tunnels", open_vpn))
+	var tools = _row(8)
+	tools.add_child(_btn("Ports and readiness", func(): open_ports(uid), "primary"))
+	tools.add_child(_btn("Shared disk space", func(): open_shared_disks(uid)))
+	tools.add_child(_btn("VPN tunnels", open_vpn))
+	body.add_child(tools)
+
+func open_shared_disks(uid: String = "") -> void:
+	var body = _open_modal("shared_disks", uid, "SHARED DISK SPACE", Vector2(800, 650))
+	var simulated = cluster.state.get("source") == "simulation"
+	body.add_child(_wrapped("One disk total per backing volume. Each mount shows the container, its directory, and its access." +
+		(" Usage comes from the demo's sample files." if simulated else ""), 14, DIM))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list = _col(9)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(list)
+	body.add_child(sc)
+	for disk in K.shared_disks(cluster.state):
+		if uid != "" and not disk["mounts"].any(func(m): return m["uid"] == uid):
+			continue
+		var card = PanelContainer.new()
+		card.add_theme_stylebox_override("panel", _sb(BG2, ORANGE, 0, 9))
+		var lines = _col(5)
+		lines.add_child(_wrapped(disk["label"], 16, ORANGE))
+		lines.add_child(_wrapped(K.shared_disk_usage(disk), 14))
+		for mount in disk["mounts"]:
+			lines.add_child(_wrapped("%s / %s · %s · %s" % [mount["pod"], mount["container"], K.tidy_text(mount["path"]),
+				"Read-only" if mount["read_only"] else "Read/write"], 13, DIM))
+		card.add_child(lines)
+		list.add_child(card)
+	if list.get_child_count() == 0:
+		list.add_child(_wrapped("No shared backing volumes are reported for this view.", 14, DIM))
+
+func open_ports(uid: String = "") -> void:
+	var body = _open_modal("ports", uid, "PORTS AND READINESS", Vector2(800, 650))
+	var simulated = cluster.state.get("source") == "simulation"
+	body.add_child(_wrapped("Each row shows the configured port and which pods or containers are ready. " +
+		("Port status follows the simulation." if simulated else "Live reachability requires a connection check."), 14, DIM))
+	var sc = ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_dyn = _col(8)
+	_dyn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(_dyn)
+	body.add_child(sc)
+	_fill_ports()
+
+func _fill_ports() -> void:
+	var rows = K.port_rows(cluster.state)
+	if _modal_arg != "":
+		rows = rows.filter(func(r): return _modal_arg in r["pods"])
+	var sig = JSON.stringify(rows)
+	if sig == _dyn_sig:
+		return
+	_dyn_sig = sig
+	_clear(_dyn)
+	if rows.is_empty():
+		_dyn.add_child(_wrapped("This view has no configured ports to report.", 14, DIM))
+	for row in rows:
+		var card = PanelContainer.new()
+		var color = K.health_color(row["health"])
+		var style = _sb(BG2, color, 0, 9)
+		style.border_width_left = 4
+		card.add_theme_stylebox_override("panel", style)
+		var lines = _col(5)
+		lines.add_child(_wrapped(row["name"], 15))
+		lines.add_child(_wrapped("%s   ·   %s" % [row["port"], row["scope"]], 14, DIM))
+		lines.add_child(_wrapped(row["status"], 14, color))
+		card.add_child(lines)
+		_dyn.add_child(card)
 
 func _fill_pod() -> void:
 	var st = cluster.state
@@ -2041,6 +2165,8 @@ func _fill_storage() -> void:
 				v.add_child(cl)
 			if str(m.get("capacity", "")) != "":
 				v.add_child(_lbl("%s  ·  %s  ·  %s" % [m["capacity"], m.get("storage_class", ""), m.get("phase", "")], 12, DIM))
+			if str(m.get("usage", "")) != "":
+				v.add_child(_wrapped(str(m["usage"]), 12, DIM))
 			if not m.get("readable", true):
 				v.add_child(_lbl("contents are never shown", 12, RED))
 			if not m.get("running", true):
@@ -4254,8 +4380,7 @@ func open_screen(uid: String) -> void:
 		open_liveview()
 		return
 	var mode: String = screens.mode_of(uid)
-	var tvp = get_viewport().get_visible_rect().size
-	var body = _open_modal("screen", uid, "SCREEN  //  " + str(p["name"]), Vector2(1180, 860) if touch_u <= 0.0 else Vector2(maxf(tvp.x * 0.94, 600.0), maxf(tvp.y * 0.9, 500.0)))
+	var body = _open_modal("screen", uid, "SCREEN  //  " + str(p["name"]), Vector2(1180, 860) if touch_u <= 0.0 else Vector2(760, 590))
 	var head = _row(10)
 	var ic = TextureRect.new()
 	ic.texture = Icons.texture(Icons.kind_of(p))
@@ -4287,7 +4412,7 @@ func open_screen(uid: String) -> void:
 			bar.add_child(_btn("Inspect", func(): open_pod(uid)))
 		body.add_child(bar)
 		var panel: Control = screens.make_panel(uid)
-		panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(tvp.x * 0.9, maxf(tvp.y * 0.9 - touch_u * 3.4, 300.0))
+		panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(700, 400)
 		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		body.add_child(panel)
 		return
@@ -4301,19 +4426,24 @@ func open_screen(uid: String) -> void:
 			var bar = HFlowContainer.new()
 			bar.add_child(_lbl("SIMULATED", 13, DIM))
 			var views: Array = demo_screens.VIEWS[kind]
+			var current = demo_screens.view_of(uid)
 			for i in views.size():
 				bar.add_child(_btn(str(views[i]), func():
 					demo_screens.set_view(uid, i)
-					open_screen(uid), "primary" if demo_screens.view_of(uid) == i else "normal"))
+					open_screen(uid), "primary" if current == i else "normal"))
 			bar.add_child(_btn("All LiveView", func(): open_liveview()))
-			bar.add_child(_btn("Connections", func(): open_network(uid)))
+			bar.add_child(_btn("Network details", func(): open_network(uid)))
+			if views[current] == "Ports":
+				bar.add_child(_btn("Port details", func(): open_ports(uid)))
+			elif views[current] == "Shared disks":
+				bar.add_child(_btn("Mount details", func(): open_shared_disks(uid)))
 			if kind == "heimdall":
 				bar.add_child(_btn("Open app directory", _open_heimdall))
 			elif p.get("wname") == "image-updater":
 				bar.add_child(_btn("Review simulated image updates", _open_image_updates))
 			body.add_child(bar)
 			var panel: Control = demo_screens.make_panel(uid)
-			panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(tvp.x * 0.9, maxf(tvp.y * 0.9 - touch_u * 3.4, 300.0))
+			panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(700, 400)
 			panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			body.add_child(panel)
 		"live":
@@ -4330,7 +4460,7 @@ func open_screen(uid: String) -> void:
 		_:
 			var l = _lbl("No application page is on this screen.\n\nLiveView puts a running application's own web page here, and a Grafana or Tautulli provider can pin its dashboard or activity. Until then the screen shows the pod's state.\n\nMetrics, Logs and Storage above work for every machine.", 15, DIM)
 			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			l.custom_minimum_size.x = 1100
+			l.custom_minimum_size.x = 700 if touch_u > 0.0 else 1100
 			body.add_child(l)
 			body.add_child(_btn("Open LiveView", func(): open_liveview(), "primary"))
 

@@ -13,7 +13,7 @@ extends Node
 # or a real provider is put on them.
 # It needs no companion and no network, so it works in the browser build.
 #
-# Each screen has two views; V on the machine opens it large, where the view
+# V on the machine opens the dashboard large, where the view
 # can be switched (the machine's own screen follows).
 
 const K = preload("res://scripts/kutil.gd")
@@ -21,8 +21,8 @@ const Models = preload("res://scripts/models.gd")
 
 const SIZE = Vector2i(640, 448)
 const HISTORY = 40
-const VIEWS = {"grafana": ["Cluster overview", "Nodes"], "streams": ["Activity", "Bandwidth"],
-	"pod": ["Overview", "Connections"], "heimdall": ["Apps", "Recent failures"]}
+const VIEWS = {"grafana": ["Cluster overview", "Nodes", "Ports", "Shared disks"], "streams": ["Activity", "Bandwidth", "Ports", "Shared disks"],
+	"pod": ["Overview", "Connections", "Ports", "Shared disks"], "heimdall": ["Apps", "Recent failures", "Ports", "Shared disks"]}
 
 var world = null
 var live = null
@@ -161,12 +161,27 @@ func sync(state: Dictionary) -> void:
 			h.pop_front()
 	var want = {}
 	var connections = {}
+	var ports = {}
+	for row in K.port_rows(state):
+		for uid in row["pods"]:
+			if not ports.has(uid):
+				ports[uid] = []
+			ports[uid].append(row)
+	var disks = {}
+	for disk in K.shared_disks(state):
+		for mount in disk["mounts"]:
+			var uid: String = mount["uid"]
+			if not disks.has(uid):
+				disks[uid] = []
+			if disk not in disks[uid]:
+				disks[uid].append(disk)
 	for l in state.get("links", []):
 		for side in ["from", "to"]:
 			var id: String = l[side]
 			if not connections.has(id):
 				connections[id] = []
-			connections[id].append("%s %s · %s" % ["→" if side == "from" else "←", l["to_name" if side == "from" else "from_name"], l["kind"]])
+			connections[id].append("%s %s · %s%s" % ["→" if side == "from" else "←", l["to_name" if side == "from" else "from_name"],
+				l["kind"], "" if l.get("ready", true) else " · unavailable"])
 	for p in state.get("pods", []):
 		var kind = kind_of(p)
 		if p.get("health") == "bad":
@@ -192,13 +207,28 @@ func sync(state: Dictionary) -> void:
 			vp.add_child(panel)
 			_screens[uid] = {"kind": want[uid][0], "vp": vp, "panel": panel, "name": want[uid][1]}
 		var s = _screens[uid]
-		s["panel"].pod = want[uid][2]
-		s["panel"].connections = connections.get(uid, [])
+		var pod: Dictionary = want[uid][2]
+		var net: Dictionary = pod.get("net", {})
+		var gateway = K.find_pod(state, str(net["via"])) if str(net.get("via", "")) != "" else null
+		var vpn: Dictionary = net.get("vpn", {})
+		var links: Array = connections.get(uid, [])
+		var route = "No VPN route configured"
+		if gateway != null:
+			route = "Via %s%s" % [gateway["wname"], "" if gateway["ready"] else " · offline"]
+			links.push_front("→ %s → Internet Output" % gateway["wname"])
+		elif not vpn.is_empty():
+			route = "%s · %d apps" % [vpn.get("product", "VPN"), vpn.get("through", []).size()]
+			links.push_front("→ %s → Internet Output" % vpn.get("product", "VPN"))
+		s["panel"].pod = pod
+		s["panel"].route = route
+		s["panel"].ports = ports.get(uid, [])
+		s["panel"].disks = disks.get(uid, [])
+		s["panel"].connections = links
 		s["panel"].failures = recent_failures.values()
 		s["panel"].figures = _figures
 		s["panel"].history = _cpu_hist
 		s["panel"].bw_history = _bw_hist
-		s["panel"].streams = st
+		s["panel"].streams = st if pod["ready"] else {}
 		s["panel"].queue_redraw()
 		s["vp"].render_target_update_mode = SubViewport.UPDATE_ONCE
 		if not _taken(uid):
@@ -218,6 +248,9 @@ class ScreenPanel extends Control:
 	var bw_history = []
 	var streams = {}
 	var pod = {}
+	var ports = []
+	var disks = []
+	var route = ""
 	var connections = []
 	var failures = []
 	var source: Control = null     # the window's copy mirrors the machine's panel
@@ -240,6 +273,9 @@ class ScreenPanel extends Control:
 			bw_history = source.bw_history
 			streams = source.streams
 			pod = source.pod
+			ports = source.ports
+			disks = source.disks
+			route = source.route
 			connections = source.connections
 			failures = source.failures
 			queue_redraw()
@@ -273,8 +309,13 @@ class ScreenPanel extends Control:
 		draw_rect(Rect2(0, 0, 640, 36), Color(0.22, 0.15, 0.05))
 		_text(Vector2(12, 26), "SIMULATED", 22, ORANGE)
 		_text(Vector2(150, 25), str(pod.get("wname", "Demo workload")), 17, Color(0.9, 0.78, 0.6), 470)
-		_text(Vector2(12, 70), VIEWS.get(kind, ["Overview", "Connections"])[view], 26, TXT)
-		if kind == "pod" or kind == "heimdall":
+		var title: String = VIEWS.get(kind, VIEWS["pod"])[view]
+		_text(Vector2(12, 70), title, 26, TXT)
+		if title == "Ports":
+			_port_panel()
+		elif title == "Shared disks":
+			_disk_panel()
+		elif kind == "pod" or kind == "heimdall":
 			_pod_panel()
 		elif kind == "grafana":
 			if view == 0:
@@ -293,20 +334,60 @@ class ScreenPanel extends Control:
 			if lines.is_empty():
 				lines.append("No failures recorded in this session")
 		elif view == 0:
-			lines = ["%s · %d restarts" % [pod.get("status", ""), pod.get("restarts", 0)],
-				"Namespace: " + str(pod.get("ns", "")), "Node: " + str(pod.get("node", ""))]
-			for c in pod.get("containers", []):
-				lines.append("%s · %s" % [c["name"], c["state"]])
+			_pod_overview()
+			return
 		else:
-			lines = connections.duplicate()
-			if not pod.get("net", {}).get("vpn", {}).is_empty():
-				lines.push_front("→ Gluetun · VPN egress")
+			lines = connections
 			if lines.is_empty():
-				lines.append("No application links are defined for this workload")
+				lines = ["No application links are defined for this workload"]
 		for i in mini(lines.size(), 7):
 			var y = 84 + i * 49
 			draw_rect(Rect2(12, y, 616, 44), CARD)
-			_text(Vector2(26, y + 30), str(lines[i]), 20, TXT, 585)
+			var color = RED if "unavailable" in lines[i] or (kind == "heimdall" and view == 1 and not failures.is_empty()) else TXT
+			_text(Vector2(26, y + 30), str(lines[i]), 20, color, 585)
+
+	func _pod_overview() -> void:
+		var status = Rect2(12, 84, 616, 96)
+		_card(status, "%s · %s" % [pod.get("ns", ""), pod.get("node", "Unscheduled")])
+		_text(Vector2(24, 155), str(pod.get("status", "Waiting")), 29, K.health_color(pod.get("health", "warn")), 365)
+		_text(Vector2(408, 155), "%d restarts" % pod.get("restarts", 0), 18, DIM, 196, HORIZONTAL_ALIGNMENT_RIGHT)
+		_card(Rect2(12, 192, 280, 88), "SERVICE PORTS")
+		var issue_count = ports.filter(func(row): return row["health"] != "ok").size()
+		_text(Vector2(24, 254), "%d configured · %d need attention" % [ports.size(), issue_count], 16, AMBER if issue_count > 0 else TXT, 254)
+		_card(Rect2(304, 192, 324, 88), "VPN ROUTE")
+		_text(Vector2(316, 254), route, 18, TXT, 300)
+		_card(Rect2(12, 292, 616, 144), "CONTAINERS")
+		var containers: Array = pod.get("containers", [])
+		for i in mini(containers.size(), 4):
+			var c: Dictionary = containers[i]
+			_text(Vector2(24, 342 + i * 25), str(c["name"]), 17, TXT, 340)
+			_text(Vector2(376, 342 + i * 25), str(c["state"]), 17, GREEN if c.get("ready", false) else AMBER, 229, HORIZONTAL_ALIGNMENT_RIGHT)
+
+	func _port_panel() -> void:
+		if ports.is_empty():
+			_card(Rect2(12, 84, 616, 62), "No Service or host ports configured for this pod")
+			return
+		for i in mini(ports.size(), 5):
+			var row: Dictionary = ports[i]
+			var y = 84 + i * 65
+			draw_rect(Rect2(12, y, 616, 60), CARD)
+			var color = K.health_color(row["health"])
+			draw_rect(Rect2(12, y, 4, 60), color)
+			_text(Vector2(26, y + 23), row["port"], 20, TXT, 300)
+			_text(Vector2(338, y + 23), row["status"], 17, color, 273, HORIZONTAL_ALIGNMENT_RIGHT)
+			_text(Vector2(26, y + 47), "%s · %s" % [row["name"], row["scope"]], 16, DIM, 585)
+		if ports.size() > 5:
+			_text(Vector2(16, 432), "Port details shows all %d ports" % ports.size(), 16, DIM)
+
+	func _disk_panel() -> void:
+		if disks.is_empty():
+			_card(Rect2(12, 84, 616, 62), "No shared backing volumes reported for this pod")
+			return
+		for i in mini(disks.size(), 4):
+			var disk: Dictionary = disks[i]
+			var y = 84 + i * 83
+			_card(Rect2(12, y, 616, 75), "%s · %d containers" % [disk["label"], disk["containers"].size()])
+			_text(Vector2(24, y + 55), K.shared_disk_usage(disk), 19, TXT, 582)
 
 	func _overview() -> void:
 		var chart = Rect2(12, 84, 616, 176)

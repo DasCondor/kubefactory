@@ -10,6 +10,29 @@ func _init():
 	var check = func(what, got, want):
 		if str(got) != str(want):
 			fails.append("%s: got %s, want %s" % [what, got, want])
+	var port_rows = K.port_rows({"source": "kubernetes", "pods": [
+		{"uid": "web-1", "ns": "demo", "labels": {"app": "web"}, "ready": true},
+		{"uid": "web-2", "ns": "demo", "labels": {"app": "web"}, "ready": false}], "services": [
+		{"ns": "demo", "name": "web", "type": "NodePort", "selector": {"app": "web"}, "ports": "80/TCP", "node_ports": {"80/TCP": "30080/TCP"}},
+		{"ns": "demo", "name": "missing", "type": "ClusterIP", "selector": {"app": "old"}, "ports": "9000/TCP"},
+		{"ns": "demo", "name": "manual", "type": "ClusterIP", "selector": {}, "ports": "53/UDP"}]})
+	check.call("port view puts missing backends first and keeps manual readiness unknown", port_rows.map(func(r): return r["status"]),
+		["No matching pods", "Backends unreported", "1/2 pods ready"])
+	check.call("port view shows node and Service ports together", port_rows[2]["port"], "30080/TCP → 80/TCP")
+	var docker_ports = K.port_rows({"source": "docker", "pods": [{"uid": "c1", "name": "proxy", "ready": true,
+		"health": "warn", "ip": "127.0.0.1:8080->80/tcp, 53/udp"}]})
+	check.call("Docker port view distinguishes host bindings and marks unhealthy containers", docker_ports.map(func(r): return [r["scope"], r["status"]]),
+		[["Published host port", "Container unhealthy"], ["Container only", "Container unhealthy"]])
+	var shared_store = K.pod_storage({"volumes": [{"name": "library", "persistentVolumeClaim": {"claimName": "library"}}],
+		"containers": [{"name": "writer", "volumeMounts": [{"name": "library", "mountPath": "/output"}]},
+			{"name": "reader", "volumeMounts": [{"name": "library", "mountPath": "/input", "readOnly": true}]}]})
+	var shared_disks = K.shared_disks({"pods": [
+		{"uid": "app", "name": "app", "ns": "demo", "node": "node-1", "store": shared_store},
+		{"uid": "other", "name": "other", "ns": "separate", "node": "node-1", "store": shared_store}]})
+	check.call("shared disks keep different namespaces separate even when claim and mount names match", shared_disks.size(), 2)
+	check.call("the shared claim retains both container paths and access modes", shared_disks[0]["mounts"].map(func(m): return [m["container"], m["path"], m["read_only"]]),
+		[["writer", "/output", false], ["reader", "/input", true]])
+	check.call("unreported live disk usage is not shown as zero", K.shared_disk_usage(shared_disks[0]), "Disk usage unreported")
 	check.call("provider", st["provider"], "Rancher · AWS EKS")
 	var n = st["nodes"][0]
 	check.call("node ready", n["ready"], true)

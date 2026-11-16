@@ -73,6 +73,7 @@ var _pipes: Node3D = null       # the library's pipe kit, when the library is in
 var _pipe_mode = false          # belts drawn as pipes (flow collars ride them) or as code-drawn tracks
 var _item_ring: Mesh
 var pipe_filter = "All"
+var vpn_selection = {}  # gateway UIDs to trace; empty shows every gateway
 var _hub_label: Label3D
 var _hologram: Node3D
 var _log_label: Label3D
@@ -1110,6 +1111,10 @@ func _node_rank(n: Dictionary) -> String:
 
 func apply_state(st: Dictionary) -> void:
 	var quiet = _first or (st["source"] + "|" + st["context"]) != _source
+	if quiet:
+		vpn_selection.clear()
+		if pipe_filter == "Internet Output":
+			pipe_filter = "All"
 	_first = false
 	_source = st["source"] + "|" + st["context"]
 	var nodes = st["nodes"].duplicate()
@@ -1294,8 +1299,10 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 	# Belt routes: depot -> lift -> trunk -> drop onto every selected machine
 	var paths = []
 	var bsig = pipe_filter if show_belts else "off"
+	var infrastructure = show_belts and pipe_filter in ["All", "Services and VPN"]
+	var show_egress = infrastructure or (show_belts and pipe_filter == "Internet Output")
+	var exits = _update_vpn_signs(pods, show_egress)
 	if show_belts:
-		var infrastructure = pipe_filter in ["All", "Services and VPN"]
 		for i in svcs.size():
 			if not infrastructure:
 				break
@@ -1318,38 +1325,51 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 					Vector3(aisle.x, h, lz), Vector3(aisle.x, h, mp.z), Vector3(mp.x, h, mp.z), mp]
 				paths.append({"pts": pts, "color": col, "service": i})
 				bsig += str(pts)
-		# VPNs: a direct pipe from the VPN to each container it carries, and the
-		# tunnel rising from the VPN to where the internet sees it.
-		#  - Docker: a container that uses a VPN container's network gets a pipe
-		#    straight across to it, just above the machine tops
+		# VPN feeds stay inside the factory. Each tunnel runs to its own port outside it.
+		# A shared VPN collects its clients at one riser before entering the gateway.
 		#  - a sidecar (Kubernetes, the demo): the VPN is a unit on the pod's roof,
 		#    piped straight into the machine it carries
 		#  - an image with the VPN built in: only the tunnel
 		var lane_index = 0
+		var vpn_inputs = {}
 		for p in pods:
 			var gw = machines.get(str(p.get("net", {}).get("via", "")))
 			var m = machines.get(p["uid"])
 			if gw != null and m != null and gw != m and not gw.pod.get("net", {}).get("vpn", {}).is_empty():
 				var height = 12.0 + (svcs.size() + lane_index) * 0.7
 				lane_index += 1
-				if infrastructure:
-					var pts = _aisle_route(m, gw, _vpn_anchor(m), _vpn_anchor(gw), height)
-					paths.append({"pts": pts, "color": VPN_FEED_COL})
-					bsig += "feed" + str(pts)
-			if not infrastructure:
+				if show_egress and _vpn_route_visible(gw.uid):
+					var tap = _pipe_aisle(gw) + Vector3.RIGHT * 1.1
+					tap.y = height
+					var pts = _aisle_route(m, gw, _vpn_anchor(m), tap, height, true)
+					pts.pop_back()  # the approach already ends at the tap at this height
+					var active: bool = p["ready"] and gw.pod["ready"]
+					paths.append({"pts": pts, "color": VPN_FEED_COL, "valve": false, "vpn_uid": gw.uid,
+						"vpn_join": "branch", "flow": active})
+					vpn_inputs[gw.uid] = [tap, active or vpn_inputs.get(gw.uid, [tap, false])[1]]
+					bsig += "feed" + str(pts) + str(active)
+			if not show_egress or not _vpn_route_visible(p["uid"]):
 				continue
-			var v: Dictionary = p.get("net", {}).get("vpn", {})
-			if m != null and not v.is_empty():
-				var b = _vpn_anchor(m)
+			if exits.has(p["uid"]):
+				var v: Dictionary = p["net"]["vpn"]
+				var tunnel: Array = exits[p["uid"]]
 				if str(v.get("sidecar", "")) != "":
 					var port = _machine_port(m, Vector2(-0.29, -0.65))
 					var inlet = to_local(m.to_global(m.pipe_port(VPN_ROOF_OFFSET) + Vector3(-VPN_UNIT_WIDTH * 0.5, 0.48, 0)))
 					paths.append({"pts": [port, Vector3(port.x, inlet.y, port.z), Vector3(port.x, inlet.y, inlet.z), inlet],
-						"color": VPN_FEED_COL, "valve": false})
-					b = to_local(m.to_global(m.pipe_port(VPN_ROOF_OFFSET) + Vector3(0, VPN_UNIT_H, 0)))
-					bsig += "side" + str(b)
-				paths.append({"pts": [b, Vector3(b.x, VPN_TUNNEL_H, b.z)], "color": VPN_TUNNEL_COL, "valve": false})
-				bsig += "tunnel" + str(b)
+						"color": VPN_FEED_COL, "valve": false, "vpn_uid": p["uid"], "flow": p["ready"]})
+					bsig += "side" + str(inlet) + str(p["ready"])
+				paths.append({"pts": tunnel, "color": VPN_TUNNEL_COL, "valve": false, "vpn_uid": p["uid"], "flow": p["ready"]})
+				bsig += "tunnel" + str(tunnel) + str(p["ready"])
+		for uid in vpn_inputs:
+			var top: Vector3 = vpn_inputs[uid][0]
+			var inlet = _machine_port(machines[uid], Vector2(-0.72, -0.35))
+			var low = maxf(7.2, inlet.y + 0.7)
+			var pts = [top, Vector3(top.x, low, top.z), Vector3(top.x, low, inlet.z),
+				Vector3(inlet.x, low, inlet.z), inlet]
+			paths.append({"pts": pts, "color": VPN_FEED_COL, "valve": false, "vpn_uid": uid,
+				"vpn_join": "riser", "flow": vpn_inputs[uid][1]})
+			bsig += "riser" + str(pts) + str(vpn_inputs[uid][1])
 		var shown = {}
 		for p in pods:
 			shown[p["uid"]] = true
@@ -1375,20 +1395,23 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 	if bsig != _belt_sig:
 		_belt_sig = bsig
 		_rebuild_belts(paths)
-	_update_vpn_signs(pods)
-
-# ---- VPN gateways (Gluetun): the two sides of the tunnel, as signs
+# ---- VPN gateways and the Internet Output station
 #
 # INSIDE, by the gateway: its addresses on your network and what goes through
-# it. OUTSIDE, at the top of the tunnel: the address the internet sees. The
-# signs show whether or not the pipelines are (B only hides the pipes).
+# it. OUTSIDE, beside its dedicated port: the pod and the public exit address.
 const VPN_UNIT_H = 1.0       # the sidecar's unit on the pod's roof
 const VPN_UNIT_WIDTH = 0.92
 const VPN_ROOF_OFFSET = Vector2(0.51, -0.37)
-const VPN_TUNNEL_H = 26.0
+const INTERNET_FIRST_PORT_Y = 8.2
+const INTERNET_PORT_PITCH = 1.18
 const VPN_FEED_COL = Color(0.62, 0.42, 0.95)
 const VPN_TUNNEL_COL = Color(0.95, 0.72, 0.22)
 var _vpn_signs = {}      # VPN uid -> {inside, outside, unit, sig}
+var _internet_output: Node3D
+var _internet_output_sig = []
+
+func _vpn_route_visible(uid: String) -> bool:
+	return pipe_filter != "Internet Output" or vpn_selection.is_empty() or vpn_selection.has(uid)
 
 # where a VPN line leaves a machine: the top, clear of the Service drops
 func _machine_port(m: Node3D, offset: Vector2) -> Vector3:
@@ -1397,8 +1420,10 @@ func _machine_port(m: Node3D, offset: Vector2) -> Vector3:
 func _pipe_aisle(m: Node3D) -> Vector3:
 	return to_local(m.global_position) + Vector3(-Platform.PITCH / 2.0, 0, Platform.PITCH / 2.0)
 
-func _aisle_route(from: Node3D, to: Node3D, a: Vector3, b: Vector3, height: float) -> Array:
+func _aisle_route(from: Node3D, to: Node3D, a: Vector3, b: Vector3, height: float, from_right: bool = false) -> Array:
 	var a_lane = _pipe_aisle(from)
+	if from_right:
+		a_lane.x += Platform.PITCH  # the left side of the roof holds the app pipes
 	var b_lane = _pipe_aisle(to)
 	var pts = [a, Vector3(a.x, height, a.z), Vector3(a_lane.x, height, a.z)]
 	if not is_equal_approx(a_lane.x, b_lane.x):
@@ -1448,18 +1473,25 @@ func _vpn_sign(col: Color, distance: float) -> Label3D:
 	add_child(l)
 	return l
 
-func _update_vpn_signs(pods: Array) -> void:
-	var seen = {}
-	for p in pods:
-		var m = machines.get(p["uid"])
-		if m == null or p.get("net", {}).get("vpn", {}).is_empty():
-			continue
-		seen[p["uid"]] = true
-		var s = _vpn_signs.get(p["uid"])
+func _update_vpn_signs(pods: Array, shown: bool) -> Dictionary:
+	var gateways = pods.filter(func(p): return machines.has(p["uid"]) and not p.get("net", {}).get("vpn", {}).is_empty())
+	gateways.sort_custom(func(a, b): return a["uid"] < b["uid"])
+	var edge = FRONT_Z
+	for platform in platforms.values():
+		edge = minf(edge, platform.position.z - platform.depth)
+	edge -= 10.0
+	var lanes = {}
+	var routes = {}
+	for p in gateways:
+		var uid = p["uid"]
+		var m = machines[uid]
+		var s = _vpn_signs.get(uid)
 		if s == null:
 			s = {"inside": _vpn_sign(VPN_FEED_COL.lightened(0.35), 22.0),
-				"outside": _vpn_sign(VPN_TUNNEL_COL.lightened(0.2), 34.0), "unit": null, "sig": ""}
-			_vpn_signs[p["uid"]] = s
+				"outside": _vpn_sign(VPN_TUNNEL_COL.lightened(0.35), 34.0), "unit": null, "sig": ""}
+			s["outside"].billboard = BaseMaterial3D.BILLBOARD_DISABLED
+			s["outside"].double_sided = false
+			_vpn_signs[uid] = s
 		var b = _vpn_anchor(m)
 		var side = str(p["net"]["vpn"].get("sidecar", "")) != ""
 		var unit = s["unit"]
@@ -1472,21 +1504,87 @@ func _update_vpn_signs(pods: Array) -> void:
 			b = to_local(unit.to_global(Vector3.UP * VPN_UNIT_H))
 		s["unit"] = unit if is_instance_valid(unit) else null
 		s["inside"].position = b + Vector3(0, 2.0, 0)
-		s["outside"].position = Vector3(b.x, VPN_TUNNEL_H + 2.6, b.z)
+		s["inside"].visible = _vpn_route_visible(uid)
+		# Leave the roof on the right and run along the aisle below the main trunks.
+		var x = to_local(m.global_position).x + Platform.PITCH * 0.5
+		var slot = int(lanes.get(x, 0))
+		lanes[x] = slot + 1
+		var y = INTERNET_FIRST_PORT_Y + slot * INTERNET_PORT_PITCH
+		var port = Vector3(x, y, edge)
+		routes[uid] = [b, Vector3(b.x, y, b.z), Vector3(x, y, b.z), port]
+		s["outside"].position = port + Vector3(0, 0.61, 0.33)
+		s["outside"].visible = shown and _vpn_route_visible(uid)
 		var inside = K.vpn_inside_text(p)
-		var outside = K.vpn_outside_text(p)
+		var vpn: Dictionary = p["net"]["vpn"]
+		var exit_ip = str(vpn.get("exit_ip", ""))
+		var outside = "%s/%s\n%s%s" % [p["ns"], p["name"], "Exit IP unknown" if exit_ip.is_empty() else exit_ip,
+			" · SIMULATED" if vpn.get("exit_note", "") == "SIMULATED" else ""]
 		if inside + outside != s["sig"]:
 			s["sig"] = inside + outside
 			s["inside"].text = inside
 			K.fit_label(s["inside"], 2.9, 0.85, 0.004)
 			s["outside"].text = outside
+			K.fit_label(s["outside"], 4.5, 0.70)
 	for uid in _vpn_signs.keys():
-		if not seen.has(uid):
+		if not routes.has(uid):
 			_vpn_signs[uid]["inside"].queue_free()
 			_vpn_signs[uid]["outside"].queue_free()
 			if is_instance_valid(_vpn_signs[uid]["unit"]):
 				_vpn_signs[uid]["unit"].queue_free()
 			_vpn_signs.erase(uid)
+	_update_internet_output(edge, lanes, shown)
+	return routes
+
+func _update_internet_output(edge: float, lanes: Dictionary, shown: bool) -> void:
+	var sig = [] if lanes.is_empty() else [edge, lanes]
+	if sig != _internet_output_sig:
+		_internet_output_sig = sig
+		if is_instance_valid(_internet_output):
+			_internet_output.queue_free()
+			_internet_output = null
+		if not lanes.is_empty():
+			var xs = lanes.keys()
+			xs.sort()
+			var width: float = xs.back() - xs.front()
+			var center: float = (xs.front() + xs.back()) * 0.5
+			var top = INTERNET_FIRST_PORT_Y + (lanes.values().max() - 1) * INTERNET_PORT_PITCH
+			var rack = Node3D.new()
+			rack.name = "InternetOutput"
+			rack.position = Vector3(center, 0, edge)
+			add_child(rack)
+			_internet_output = rack
+			_box(Vector3(width + 4.6, 0.30, 3.8), Tex.shared("foundation"), Vector3(0, 0.15, -1.15), rack)
+			_box(Vector3(width + 4.6, 2.8, 0.35), Tex.shared("dark"), Vector3(0, 1.4, -1.85), rack)
+			var steel = Tex.shared("steel")
+			var gold = Tex.body(VPN_TUNNEL_COL)
+			for x in xs:
+				var local_x: float = x - center
+				var h: float = INTERNET_FIRST_PORT_Y + (lanes[x] - 1) * INTERNET_PORT_PITCH + 0.92
+				_box(Vector3(1.3, h, 2.5), Tex.shared("dark"), Vector3(local_x, h * 0.5, -1.25), rack)
+				for slot in lanes[x]:
+					var y = INTERNET_FIRST_PORT_Y + slot * INTERNET_PORT_PITCH
+					_cyl(0.32, 0.32, steel, Vector3(local_x, y, 0.04), rack, Vector3(PI * 0.5, 0, 0))
+					_cyl(0.21, 0.09, gold, Vector3(local_x, y, 0.19), rack, Vector3(PI * 0.5, 0, 0))
+			# One shared output leaves the ports' collector on the public side of the rack.
+			if width > 0.01:
+				_cyl(0.37, width, gold, Vector3(0, 1.25, -2.5), rack, Vector3(0, 0, PI * 0.5))
+			_cyl(0.37, 5.6, gold, Vector3(0, 1.25, -5.3), rack, Vector3(PI * 0.5, 0, 0)).name = "PublicInternetPipe"
+			_box(Vector3(3.6, top + 0.6, 2.2), Tex.shared("dark"), Vector3(0, (top + 0.6) * 0.5, -8.6), rack)
+			_box(Vector3(4.0, 0.18, 2.6), gold, Vector3(0, top + 0.65, -8.6), rack)
+			for face in [["FactoryInputs", "FACTORY SIDE\nVPN INPUTS", 0.55, 0.0],
+					["PublicOutput", "PUBLIC SIDE\nWWW OUTPUT", -9.78, PI]]:
+				var title = _vpn_sign(VPN_TUNNEL_COL.lightened(0.4), 180.0)
+				title.reparent(rack, false)
+				title.name = face[0]
+				title.text = face[1]
+				title.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+				title.double_sided = false
+				title.rotation.y = face[3]
+				title.font_size = 64
+				title.pixel_size = 0.021
+				title.position = Vector3(0, top + 1.8, face[2])
+	if is_instance_valid(_internet_output):
+		_internet_output.visible = shown
 
 func _rebuild_belts(paths: Array) -> void:
 	_paths = paths
@@ -1509,7 +1607,7 @@ func _rebuild_belts(paths: Array) -> void:
 				key = "%s:%s:%s" % [path["service"], a, (b - a).normalized()]
 			if not segs.has(key) or a.distance_squared_to(b) > a.distance_squared_to(segs[key][1]):
 				segs[key] = [a, b, path["color"], is_drop]
-			if i < pts.size() - 1:
+			if i < pts.size() - 1 or path.get("vpn_join") == "branch":
 				joints[str(b)] = [b, path["color"]]                      # a corner
 		path["cum"] = cum
 		total += cum[cum.size() - 1]

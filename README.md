@@ -41,6 +41,8 @@ KubeFactory, from first launch to administration and development. Start with
 the [overview](https://github.com/DasCondor/kubefactory/wiki/Overview),
 [getting started](https://github.com/DasCondor/kubefactory/wiki/Getting-Started),
 or [documentation index](https://github.com/DasCondor/kubefactory/wiki/Documentation-Index).
+The [visual demo guide](docs/wiki/README.md) has screenshots and walkthroughs of
+the media stack, VPN routes, port readiness, shared disks, and phone controls.
 See the [changelog](https://github.com/DasCondor/kubefactory/wiki/Changelog) for
 release history and [Contributing](CONTRIBUTING.md) to help.
 
