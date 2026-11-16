@@ -248,6 +248,9 @@ func _ready() -> void:
 	foreman.changed.connect(func():
 		world.set_foreman(foreman.identity())
 		hud.on_foreman_changed())
+	cluster.source_changed.connect(func(label, _note):
+		if label != "simulation" and foreman.providers.is_empty():
+			foreman.refresh_providers())
 	cluster.data_ready.connect(func(key, r):
 		if key == "krew:scan":
 			krew.set_scan(r)

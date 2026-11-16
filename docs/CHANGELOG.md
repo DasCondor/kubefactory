@@ -37,6 +37,11 @@
   Komodo keeps no events for a container, so that choice says that too.
   Tests: `agent/komodo_test.go`, `tests/live/komodo_test.gd`.
 
+### Fixed
+
+- Opening a demo leaves the native companion stopped until the operator
+  requests a local feature such as connection discovery or Foreman.
+
 ## 2.0.0-beta.2 (2026-11-15)
 
 A beta: not a stable release. Everything since beta.1 is below: phone menus,

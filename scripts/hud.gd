@@ -4553,6 +4553,8 @@ var _fm_scroll: ScrollContainer = null
 func open_foreman() -> void:
 	if foreman == null:
 		return
+	if _modal_kind != "foreman" and foreman.available() and foreman.providers.is_empty():
+		foreman.refresh_providers()
 	var sc_keep = 0.0
 	if _modal_kind == "foreman" and is_instance_valid(_fm_scroll):
 		sc_keep = _fm_scroll.scroll_vertical
