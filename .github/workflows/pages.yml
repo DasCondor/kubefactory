@@ -47,6 +47,7 @@ jobs:
           mkdir -p dist/web
           ./Godot_v4.3-stable_linux.x86_64 --headless --path . --export-release "Web" dist/web/index.html
           test -s dist/web/index.wasm && test -s dist/web/index.pck
+          grep -Fq 'id="launch-menu"' dist/web/index.html
 
       # The asset reviewer: one self-contained page (no external scripts) that loads the
       # model library's GLBs from beside itself. Served at <site>/model-viewer/.

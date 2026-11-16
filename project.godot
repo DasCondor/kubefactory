@@ -4,6 +4,11 @@ config_version=5
 [application]
 
 config/name="KubeFactory"
+config/icon="res://branding/kubefactory.png"
+boot_splash/bg_color=Color(0.06, 0.07, 0.08, 1)
+boot_splash/image="res://branding/kubefactory.png"
+boot_splash/fullsize=false
+boot_splash/show_image.web=false
 run/main_scene="res://scripts/main.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 

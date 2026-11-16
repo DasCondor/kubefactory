@@ -3707,6 +3707,19 @@ func _save_setting(key: String, value) -> void:
 	settings[key] = value
 	K.save_settings(settings)
 
+func open_startup() -> void:
+	var body = _open_modal("startup", null, "KUBEFACTORY  %s" % version, Vector2(490, 330))
+	if cluster.edition == "demo":
+		body.add_child(_btn("Choose a demo", open_demos, "primary"))
+	else:
+		body.add_child(_btn("Enter factory", close_modal, "primary"))
+		body.add_child(_btn("Demo worlds", open_demos))
+	body.add_child(_btn("Settings", open_settings))
+	body.add_child(_btn("How to play", open_welcome))
+	body.add_child(_btn("Quit to desktop", func(): get_tree().quit()))
+	for button in body.get_children():
+		button.custom_minimum_size.y = 40
+
 func open_welcome() -> void:
 	var body = _open_modal("welcome", null, "WELCOME TO KUBEFACTORY", Vector2(900, 560))
 	var intro = _lbl("Your cluster is a factory. Walk it, spot what is broken, and fix it with the tool belt.", 16)
