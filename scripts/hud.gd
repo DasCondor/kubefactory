@@ -73,6 +73,8 @@ func _minimap_visibility() -> void:
 		minimap.enabled = bool(settings.get("minimap", true))
 		minimap.visible = minimap.enabled and not (touch != null and touch.active)
 var touch_u = 0.0                 # their unit size while they are on; 0 = desktop
+var _status: PanelContainer
+var _demo_cards: GridContainer
 
 var _notes: VBoxContainer
 var _mono: SystemFont
@@ -219,11 +221,12 @@ func _ready() -> void:
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_root)
 
-	var status = PanelContainer.new()
+	_status = PanelContainer.new()
 	var ssb = _sb(BG, ORANGE, 0, 12)
 	ssb.border_width_left = 4
-	status.add_theme_stylebox_override("panel", ssb)
-	status.position = Vector2(16, 16)
+	_status.add_theme_stylebox_override("panel", ssb)
+	_status.position = Vector2(16, 16)
+	_status.resized.connect(_position_touch_notes)
 	var sv = _col(2)
 	sv.add_child(_lbl("KUBEFACTORY", 20, ORANGE))
 	_src = _lbl("connecting...", 14, TXT)
@@ -235,8 +238,8 @@ func _ready() -> void:
 	sv.add_child(_stats)
 	sv.add_child(_who)
 	sv.add_child(_err)
-	status.add_child(sv)
-	_root.add_child(status)
+	_status.add_child(sv)
+	_root.add_child(_status)
 
 	_prob_panel = PanelContainer.new()
 	var psb = _sb(BG, RED, 0, 12)
@@ -409,10 +412,29 @@ func set_touch(on: bool, unit: float) -> void:
 		_help.visible = not on
 	for s in _slots:
 		s.get_parent().visible = not on
+	_bp.visible = not on
+	_who.visible = not on
+	_prob_panel.visible = not on and _prob_box.get_child_count() > 1
+	var ui_scale = unit / 42.0 if on else 1.0
+	_status.scale = Vector2.ONE * ui_scale
+	_status.position = Vector2(touch._margin[0], touch._margin[1]) if on else Vector2(16, 16)
+	for label in [_src, _stats, _err]:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if on else TextServer.AUTOWRAP_OFF
+	_status.custom_minimum_size.x = minf(260.0, (touch._vp.x - touch._margin[0] - touch._margin[2] - unit * 1.8) / ui_scale) if on else 0.0
+	_status.reset_size()
+	_notes.scale = Vector2.ONE * ui_scale
+	_notes.offset_left = -touch._margin[2] - 244.0 * ui_scale if on else -436.0
+	_notes.offset_right = _notes.offset_left + (244.0 if on else 420.0)
+	_position_touch_notes()
 	if _target != null:
-		_target.add_theme_font_size_override("font_size", int(clampf(unit * 0.26, 17, 60)) if on else 17)
+		_target.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if on else TextServer.AUTOWRAP_OFF
+		_target.add_theme_font_size_override("font_size", maxi(1, roundi(unit * 0.31)) if on else 17)
 		_target.offset_top = unit * 0.6 if on else 200
 		_target.offset_bottom = unit * 1.9 if on else 330
+
+func _position_touch_notes() -> void:
+	if _notes != null:
+		_notes.offset_top = _status.position.y + _status.size.y * _status.scale.y + touch_u * 0.15 if touch_u > 0.0 else 16.0
 
 # ----- tables: click a column to sort by it, type to keep the rows that contain something
 #
@@ -501,11 +523,11 @@ func notify(msg: String, kind: String = "info") -> void:
 	pc.add_theme_stylebox_override("panel", s)
 	var l = _lbl(msg, 13)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size.x = 390
+	l.custom_minimum_size.x = 218 if touch_u > 0.0 else 390
 	pc.add_child(l)
 	_ignore_mouse(pc)
 	_notes.add_child(pc)
-	while _notes.get_child_count() > 8:
+	while _notes.get_child_count() > (2 if touch_u > 0.0 else 8):
 		var old = _notes.get_child(0)
 		_notes.remove_child(old)
 		old.queue_free()
@@ -518,6 +540,8 @@ func on_state(st: Dictionary) -> void:
 	var src = str(st["source"]).to_upper()
 	if str(st.get("provider", "")) != "":
 		src = str(st["provider"]).to_upper() + ("" if st["source"] != "simulation" else "  (SIMULATED)")
+	if touch_u > 0.0 and st["source"] == "simulation":
+		src = "SIMULATED"
 	_src.text = "%s  ·  %s%s" % [src, st["context"], "    [READ-ONLY]" if cluster.read_only else ""]
 	var ready = 0
 	for n in st["nodes"]:
@@ -528,6 +552,8 @@ func on_state(st: Dictionary) -> void:
 		c[p["health"]] += 1
 	_stats.text = "NODES %d/%d   PODS %d running · %d pending · %d failing   WORKLOADS %d" % [
 		ready, st["nodes"].size(), c["ok"], c["warn"], c["bad"], st["workloads"].size()]
+	if touch_u > 0.0:
+		_stats.text = "%d/%d nodes · %d pods running\n%d pending · %d failing" % [ready, st["nodes"].size(), c["ok"], c["warn"], c["bad"]]
 	_err.text = str(st["error"])
 	_err.visible = st["error"] != ""
 	refresh_who()
@@ -550,7 +576,7 @@ func on_state(st: Dictionary) -> void:
 	if sig != _prob_sig:
 		_prob_sig = sig
 		_clear(_prob_box)
-		_prob_panel.visible = lines.size() > 0
+		_prob_panel.visible = touch_u <= 0.0 and lines.size() > 0
 		_prob_box.add_child(_lbl("PROBLEMS  (%d)        [G] jump to next" % lines.size(), 14, RED))
 		for l in lines.slice(0, 7):
 			var r = _row(10)
@@ -567,35 +593,34 @@ func on_state(st: Dictionary) -> void:
 func modal_open() -> bool:
 	return _modal != null
 
-# On a touch screen a dialog fills the screen's width and scrolls if it is
-# taller, rather than shrinking until it fits: desktop dialogs shrunk onto a
-# phone had 4-6 px text. A phone held upright gets the dialog sideways, along
-# its long edge, so the text is as large as in landscape; turning the phone
-# (or not, with rotation lock on) reads it.
-#
-# The enlargement is the window's interface scale (content_scale_factor), not
-# a scaled picture of the dialog, so text is drawn sharp at its new size. It
-# goes back to the player's own interface size when the dialog closes.
+# Keep dialogs upright and legible. Wide tables can scroll on a narrow display.
 var _fit_cb = Callable()
 
 func _fit_modal(modal: Control, scroll: ScrollContainer, center: Control, panel: Control) -> void:
 	if modal != _modal or not is_instance_valid(panel) or not is_instance_valid(scroll):
 		return                                   # a dialog that has closed
 	var root = get_tree().root
-	var unscaled = get_viewport().get_visible_rect().size * root.content_scale_factor
-	var sideways = unscaled.y > unscaled.x * 1.6
-	var long_edge = unscaled.y if sideways else unscaled.x
-	var f = clampf(long_edge * 0.98 / maxf(panel.size.x, 1.0), 0.5, 4.0)
+	var vp = get_viewport().get_visible_rect().size
+	var display: Vector2 = touch.display_size()
+	if display.x <= 1.0 or vp.x <= 1.0:
+		return
+	if _modal_kind == "demos" and is_instance_valid(_demo_cards):
+		_demo_cards.columns = 2 if display.x >= 660.0 else 1
+		panel.custom_minimum_size.x = 675 if _demo_cards.columns == 2 else 348
+	var css = display.x / vp.x
+	var panel_width = panel.get_combined_minimum_size().x
+	var scrollbar = scroll.get_v_scroll_bar().get_combined_minimum_size().x
+	var wanted_css = clampf((display.x - 16.0) / maxf(panel_width + scrollbar, 1.0), 0.9, 1.12)
+	var f = root.content_scale_factor * wanted_css / css
 	if absf(root.content_scale_factor - f) > 0.01:
 		root.content_scale_factor = f            # size_changed brings us back here
 		return
-	var vp = get_viewport().get_visible_rect().size
-	var frame = Vector2(vp.y, vp.x) if sideways else vp
+	var inset = 8.0 / css
+	var frame = vp - Vector2.ONE * inset * 2.0
 	scroll.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	scroll.rotation = PI / 2.0 if sideways else 0.0
-	scroll.position = Vector2(vp.x, 0) if sideways else Vector2.ZERO
+	scroll.position = Vector2.ONE * inset
 	scroll.size = frame
-	center.custom_minimum_size = Vector2(frame.x, maxf(frame.y, panel.size.y + 8.0))
+	center.custom_minimum_size = Vector2(frame.x - scrollbar, maxf(frame.y, panel.size.y + 8.0))
 
 func _player_ui_scale() -> void:
 	get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
@@ -641,7 +666,7 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	if fit:
 		# a scrolling frame, for a dialog taller than the screen
 		scroll = ScrollContainer.new()
-		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		_modal.add_child(scroll)
 		scroll.add_child(center)
@@ -671,12 +696,14 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	var vb = _col(10)
 	panel.add_child(vb)
 	var head = _row()
-	head.add_child(_lbl(title, 22, ORANGE))
-	head.add_child(_spacer())
+	head.add_child(_wrapped(title, 22, ORANGE) if fit else _lbl(title, 22, ORANGE))
+	if not fit:
+		head.add_child(_spacer())
 	var xb = _btn("  X  ", close_modal)
 	if fit:
 		xb.custom_minimum_size = Vector2(64, 52)       # enlarged with the dialog
 		xb.add_theme_font_size_override("font_size", 22)
+		xb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	elif touch_u > 0.0:
 		xb.custom_minimum_size = Vector2(touch_u * 1.1, touch_u * 0.9)
 		xb.add_theme_font_size_override("font_size", int(touch_u * 0.3))
@@ -885,9 +912,9 @@ func _show_vpn_routes(selected: Dictionary) -> void:
 	close_modal()
 
 func open_vpn() -> void:
-	var body = _open_modal("vpn", null, "VPN  //  TUNNELS", Vector2(1100, 760) if touch_u <= 0.0 else Vector2(760, 900))
 	var narrow = touch_u > 0.0
-	var tw = 700 if narrow else 1040
+	var body = _open_modal("vpn", null, "VPN  //  TUNNELS", Vector2(356, 0) if narrow else Vector2(1100, 760))
+	var tw = 314 if narrow else 1040
 	var pods: Array = cluster.state.get("pods", [])
 	var vpns = pods.filter(func(p): return not p.get("net", {}).get("vpn", {}).is_empty())
 	vpns.sort_custom(func(a, b):
@@ -900,15 +927,18 @@ func open_vpn() -> void:
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.custom_minimum_size.x = tw
 	body.add_child(intro)
-	var sc = ScrollContainer.new()
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var list = _col(8)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(list)
-	body.add_child(sc)
+	if narrow:
+		body.add_child(list)
+	else:
+		var sc = ScrollContainer.new()
+		sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		sc.add_child(list)
+		body.add_child(sc)
 	var selected: Dictionary = world.vpn_selection.duplicate()
-	var actions = _row(8)
+	var actions: Container = HFlowContainer.new() if narrow else _row(8)
 	var trace: Button
 	if not vpns.is_empty():
 		trace = _btn("Show selected VPN routes", func(): _show_vpn_routes(selected), "primary", not selected.is_empty())
@@ -935,7 +965,7 @@ func open_vpn() -> void:
 		var kind = {"gateway": "gateway: other containers use its network", "built-in": "VPN built into the app's own image"}.get(str(v.get("role", "")), "")
 		if str(v.get("sidecar", "")) != "":
 			kind = "sidecar: carries its whole pod"
-		head.add_child(_lbl("%s   %s" % [p["name"], str(v.get("product", ""))], 15, Color(0.95, 0.75, 0.3)))
+		head.add_child(_wrapped("%s   %s" % [p["name"], str(v.get("product", ""))], 15, Color(0.95, 0.75, 0.3)))
 		head.add_child(_lbl(kind, 12, DIM))
 		head.add_child(_spacer())
 		if v.get("can_check", false):
@@ -2466,13 +2496,15 @@ func _open_connect_paste() -> void:
 
 func open_demos() -> void:
 	offer_demos = false
-	var body = _open_modal("demos", null, "CHOOSE A DEMO", Vector2(980, 600))
-	var intro = _lbl("Four simulated worlds. Nothing here is real, so break whatever you like. Switch any time from the pause menu (Esc).", 14, DIM)
+	var mobile = touch_u > 0.0
+	var body = _open_modal("demos", null, "CHOOSE A DEMO", Vector2(348, 0) if mobile else Vector2(980, 600))
+	var intro = _lbl("Try a simulated cluster. Switch worlds anytime from the game menu." if mobile else "Four simulated worlds. Nothing here is real, so break whatever you like. Switch any time from the pause menu (Esc).", 14, DIM)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	intro.custom_minimum_size.x = 930
+	intro.custom_minimum_size.x = 0 if mobile else 930
 	body.add_child(intro)
 	var grid = GridContainer.new()
-	grid.columns = 2
+	_demo_cards = grid
+	grid.columns = 1 if mobile else 2
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 12)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2481,28 +2513,33 @@ func open_demos() -> void:
 		var active = cluster.backend != null and cluster.backend.label == "simulation" and cluster.backend.context == d["flavor"]
 		var col = K.provider_color(f["provider"]).lightened(0.25)
 		var pc = PanelContainer.new()
-		pc.custom_minimum_size = Vector2(458, 210)
+		pc.custom_minimum_size = Vector2(310, 154) if mobile else Vector2(458, 210)
 		var sb = _sb(BG2, col, 0, 14)
 		sb.border_width_top = 4
 		pc.add_theme_stylebox_override("panel", sb)
 		var v = _col(6)
 		pc.add_child(v)
-		v.add_child(_lbl(str(d["name"]).to_upper(), 18, col))
+		var title = _wrapped(str(d["name"]).to_upper(), 18, col)
+		var action = _touch_size(_btn("Resume" if mobile else "Keep playing this one", close_modal, "primary")) if active else _touch_size(_btn("Play", func():
+			close_modal()
+			target_requested.emit({"source": "simulation", "context": d["flavor"], "provider": f["provider"]}), "primary"))
+		var r = _row()
+		if mobile:
+			r.add_child(title)
+			r.add_child(action)
+			v.add_child(r)
+		else:
+			v.add_child(title)
 		v.add_child(_lbl("%s  ·  %d nodes" % [f["provider"], f["nodes"].size() + (1 if f["cp"] != "" else 0)], 12, DIM))
 		var desc = _lbl(d["desc"], 14)
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc.custom_minimum_size.x = 420
+		desc.custom_minimum_size.x = 0 if mobile else 420
 		desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		v.add_child(desc)
-		var r = _row()
-		r.add_child(_spacer())
-		if active:
-			r.add_child(_btn("Keep playing this one", close_modal, "primary"))
-		else:
-			r.add_child(_btn("Play", func():
-				close_modal()
-				target_requested.emit({"source": "simulation", "context": d["flavor"], "provider": f["provider"]}), "primary"))
-		v.add_child(r)
+		if not mobile:
+			r.add_child(_spacer())
+			r.add_child(action)
+			v.add_child(r)
 		grid.add_child(pc)
 	body.add_child(grid)
 
@@ -3841,24 +3878,28 @@ func open_pause() -> void:
 	var height = clampf(viewport_size.y * 0.85, 270, 720)
 	var width = clampf(viewport_size.x * 0.9, 300, 530)
 	if touch_u > 0.0:
-		width = 530
-		height = clampf(width * minf(viewport_size.x, viewport_size.y) / maxf(viewport_size.x, viewport_size.y) * 0.98, 170, 550)
-	var frame = _open_modal("pause", null, "KUBEFACTORY  %s" % version, Vector2(width, height))
+		width = 356
+		height = 0
+	var frame = _open_modal("pause", null, "KUBEFACTORY" if touch_u > 0.0 else "KUBEFACTORY  %s" % version, Vector2(width, height))
 	var header := frame.get_parent().get_child(0)
 	var close_button: Button = header.get_child(header.get_child_count() - 1)
 	if touch_u > 0.0:
 		close_button.custom_minimum_size = Vector2(42, 34)
 		close_button.add_theme_font_size_override("font_size", 16)
-	var resume = _btn("Resume", close_modal, "primary")
-	resume.custom_minimum_size.y = 34
+	var resume = _touch_size(_btn("Resume", close_modal, "primary"))
+	if touch_u <= 0.0:
+		resume.custom_minimum_size.y = 34
 	frame.add_child(resume)
-	var menu = ScrollContainer.new()
-	menu.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	menu.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	frame.add_child(menu)
 	var body = _col(8)
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	menu.add_child(body)
+	if touch_u > 0.0:
+		frame.add_child(body)
+	else:
+		var menu = ScrollContainer.new()
+		menu.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		menu.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		frame.add_child(menu)
+		menu.add_child(body)
 	body.add_child(_wrapped("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Settings", open_settings, "primary"))
 	body.add_child(_btn("Demo worlds", open_demos))
@@ -3942,7 +3983,7 @@ func open_pause() -> void:
 	if touch_u > 0.0:
 		for child in body.get_children():
 			if child is Button:
-				child.custom_minimum_size.y = 30
+				child.custom_minimum_size.y = 48
 
 # ----- LiveView providers: Grafana and Tautulli (scripts/providers.gd, agent/providers.go)
 #
@@ -4337,9 +4378,7 @@ var screens: Node = null          # set by main
 # A button big enough for a finger, when the touch controls are on.
 func _touch_size(b: Button) -> Button:
 	if touch_u > 0.0:
-		b.custom_minimum_size = Vector2(touch_u * 1.7, touch_u * 0.9)
-		b.add_theme_font_size_override("font_size", int(touch_u * 0.27))
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size.y = 49
 	return b
 
 func open_demo_screen(uid: String) -> void:
@@ -4393,7 +4432,9 @@ func open_screen(uid: String) -> void:
 		open_liveview()
 		return
 	var mode: String = screens.mode_of(uid)
-	var body = _open_modal("screen", uid, "SCREEN  //  " + str(p["name"]), Vector2(1180, 860) if touch_u <= 0.0 else Vector2(760, 590))
+	var mobile = touch_u > 0.0
+	var screen_name = p.get("wname", "") if mobile and p.get("wname", "") != "" else p["name"]
+	var body = _open_modal("screen", uid, "SCREEN  //  " + str(screen_name), Vector2(358, 0) if mobile else Vector2(1180, 860))
 	var head = _row(10)
 	var ic = TextureRect.new()
 	ic.texture = Icons.texture(Icons.kind_of(p))
@@ -4401,21 +4442,21 @@ func open_screen(uid: String) -> void:
 	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	head.add_child(ic)
-	head.add_child(_lbl("%s   ·   %s   ·   %s" % [Icons.label_of(Icons.kind_of(p)), p["ns"], p["status"]], 13, DIM))
-	head.add_child(_spacer())
-	var tabs = head
-	if touch_u > 0.0:
-		# on a phone the tabs get a row of their own, each a full finger wide
+	head.add_child(_wrapped("%s   ·   %s   ·   %s" % [Icons.label_of(Icons.kind_of(p)), p["ns"], p["status"]], 13, DIM))
+	if not mobile:
+		head.add_child(_spacer())
+	var tabs: Container = head
+	if mobile:
 		body.add_child(head)
-		tabs = _row(int(touch_u * 0.2))
+		tabs = HFlowContainer.new()
 	for m in screens.MODES:
 		tabs.add_child(_touch_size(_btn(str(screens.TITLES[m]), func():
 			screens.set_mode(uid, m)
 			open_screen(uid), "primary" if m == mode else "normal")))
 	body.add_child(tabs)
 	if mode != "dashboard":
-		var bar = _row(8)
-		bar.add_child(_lbl({"metrics": "This pod's own state, as the cluster reports it.", "logs": "The end of its log; it refreshes while this view is up.", "storage": "What is mounted into it."}[mode], 13, DIM))
+		var bar: Container = _col(8) if mobile else _row(8)
+		bar.add_child(_wrapped({"metrics": "This pod's own state, as the cluster reports it.", "logs": "The end of its log; it refreshes while this view is up.", "storage": "What is mounted into it."}[mode], 13, DIM))
 		bar.add_child(_spacer())
 		if mode == "logs":
 			bar.add_child(_btn("Open the full log", func(): open_logs(uid)))
@@ -4425,7 +4466,7 @@ func open_screen(uid: String) -> void:
 			bar.add_child(_btn("Inspect", func(): open_pod(uid)))
 		body.add_child(bar)
 		var panel: Control = screens.make_panel(uid)
-		panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(700, 400)
+		panel.custom_minimum_size = Vector2(312, 245) if mobile else Vector2(1130, 700)
 		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		body.add_child(panel)
 		return
@@ -4441,9 +4482,9 @@ func open_screen(uid: String) -> void:
 			var views: Array = demo_screens.VIEWS[kind]
 			var current = demo_screens.view_of(uid)
 			for i in views.size():
-				bar.add_child(_btn(str(views[i]), func():
+				bar.add_child(_touch_size(_btn(str(views[i]), func():
 					demo_screens.set_view(uid, i)
-					open_screen(uid), "primary" if current == i else "normal"))
+					open_screen(uid), "primary" if current == i else "normal")))
 			bar.add_child(_btn("All LiveView", func(): open_liveview()))
 			bar.add_child(_btn("Network details", func(): open_network(uid)))
 			if views[current] == "Ports":
@@ -4455,8 +4496,8 @@ func open_screen(uid: String) -> void:
 			elif p.get("wname") == "image-updater":
 				bar.add_child(_btn("Review simulated image updates", _open_image_updates))
 			body.add_child(bar)
-			var panel: Control = demo_screens.make_panel(uid)
-			panel.custom_minimum_size = Vector2(1130, 700) if touch_u <= 0.0 else Vector2(700, 400)
+			var panel: Control = demo_screens.make_panel(uid, mobile)
+			panel.custom_minimum_size = Vector2(312, 245) if mobile else Vector2(1130, 700)
 			panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			body.add_child(panel)
 		"live":
@@ -4473,7 +4514,7 @@ func open_screen(uid: String) -> void:
 		_:
 			var l = _lbl("No application page is on this screen.\n\nLiveView puts a running application's own web page here, and a Grafana or Tautulli provider can pin its dashboard or activity. Until then the screen shows the pod's state.\n\nMetrics, Logs and Storage above work for every machine.", 15, DIM)
 			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			l.custom_minimum_size.x = 700 if touch_u > 0.0 else 1100
+			l.custom_minimum_size.x = 0 if mobile else 1100
 			body.add_child(l)
 			body.add_child(_btn("Open LiveView", func(): open_liveview(), "primary"))
 

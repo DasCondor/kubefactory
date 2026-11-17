@@ -112,10 +112,11 @@ func set_view(uid: String, v: int) -> void:
 		screen["vp"].render_target_update_mode = SubViewport.UPDATE_ONCE
 
 # A second, larger copy of a machine's panel for the window (same data, same view).
-func make_panel(uid: String) -> Control:
+func make_panel(uid: String, compact: bool = false) -> Control:
 	if not _screens.has(uid):
 		return null
 	var p = ScreenPanel.new()
+	p.compact = compact
 	p.kind = _screens[uid]["kind"]
 	p.source = _screens[uid]["panel"]
 	return p
@@ -241,6 +242,7 @@ func _process(delta: float) -> void:
 # Laid out on a 640 x 448 sheet in large print (it is read from across a
 # walkway) and scaled to whatever size the control has.
 class ScreenPanel extends Control:
+	var compact = false
 	var kind = ""
 	var view = 0
 	var figures = {}
@@ -281,11 +283,11 @@ class ScreenPanel extends Control:
 			queue_redraw()
 
 	func _text(pos: Vector2, s: String, px: int, col: Color, width: float = -1.0, align: int = HORIZONTAL_ALIGNMENT_LEFT) -> void:
-		draw_string(ThemeDB.fallback_font, pos, s, align, width, px, col)
+		draw_string(ThemeDB.fallback_font, pos, s, align, width, maxi(px, 21) if compact else px, col)
 
 	func _card(r: Rect2, title: String) -> void:
 		draw_rect(r, CARD)
-		_text(r.position + Vector2(12, 24), title, 17, DIM)
+		_text(r.position + Vector2(12, 24), title, 17, DIM, r.size.x - 24.0)
 
 	func _level(v: float) -> Color:
 		return GREEN if v < 0.7 else (AMBER if v < 0.9 else RED)
@@ -353,7 +355,12 @@ class ScreenPanel extends Control:
 		_text(Vector2(408, 155), "%d restarts" % pod.get("restarts", 0), 18, DIM, 196, HORIZONTAL_ALIGNMENT_RIGHT)
 		_card(Rect2(12, 192, 280, 88), "SERVICE PORTS")
 		var issue_count = ports.filter(func(row): return row["health"] != "ok").size()
-		_text(Vector2(24, 254), "%d configured · %d need attention" % [ports.size(), issue_count], 16, AMBER if issue_count > 0 else TXT, 254)
+		var port_color = AMBER if issue_count > 0 else TXT
+		if compact:
+			_text(Vector2(24, 246), "%d configured" % ports.size(), 16, port_color, 254)
+			_text(Vector2(24, 271), "%d need attention" % issue_count, 16, port_color, 254)
+		else:
+			_text(Vector2(24, 254), "%d configured · %d need attention" % [ports.size(), issue_count], 16, port_color, 254)
 		_card(Rect2(304, 192, 324, 88), "VPN ROUTE")
 		_text(Vector2(316, 254), route, 18, TXT, 300)
 		_card(Rect2(12, 292, 616, 144), "CONTAINERS")

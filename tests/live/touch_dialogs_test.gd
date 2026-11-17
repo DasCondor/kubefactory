@@ -1,8 +1,5 @@
 extends SceneTree
-# Dialogs on a phone: with touch controls on, a dialog is enlarged (the window's
-# interface scale) until it fills the screen's long edge, turned sideways when
-# the phone is upright, scrolls if it is taller than the screen, and the
-# player's own interface size comes back when it closes.
+# Dialogs on a phone stay upright, use readable text, and scroll when needed.
 #
 #   Godot --path . --resolution 390x844 -s tests/live/touch_dialogs_test.gd -- --demo --touch
 #
@@ -34,29 +31,38 @@ func _run() -> void:
 	_check("touch controls are on", game.touch != null and game.touch.active)
 	var own = root.content_scale_factor
 	var win = Vector2(root.size)
-	var upright = win.y > win.x * 1.6
-	print("window ", win, "  (upright)" if upright else "  (sideways)", "  interface scale ", own)
+	var upright = win.y > win.x
+	print("window ", win, "  (portrait)" if upright else "  (landscape)", "  interface scale ", own)
+	var touch = game.touch
+	_check("Menu has a phone-sized hit target", touch._buttons["menu"]["rect"].size.y * touch._css >= 37.0)
+	_check("Touch controls fit the viewport", touch._buttons.values().all(func(b): return Rect2(Vector2.ZERO, touch._vp).encloses(b["rect"])))
+	_check("The held scanner is reframed in portrait", game.player.view._pivot.scale.x < 1.0 if upright else is_equal_approx(game.player.view._pivot.scale.x, 1.0))
+	var all_tools: Vector2 = touch._buttons["bar3"]["rect"].get_center()
+	touch._begin(0, all_tools)
+	touch._end(0)
+	for i in 6:
+		var box: Rect2 = touch._buttons.get("tool%d" % i, {}).get("rect", Rect2())
+		_check("Tool %d is visible and clear of Aim" % (i + 1), box.has_area() and Rect2(Vector2.ZERO, touch._vp).encloses(box) and not box.intersects(touch._buttons["aim"]["rect"]))
+	touch._begin(0, all_tools)
+	touch._end(0)
 	var shots = OS.get_environment("KF_SHOTS")
 	for d in [["welcome", hud.open_welcome], ["demos", hud.open_demos], ["foreman", hud.open_foreman], ["krew", hud.open_krew], ["settings", hud.open_settings], ["pause", hud.open_pause], ["vpn", hud.open_vpn]]:
 		d[1].call()
 		for i in 8:
 			await process_frame
 		var scroll = hud._modal.get_child(1)
-		var panel = scroll.get_child(0).get_child(0)
 		var vp = root.get_visible_rect().size
-		var long_edge = vp.y if upright else vp.x
-		var fill = panel.size.x / long_edge
-		# a small dialog stops at the 4x limit instead
-		_check("%s: fills the long edge" % d[0], (fill > 0.9 or root.content_scale_factor >= 3.99) and fill <= 1.0,"%.2f of the edge, interface scale %.2f" % [fill, root.content_scale_factor])
-		_check("%s: %s" % [d[0], "turned sideways" if upright else "upright"], is_equal_approx(scroll.rotation, PI / 2.0) == upright, scroll.rotation)
-		_check("%s: enlarged, never shrunk below the player's size" % d[0], root.content_scale_factor >= own - 0.01, root.content_scale_factor)
+		_check("%s: scroll frame fits the viewport" % d[0], Rect2(Vector2.ZERO, vp).encloses(scroll.get_rect()), scroll.get_rect())
+		_check("%s: stays upright" % d[0], is_zero_approx(scroll.rotation), scroll.rotation)
+		if d[0] == "demos":
+			_check("Demo cards use the available width", hud._demo_cards.columns == (2 if win.x >= 660.0 else 1))
 		# body text (13 px in the dialog) as drawn on the screen, in window pixels
 		var text_px = 13.0 * win.x / vp.x
 		_check("%s: body text at least 10 px on screen" % d[0], text_px >= 9.95,"%.1f px" % text_px)
 		if shots != "":
 			DirAccess.make_dir_recursive_absolute(shots)
 			root.get_texture().get_image().save_png(shots.path_join("touch_%s_%s.png" % [d[0], "upright" if upright else "sideways"]))
-	# a tap reaches a button through the enlargement (and the turn, upright)
+	# A tap reaches a button through the interface scale.
 	hud.open_demos()
 	for i in 8:
 		await process_frame
@@ -86,7 +92,6 @@ func _run() -> void:
 	root.size = portrait
 	for i in 8:
 		await process_frame
-	var touch = game.touch
 	touch._begin(0, touch._buttons["menu"]["rect"].get_center())
 	root.size = landscape
 	for i in 8:
@@ -106,9 +111,9 @@ func _run() -> void:
 			for i in 12:
 				await process_frame
 			var turned = size == portrait
-			_check("%s reflows when turned %s" % [dialog[0], "upright" if turned else "sideways"],
+			_check("%s reflows when turned %s" % [dialog[0], "to portrait" if turned else "to landscape"],
 				hud._modal == modal and touch.active and is_equal_approx(hud.touch_u, touch._u) and
-				is_equal_approx(scroll.rotation, PI / 2.0 if turned else 0.0), scroll.rotation)
+				is_zero_approx(scroll.rotation) and root.get_visible_rect().encloses(scroll.get_rect()), scroll.get_rect())
 			if shots != "":
 				root.get_texture().get_image().save_png(shots.path_join("rotated_%s_%s.png" % [dialog[0], "portrait" if turned else "landscape"]))
 		hud.close_modal()

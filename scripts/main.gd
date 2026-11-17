@@ -142,8 +142,8 @@ func _ready() -> void:
 		touch.main = self
 		touch.hud = hud
 		touch.player = player
-		add_child(touch)
 		hud.touch = touch
+		add_child(touch)
 		if _touch_forced:
 			touch.set_active.call_deferred(true)
 
