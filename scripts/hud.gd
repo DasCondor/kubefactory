@@ -168,6 +168,8 @@ func _btn(text: String, cb: Callable, kind: String = "normal", enabled: bool = t
 	b.add_theme_color_override("font_hover_color", fc)
 	b.add_theme_color_override("font_pressed_color", fc)
 	b.add_theme_font_size_override("font_size", 14)
+	if touch_u > 0.0:
+		b.custom_minimum_size.y = 46
 	b.pressed.connect(cb)
 	return b
 
@@ -593,34 +595,31 @@ func on_state(st: Dictionary) -> void:
 func modal_open() -> bool:
 	return _modal != null
 
-# Keep dialogs upright and legible. Wide tables can scroll on a narrow display.
+# The title and navigation stay outside the scroll area.
 var _fit_cb = Callable()
+var _mobile_scroll: ScrollContainer
 
-func _fit_modal(modal: Control, scroll: ScrollContainer, center: Control, panel: Control) -> void:
-	if modal != _modal or not is_instance_valid(panel) or not is_instance_valid(scroll):
+func _fit_modal(modal: Control, panel: PanelContainer, preferred_width: float) -> void:
+	if modal != _modal or not is_instance_valid(panel):
 		return                                   # a dialog that has closed
 	var root = get_tree().root
 	var vp = get_viewport().get_visible_rect().size
 	var display: Vector2 = touch.display_size()
 	if display.x <= 1.0 or vp.x <= 1.0:
 		return
+	var css = display.x / vp.x
+	var f = root.content_scale_factor / css
+	if absf(root.content_scale_factor - f) > 0.01:
+		root.content_scale_factor = f
+		return
+	var width = preferred_width
 	if _modal_kind == "demos" and is_instance_valid(_demo_cards):
 		_demo_cards.columns = 2 if display.x >= 660.0 else 1
-		panel.custom_minimum_size.x = 675 if _demo_cards.columns == 2 else 348
-	var css = display.x / vp.x
-	var panel_width = panel.get_combined_minimum_size().x
-	var scrollbar = scroll.get_v_scroll_bar().get_combined_minimum_size().x
-	var wanted_css = clampf((display.x - 16.0) / maxf(panel_width + scrollbar, 1.0), 0.9, 1.12)
-	var f = root.content_scale_factor * wanted_css / css
-	if absf(root.content_scale_factor - f) > 0.01:
-		root.content_scale_factor = f            # size_changed brings us back here
-		return
-	var inset = 8.0 / css
-	var frame = vp - Vector2.ONE * inset * 2.0
-	scroll.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	scroll.position = Vector2.ONE * inset
-	scroll.size = frame
-	center.custom_minimum_size = Vector2(frame.x - scrollbar, maxf(frame.y, panel.size.y + 8.0))
+		width = 720.0 if _demo_cards.columns == 2 else 440.0
+	var inset = Vector2.ONE * 8.0 / css
+	var frame = vp - inset * 2.0
+	panel.size = Vector2(minf(frame.x, maxf(width, 440.0)), frame.y)
+	panel.position = Vector2((vp.x - panel.size.x) * 0.5, inset.y)
 
 func _player_ui_scale() -> void:
 	get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
@@ -639,6 +638,7 @@ func close_modal(recapture: bool = true) -> void:
 				get_viewport().size_changed.disconnect(_fit_cb)
 			_fit_cb = Callable()
 			_player_ui_scale()           # a touch dialog enlarged the interface
+	_mobile_scroll = null
 	_modal_kind = ""
 	_dyn = null
 	_dyn_sig = ""
@@ -649,7 +649,7 @@ func close_modal(recapture: bool = true) -> void:
 		if not (touch != null and touch.active):       # touch never locks the pointer
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
-func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = false) -> VBoxContainer:
+func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = false, back: Callable = Callable()) -> VBoxContainer:
 	var was_pad = _modal_kind == "logs"
 	close_modal(false)
 	_modal_kind = kind
@@ -660,24 +660,19 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 	dim.color = Color(0, 0, 0, 0.45)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_modal.add_child(dim)
-	var center = CenterContainer.new()
 	var fit = touch_u > 0.0
-	var scroll: ScrollContainer = null
+	var panel = PanelContainer.new()
 	if fit:
-		# a scrolling frame, for a dialog taller than the screen
-		scroll = ScrollContainer.new()
-		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-		scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		_modal.add_child(scroll)
-		scroll.add_child(center)
+		_modal.add_child(panel)
 	else:
+		var center = CenterContainer.new()
 		center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		_modal.add_child(center)
-	var panel = PanelContainer.new()
-	panel.custom_minimum_size = size
-	var psb = _sb(BG, ORANGE, 0, 18)
+		center.add_child(panel)
+		panel.custom_minimum_size = size
+	var psb = _sb(BG, ORANGE, 0, 12 if fit else 18)
 	psb.border_width_top = 4
-	if pad:
+	if pad and not fit:
 		# a handheld datapad: chunky rubberised bezel around a dark screen
 		psb = _sb(Color(0.035, 0.05, 0.055, 0.985), Color(0.2, 0.21, 0.23), 14, 20)
 		psb.set_corner_radius_all(30)
@@ -692,31 +687,44 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 			tw.tween_property(_modal, "position:y", 0.0, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			tw.tween_property(_modal, "modulate:a", 1.0, 0.18)
 	panel.add_theme_stylebox_override("panel", psb)
-	center.add_child(panel)
 	var vb = _col(10)
 	panel.add_child(vb)
 	var head = _row()
-	head.add_child(_wrapped(title, 22, ORANGE) if fit else _lbl(title, 22, ORANGE))
+	if fit and back.is_valid():
+		var prev = _btn("‹", back)
+		prev.tooltip_text = "Back"
+		prev.custom_minimum_size = Vector2(46, 46)
+		prev.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		head.add_child(prev)
+	head.add_child(_wrapped(title, 18, ORANGE) if fit else _lbl(title, 22, ORANGE))
 	if not fit:
 		head.add_child(_spacer())
 	var xb = _btn("  X  ", close_modal)
 	if fit:
-		xb.custom_minimum_size = Vector2(64, 52)       # enlarged with the dialog
-		xb.add_theme_font_size_override("font_size", 22)
+		xb.text = "×"
+		xb.tooltip_text = "Close"
+		xb.custom_minimum_size = Vector2(46, 46)
+		xb.add_theme_font_size_override("font_size", 21)
 		xb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	elif touch_u > 0.0:
-		xb.custom_minimum_size = Vector2(touch_u * 1.1, touch_u * 0.9)
-		xb.add_theme_font_size_override("font_size", int(touch_u * 0.3))
 	head.add_child(xb)
 	vb.add_child(head)
 	var body = _col(10)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vb.add_child(body)
+	if fit:
+		_mobile_scroll = ScrollContainer.new()
+		_mobile_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		_mobile_scroll.scroll_deadzone = 8
+		_mobile_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_mobile_scroll.add_child(body)
+		vb.add_child(_mobile_scroll)
+	else:
+		vb.add_child(body)
 	add_child(_modal)
 	if fit:
 		# a bound method, not a lambda: Godot 4.3 crashed calling a deferred lambda
-		_fit_cb = _fit_modal.bind(_modal, scroll, center, panel)
-		panel.resized.connect(_fit_cb)                # content grew or shrank
+		_fit_cb = _fit_modal.bind(_modal, panel, size.x)
+		panel.minimum_size_changed.connect(_fit_cb, CONNECT_DEFERRED)
 		get_viewport().size_changed.connect(_fit_cb, CONNECT_DEFERRED)
 		_fit_cb.call_deferred()
 	if sfx != null and not (pad and was_pad):
@@ -911,10 +919,11 @@ func _show_vpn_routes(selected: Dictionary) -> void:
 	world.apply_state(cluster.state)
 	close_modal()
 
-func open_vpn() -> void:
+func open_vpn(back: Callable = Callable()) -> void:
 	var narrow = touch_u > 0.0
-	var body = _open_modal("vpn", null, "VPN  //  TUNNELS", Vector2(356, 0) if narrow else Vector2(1100, 760))
-	var tw = 314 if narrow else 1040
+	var parent = back if back.is_valid() else open_pause
+	var body = _open_modal("vpn", null, "VPN TUNNELS", Vector2(440, 0) if narrow else Vector2(1100, 760), false, parent)
+	var tw = 0 if narrow else 1040
 	var pods: Array = cluster.state.get("pods", [])
 	var vpns = pods.filter(func(p): return not p.get("net", {}).get("vpn", {}).is_empty())
 	vpns.sort_custom(func(a, b):
@@ -989,7 +998,7 @@ func open_vpn() -> void:
 		for t in [[K.vpn_inside_text(p), Color(0.75, 0.6, 1.0)], [K.vpn_outside_text(p), Color(0.95, 0.75, 0.3)]]:
 			var l = _lbl(t[0].replace("\n", "     "), 14, t[1])
 			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			l.custom_minimum_size.x = tw - 30
+			l.custom_minimum_size.x = maxf(tw - 30, 0.0)
 			col.add_child(l)
 		if clients.has(spot_uid):
 			var names = ["Inspect an app on this VPN"]
@@ -999,6 +1008,10 @@ func open_vpn() -> void:
 				var index = names.find(label)
 				if index > 0:
 					open_pod(clients[spot_uid][index - 1]["uid"]))
+			if narrow:
+				pick_app.fit_to_longest_item = false
+				pick_app.clip_text = true
+				pick_app.custom_minimum_size.y = 46
 			col.add_child(pick_app)
 		if _vpn_checked.has(spot_uid):
 			col.add_child(_lbl("Checked just now from inside the tunnel:  " + _vpn_checked[spot_uid], 14, K.health_color("ok")))
@@ -1017,7 +1030,7 @@ func open_vpn() -> void:
 	list.add_child(_lbl("DOWNLOADERS WITHOUT A DETECTED VPN", 13, DIM))
 	var ex = _lbl(", ".join(PackedStringArray(exposed)) if not exposed.is_empty() else "No unprotected downloaders detected.", 14, K.health_color("warn") if not exposed.is_empty() else DIM)
 	ex.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ex.custom_minimum_size.x = tw - 30
+	ex.custom_minimum_size.x = maxf(tw - 30, 0.0)
 	list.add_child(ex)
 	actions.add_child(_btn("Network and shared data", open_network))
 	body.add_child(actions)
@@ -1066,14 +1079,45 @@ func _wrapped(value: String, px: int = 14, color: Color = TXT) -> Label:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return label
 
-func open_network(uid: String = "") -> void:
-	var body = _open_modal("network", uid, "NETWORK AND SHARED DATA", Vector2(820, 660))
+func _menu_list(body: VBoxContainer, gap: int, desktop_height: float = 0.0) -> VBoxContainer:
+	var list = _col(gap)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if touch_u > 0.0:
+		body.add_child(list)
+	else:
+		var sc = ScrollContainer.new()
+		sc.custom_minimum_size.y = desktop_height
+		sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		sc.add_child(list)
+		body.add_child(sc)
+	return list
+
+class TouchFilter extends LineEdit:
+	var _last_text = ""
+
+	func _ready() -> void:
+		custom_minimum_size.y = 46
+		clear_button_enabled = true
+		_last_text = text
+		text_changed.connect(func(value): _last_text = value)
+		set_process(OS.has_feature("web"))
+
+	func _process(_delta: float) -> void:
+		# Godot 4.3's web keyboard assigns LineEdit.text without emitting text_changed.
+		if text != _last_text:
+			text_changed.emit(text)
+
+func open_network(uid: String = "", back: Callable = Callable()) -> void:
+	var mobile = touch_u > 0.0
+	var parent = back if back.is_valid() else open_pause
+	var body = _open_modal("network", uid, "NETWORK AND SHARED DATA", Vector2(440, 0) if mobile else Vector2(820, 660), false, parent)
 	var state: Dictionary = cluster.state
 	var sim: bool = state.get("source") == "simulation"
 	var pods: Array = state.get("pods", [])
 	var show_app_flows: bool = sim and not state.get("links", []).is_empty()
 	if show_app_flows or pods.any(func(p): return not p.get("net", {}).get("vpn", {}).is_empty()):
-		var controls = _row(10)
+		var controls: Container = _col(4) if mobile else _row(10)
 		controls.add_child(_lbl("SHOW IN THE FACTORY", 13, DIM))
 		var pick = OptionButton.new()
 		var filters = ["All", "Services and VPN", "Internet Output"]
@@ -1087,14 +1131,16 @@ func open_network(uid: String = "") -> void:
 			world.apply_state(cluster.state))
 		controls.add_child(pick)
 		body.add_child(controls)
-	var sc = ScrollContainer.new()
-	sc.custom_minimum_size.y = 490
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var list = _col(8)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(list)
-	body.add_child(sc)
+		if mobile:
+			pick.custom_minimum_size.y = 46
+	var tools: Container = HFlowContainer.new() if mobile else _row(8)
+	var to_network = func(): open_network(uid, parent)
+	tools.add_child(_btn("Ports and readiness", func(): open_ports(uid, to_network), "primary"))
+	tools.add_child(_btn("Shared disk space", func(): open_shared_disks(uid, to_network)))
+	tools.add_child(_btn("VPN tunnels", func(): open_vpn(to_network)))
+	if mobile:
+		body.add_child(tools)
+	var list = _menu_list(body, 8, 490)
 	list.add_child(_wrapped("SIMULATED · Only configured demo routes are shown. Arrows follow requests, scrapes or files."
 		if sim else "Configured network attachments, Service selectors and detected VPNs. Application traffic requires flow telemetry.", 14, DIM))
 	for kind in ["API", "Metrics", "Files"]:
@@ -1140,24 +1186,15 @@ func open_network(uid: String = "") -> void:
 				items.append("/%s (%s), shared with %s" % [claim, "read-only" if mounts[claim] else "read/write", ", ".join(peers)])
 		if not items.is_empty():
 			list.add_child(_wrapped("%s · %s" % [Topology.key(pod) if sim else pod["name"], "  |  ".join(items)]))
-	var tools = _row(8)
-	tools.add_child(_btn("Ports and readiness", func(): open_ports(uid), "primary"))
-	tools.add_child(_btn("Shared disk space", func(): open_shared_disks(uid)))
-	tools.add_child(_btn("VPN tunnels", open_vpn))
-	body.add_child(tools)
+	if not mobile:
+		body.add_child(tools)
 
-func open_shared_disks(uid: String = "") -> void:
-	var body = _open_modal("shared_disks", uid, "SHARED DISK SPACE", Vector2(800, 650))
+func open_shared_disks(uid: String = "", back: Callable = Callable()) -> void:
+	var body = _open_modal("shared_disks", uid, "SHARED DISK SPACE", Vector2(440, 0) if touch_u > 0.0 else Vector2(800, 650), false, back)
 	var simulated = cluster.state.get("source") == "simulation"
 	body.add_child(_wrapped("One disk total per backing volume. Each mount shows the container, its directory, and its access." +
 		(" Usage comes from the demo's sample files." if simulated else ""), 14, DIM))
-	var sc = ScrollContainer.new()
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var list = _col(9)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(list)
-	body.add_child(sc)
+	var list = _menu_list(body, 9)
 	for disk in K.shared_disks(cluster.state):
 		if uid != "" and not disk["mounts"].any(func(m): return m["uid"] == uid):
 			continue
@@ -1174,18 +1211,12 @@ func open_shared_disks(uid: String = "") -> void:
 	if list.get_child_count() == 0:
 		list.add_child(_wrapped("No shared backing volumes are reported for this view.", 14, DIM))
 
-func open_ports(uid: String = "") -> void:
-	var body = _open_modal("ports", uid, "PORTS AND READINESS", Vector2(800, 650))
+func open_ports(uid: String = "", back: Callable = Callable()) -> void:
+	var body = _open_modal("ports", uid, "PORTS AND READINESS", Vector2(440, 0) if touch_u > 0.0 else Vector2(800, 650), false, back)
 	var simulated = cluster.state.get("source") == "simulation"
 	body.add_child(_wrapped("Each row shows the configured port and which pods or containers are ready. " +
 		("Port status follows the simulation." if simulated else "Live reachability requires a connection check."), 14, DIM))
-	var sc = ScrollContainer.new()
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_dyn = _col(8)
-	_dyn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(_dyn)
-	body.add_child(sc)
+	_dyn = _menu_list(body, 8)
 	_fill_ports()
 
 func _fill_ports() -> void:
@@ -1374,7 +1405,7 @@ func _fill_service() -> void:
 # ----- codex (cluster overview at the HUB)
 
 func open_codex() -> void:
-	var body = _open_modal("codex", null, "CLUSTER CODEX", Vector2(1220, 700))
+	var body = _open_modal("codex", null, "CLUSTER CODEX", Vector2(1220, 700), false, open_pause)
 	var top = _row(10)
 	top.add_child(_lbl("NAMESPACE", 13, DIM))
 	var pick = OptionButton.new()
@@ -1565,7 +1596,7 @@ func _choose(bp: Dictionary) -> void:
 # ----- cluster switcher
 
 func open_clusters() -> void:
-	var body = _open_modal("clusters", null, "CLUSTERS", Vector2(980, 600))
+	var body = _open_modal("clusters", null, "CLUSTERS", Vector2(980, 600), false, open_pause)
 	var top = _row(10)
 	top.add_child(_lbl("Built-in simulations and discovered local connections.", 13, DIM))
 	top.add_child(_spacer())
@@ -1804,7 +1835,8 @@ func open_storage(uid: String) -> void:
 	var body = _open_modal("storage", uid, "STORAGE  //  " + str(p["name"]), Vector2(1000, 700))
 	# dock the panel to the right so the open door and its bays stay in view
 	_modal.get_child(0).color.a = 0.12
-	_modal.get_child(1).anchor_left = 0.36
+	if touch_u <= 0.0:
+		_modal.get_child(1).anchor_left = 0.36
 	var sim = cluster.backend != null and cluster.backend.label == "simulation"
 	var note = _lbl("Read-only. Files are listed and previewed in pages of 64 KiB; nothing is copied, changed or sent anywhere." +
 		("   SIMULATED: this listing is invented by the demo." if sim else ""), 12, K.health_color("warn") if sim else DIM)
@@ -1887,25 +1919,42 @@ var _lv_pending = {}           # an endpoint waiting for its port-forward
 var _lv_rect: TextureRect = null
 var _lv_move_t = 0
 
-func open_liveview() -> void:
-	var body = _open_modal("livelist", null, "LIVEVIEW", Vector2(1000, 640))
+func open_liveview(search: String = "") -> void:
+	var mobile = touch_u > 0.0
+	var body = _open_modal("livelist", null, "DASHBOARDS" if mobile else "LIVEVIEW", Vector2(440, 0) if mobile else Vector2(1000, 640), false, open_pause)
 	var src = cluster.backend.label if cluster.backend != null else ""
 	if src == "simulation":
 		var intro = _wrapped("SIMULATED · Choose a pod to open its demo dashboard.", 15, DIM)
 		body.add_child(intro)
-		var demo_scroll = ScrollContainer.new()
-		demo_scroll.custom_minimum_size.y = 480
-		demo_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		demo_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		var demo_rows = _col(6)
-		demo_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		demo_scroll.add_child(demo_rows)
-		body.add_child(demo_scroll)
+		var query: LineEdit
+		if mobile:
+			query = TouchFilter.new()
+			query.placeholder_text = "Find a pod"
+			query.text = search
+			body.add_child(query)
+		var demo_rows = _menu_list(body, 6, 480)
+		var cards: Array[Control] = []
 		for ds in demo_screens.screens():
 			var row = _row(10)
+			row.set_meta("pod_name", str(ds["name"]).to_lower())
 			row.add_child(_wrapped(str(ds["name"])))
-			row.add_child(_btn("View", func(): open_screen(str(ds["uid"])), "primary"))
+			row.add_child(_btn("View", func():
+				var previous = query.text if query != null else ""
+				open_screen(str(ds["uid"]), func(): open_liveview(previous)), "primary"))
 			demo_rows.add_child(row)
+			cards.append(row)
+		if query != null:
+			var no_matches = _wrapped("No matching pods.", 14, DIM)
+			demo_rows.add_child(no_matches)
+			var filter_cards = func(value: String):
+				var term = value.strip_edges().to_lower()
+				var any_match = false
+				for card in cards:
+					card.visible = term in str(card.get_meta("pod_name"))
+					any_match = any_match or card.visible
+				no_matches.visible = not any_match
+			query.text_changed.connect(filter_cards)
+			filter_cards.call(search)
 		return
 	var intro = _lbl("Open a running application's own web page on a screen. It is the real page, drawn by this computer's browser engine in a private, throw-away profile, and it takes your mouse and keyboard.", 13, DIM)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2497,7 +2546,7 @@ func _open_connect_paste() -> void:
 func open_demos() -> void:
 	offer_demos = false
 	var mobile = touch_u > 0.0
-	var body = _open_modal("demos", null, "CHOOSE A DEMO", Vector2(348, 0) if mobile else Vector2(980, 600))
+	var body = _open_modal("demos", null, "DEMO WORLDS", Vector2(440, 0) if mobile else Vector2(980, 600), false, open_pause)
 	var intro = _lbl("Try a simulated cluster. Switch worlds anytime from the game menu." if mobile else "Four simulated worlds. Nothing here is real, so break whatever you like. Switch any time from the pause menu (Esc).", 14, DIM)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.custom_minimum_size.x = 0 if mobile else 930
@@ -2513,7 +2562,8 @@ func open_demos() -> void:
 		var active = cluster.backend != null and cluster.backend.label == "simulation" and cluster.backend.context == d["flavor"]
 		var col = K.provider_color(f["provider"]).lightened(0.25)
 		var pc = PanelContainer.new()
-		pc.custom_minimum_size = Vector2(310, 154) if mobile else Vector2(458, 210)
+		pc.custom_minimum_size = Vector2(0, 0) if mobile else Vector2(458, 210)
+		pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var sb = _sb(BG2, col, 0, 14)
 		sb.border_width_top = 4
 		pc.add_theme_stylebox_override("panel", sb)
@@ -2531,7 +2581,7 @@ func open_demos() -> void:
 		else:
 			v.add_child(title)
 		v.add_child(_lbl("%s  ·  %d nodes" % [f["provider"], f["nodes"].size() + (1 if f["cp"] != "" else 0)], 12, DIM))
-		var desc = _lbl(d["desc"], 14)
+		var desc = _lbl(d["short_desc"] if mobile else d["desc"], 14)
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		desc.custom_minimum_size.x = 0 if mobile else 420
 		desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2554,7 +2604,7 @@ func open_logs(pod_uid: String = "") -> void:
 			_ls["ns"] = p["ns"]
 			_ls["pod"] = p["name"]
 			_ls["container"] = ""
-	var body = _open_modal("logs", null, "HELMSMAN DATAPAD  //  LOG LEDGER", Vector2(1260, 740), true)
+	var body = _open_modal("logs", null, "HELMSMAN DATAPAD  //  LOG LEDGER", Vector2(1260, 740), true, open_pause)
 	var tabs = _row()
 	for t in [["pods", "POD LOGS"], ["events", "CLUSTER EVENTS"], ["audit", "AUDIT LOG"]]:
 		tabs.add_child(_btn("  " + t[1] + "  ", func():
@@ -2909,23 +2959,8 @@ func open_gauge() -> void:
 	var compact = touch != null and touch.active
 	var wide_touch = compact and get_viewport().get_visible_rect().size.x > get_viewport().get_visible_rect().size.y
 	var dialog_size = Vector2(850, 500) if wide_touch else (Vector2(500, 800) if compact else Vector2(1160, 720))
-	var body = _open_modal("gauge", null, "GAUGE  //  RESOURCE DESK", dialog_size)
-	if compact:
-		var head = body.get_parent().get_child(0)
-		head.get_child(0).add_theme_font_size_override("font_size", 24)
-		var close: Button = head.get_child(head.get_child_count() - 1)
-		close.custom_minimum_size = Vector2(70, 60)
-		close.add_theme_font_size_override("font_size", 22)
-		_gauge_scroll = ScrollContainer.new()
-		_gauge_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		_gauge_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		body.add_child(_gauge_scroll)
-		var flow = _col(10)
-		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_gauge_scroll.add_child(flow)
-		body = flow
-	else:
-		_gauge_scroll = null
+	var body = _open_modal("gauge", null, "GAUGE  //  RESOURCE DESK", dialog_size, false, open_pause)
+	_gauge_scroll = _mobile_scroll
 	var top = _row(16)
 	var portrait = null if compact else _krew_portrait("gauge", Color(0.04, 0.1, 0.12), false)
 	if portrait != null:
@@ -3758,6 +3793,20 @@ func open_startup() -> void:
 		button.custom_minimum_size.y = 40
 
 func open_welcome() -> void:
+	if touch_u > 0.0:
+		var touch_help = _open_modal("welcome", null, "HOW TO PLAY", Vector2(440, 0), false, open_pause)
+		for row in [["Move", "Use the stick on the left."], ["Look", "Drag the world with your right thumb."],
+			["Aim and inspect", "Aim faces a nearby machine. The action button inspects it or opens its screen."],
+			["Jump", "Tap twice to toggle the hoverpack."], ["Tools", "Tap All Tools to open the tool picker."]]:
+			touch_help.add_child(_lbl(row[0], 16, ORANGE))
+			touch_help.add_child(_wrapped(row[1]))
+		touch_help.add_child(_btn("Continue", func():
+			_save_setting("welcomed", true)
+			if offer_demos:
+				open_demos()
+			else:
+				close_modal(), "primary"))
+		return
 	var body = _open_modal("welcome", null, "WELCOME TO KUBEFACTORY", Vector2(900, 560))
 	var intro = _lbl("Your cluster is a factory. Walk it, spot what is broken, and fix it with the tool belt.", 16)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -3798,22 +3847,23 @@ func open_welcome() -> void:
 # library from the site). Choosing reloads the page with ?gfx=..., which is
 # also a link that can be shared.
 func _open_web_graphics() -> void:
-	var body = _open_modal("graphics", null, "GRAPHICS", Vector2(820, 440))
+	var mobile = touch_u > 0.0
+	var body = _open_modal("graphics", null, "GRAPHICS", Vector2(440, 0) if mobile else Vector2(820, 440), false, open_settings)
 	var intro = _lbl("Two presets in the browser. Every tool, panel and action works the same on both; switching reloads the demo.", 14, DIM)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	intro.custom_minimum_size.x = 780
+	intro.custom_minimum_size.x = 0 if mobile else 780
 	body.add_child(intro)
 	for i in 2:
 		var active = (i == 1) == Gfx.web_high
 		var pc = PanelContainer.new()
 		pc.add_theme_stylebox_override("panel", _sb(BG2, ORANGE if active else Color(0, 0, 0, 0), 1 if active else 0, 10))
-		var r = _row(12)
+		var r: Container = _col(8) if mobile else _row(12)
 		var v = _col(2)
 		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.add_child(_lbl(Gfx.WEB_NAMES[i].to_upper(), 17, ORANGE if active else TXT))
 		var bl = _lbl(Gfx.WEB_BLURB[i], 13, DIM)
 		bl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		bl.custom_minimum_size.x = 600
+		bl.custom_minimum_size.x = 0 if mobile else 600
 		v.add_child(bl)
 		r.add_child(v)
 		if active:
@@ -3822,10 +3872,11 @@ func _open_web_graphics() -> void:
 			r.add_child(_btn("Use", func(): graphics_requested.emit("high" if i == 1 else "standard"), "primary"))
 		pc.add_child(r)
 		body.add_child(pc)
-	var back = _row(10)
-	back.add_child(_spacer())
-	back.add_child(_btn("Back", open_pause))
-	body.add_child(back)
+	if not mobile:
+		var back = _row(10)
+		back.add_child(_spacer())
+		back.add_child(_btn("Back", open_pause))
+		body.add_child(back)
 
 func open_graphics() -> void:
 	if Gfx.web():
@@ -3874,32 +3925,23 @@ func open_graphics() -> void:
 # ----- pause menu
 
 func open_pause() -> void:
+	if touch_u > 0.0:
+		_open_touch_pause()
+		return
 	var viewport_size = get_viewport().get_visible_rect().size
 	var height = clampf(viewport_size.y * 0.85, 270, 720)
 	var width = clampf(viewport_size.x * 0.9, 300, 530)
-	if touch_u > 0.0:
-		width = 356
-		height = 0
-	var frame = _open_modal("pause", null, "KUBEFACTORY" if touch_u > 0.0 else "KUBEFACTORY  %s" % version, Vector2(width, height))
-	var header := frame.get_parent().get_child(0)
-	var close_button: Button = header.get_child(header.get_child_count() - 1)
-	if touch_u > 0.0:
-		close_button.custom_minimum_size = Vector2(42, 34)
-		close_button.add_theme_font_size_override("font_size", 16)
-	var resume = _touch_size(_btn("Resume", close_modal, "primary"))
-	if touch_u <= 0.0:
-		resume.custom_minimum_size.y = 34
+	var frame = _open_modal("pause", null, "KUBEFACTORY  %s" % version, Vector2(width, height))
+	var resume = _btn("Resume", close_modal, "primary")
+	resume.custom_minimum_size.y = 34
 	frame.add_child(resume)
 	var body = _col(8)
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if touch_u > 0.0:
-		frame.add_child(body)
-	else:
-		var menu = ScrollContainer.new()
-		menu.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		menu.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		frame.add_child(menu)
-		menu.add_child(body)
+	var menu = ScrollContainer.new()
+	menu.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	menu.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	frame.add_child(menu)
+	menu.add_child(body)
 	body.add_child(_wrapped("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Settings", open_settings, "primary"))
 	body.add_child(_btn("Demo worlds", open_demos))
@@ -3980,10 +4022,25 @@ func open_pause() -> void:
 	body.add_child(_spacer())
 	if not Gfx.web():
 		body.add_child(_btn("Quit to desktop", func(): get_tree().quit(), "danger"))
-	if touch_u > 0.0:
-		for child in body.get_children():
-			if child is Button:
-				child.custom_minimum_size.y = 48
+
+func _open_touch_pause() -> void:
+	var body = _open_modal("pause", null, "KUBEFACTORY", Vector2(460, 0))
+	body.add_child(_btn("Resume", close_modal, "primary"))
+	var quick = GridContainer.new()
+	quick.columns = 2
+	for entry in [["Demo worlds", open_demos], ["Settings", open_settings], ["Dashboards", open_liveview], ["Network", open_network]]:
+		var button = _btn(entry[0], entry[1])
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		quick.add_child(button)
+	body.add_child(quick)
+	body.add_child(_wrapped(str(cluster.state.get("context", "")), 13, DIM))
+	body.add_child(_lbl("CLUSTER TOOLS", 13, ORANGE))
+	for entry in [["VPN tunnels", open_vpn], ["Cluster codex", open_codex], ["Logging station", open_logs],
+		["Krew operations", open_krew], ["Foreman", open_foreman], ["Resource desk", open_gauge], ["Switch cluster", open_clusters],
+		["How to play", open_welcome]]:
+		body.add_child(_btn(entry[0], entry[1]))
+	if not Gfx.web():
+		body.add_child(_btn("Quit to desktop", func(): get_tree().quit(), "danger"))
 
 # ----- LiveView providers: Grafana and Tautulli (scripts/providers.gd, agent/providers.go)
 #
@@ -4384,17 +4441,10 @@ func _touch_size(b: Button) -> Button:
 func open_demo_screen(uid: String) -> void:
 	open_screen(uid)
 
-func _open_heimdall() -> void:
-	var body = _open_modal("heimdall", null, "HEIMDALL  //  MEDIA LAB", Vector2(760, 650))
-	var sc = ScrollContainer.new()
-	sc.custom_minimum_size.y = 530
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var rows = _col(8)
-	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(rows)
-	body.add_child(sc)
-	rows.add_child(_lbl("RECENT FAILURES · THIS SIMULATION SESSION", 14, ORANGE))
+func _open_heimdall(back: Callable = Callable()) -> void:
+	var body = _open_modal("heimdall", null, "HEIMDALL  //  MEDIA LAB", Vector2(500, 0) if touch_u > 0.0 else Vector2(760, 650), false, back)
+	var rows = _menu_list(body, 8, 530)
+	rows.add_child(_wrapped("RECENT FAILURES · THIS SIMULATION SESSION", 14, ORANGE))
 	var failures: Array = demo_screens.recent_failures.values()
 	failures.reverse()
 	if failures.is_empty():
@@ -4426,7 +4476,7 @@ func _open_image_updates() -> void:
 				cluster.act({"op": "demo_update_image", "ns": update["ns"], "kind": update["kind"], "name": update["name"], "current": update["current"]})),
 			"mk3", not cluster.read_only and cluster.max_tier(update["ns"]) >= 3))
 
-func open_screen(uid: String) -> void:
+func open_screen(uid: String, back: Callable = Callable()) -> void:
 	var p = K.find_pod(cluster.state, uid)
 	if p == null or screens == null:
 		open_liveview()
@@ -4434,7 +4484,8 @@ func open_screen(uid: String) -> void:
 	var mode: String = screens.mode_of(uid)
 	var mobile = touch_u > 0.0
 	var screen_name = p.get("wname", "") if mobile and p.get("wname", "") != "" else p["name"]
-	var body = _open_modal("screen", uid, "SCREEN  //  " + str(screen_name), Vector2(358, 0) if mobile else Vector2(1180, 860))
+	var body = _open_modal("screen", uid, "SCREEN  //  " + str(screen_name), Vector2(600, 0) if mobile else Vector2(1180, 860), false, back)
+	var to_screen = func(): open_screen(uid, back)
 	var head = _row(10)
 	var ic = TextureRect.new()
 	ic.texture = Icons.texture(Icons.kind_of(p))
@@ -4450,9 +4501,12 @@ func open_screen(uid: String) -> void:
 		body.add_child(head)
 		tabs = HFlowContainer.new()
 	for m in screens.MODES:
-		tabs.add_child(_touch_size(_btn(str(screens.TITLES[m]), func():
+		var button = _touch_size(_btn(str(screens.TITLES[m]), func():
 			screens.set_mode(uid, m)
-			open_screen(uid), "primary" if m == mode else "normal")))
+			to_screen.call(), "primary" if m == mode else "normal"))
+		if mobile:
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tabs.add_child(button)
 	body.add_child(tabs)
 	if mode != "dashboard":
 		var bar: Container = _col(8) if mobile else _row(8)
@@ -4466,7 +4520,7 @@ func open_screen(uid: String) -> void:
 			bar.add_child(_btn("Inspect", func(): open_pod(uid)))
 		body.add_child(bar)
 		var panel: Control = screens.make_panel(uid)
-		panel.custom_minimum_size = Vector2(312, 245) if mobile else Vector2(1130, 700)
+		panel.custom_minimum_size = Vector2(260, 245) if mobile else Vector2(1130, 700)
 		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		body.add_child(panel)
 		return
@@ -4478,28 +4532,32 @@ func open_screen(uid: String) -> void:
 				if ds["uid"] == uid:
 					kind = str(ds["kind"])
 			var bar = HFlowContainer.new()
-			bar.add_child(_lbl("SIMULATED", 13, DIM))
+			if not mobile:
+				bar.add_child(_lbl("SIMULATED", 13, DIM))
 			var views: Array = demo_screens.VIEWS[kind]
 			var current = demo_screens.view_of(uid)
 			for i in views.size():
 				bar.add_child(_touch_size(_btn(str(views[i]), func():
 					demo_screens.set_view(uid, i)
-					open_screen(uid), "primary" if current == i else "normal")))
-			bar.add_child(_btn("All LiveView", func(): open_liveview()))
-			bar.add_child(_btn("Network details", func(): open_network(uid)))
-			if views[current] == "Ports":
-				bar.add_child(_btn("Port details", func(): open_ports(uid)))
-			elif views[current] == "Shared disks":
-				bar.add_child(_btn("Mount details", func(): open_shared_disks(uid)))
-			if kind == "heimdall":
-				bar.add_child(_btn("Open app directory", _open_heimdall))
-			elif p.get("wname") == "image-updater":
-				bar.add_child(_btn("Review simulated image updates", _open_image_updates))
+					to_screen.call(), "primary" if current == i else "normal")))
 			body.add_child(bar)
 			var panel: Control = demo_screens.make_panel(uid, mobile)
-			panel.custom_minimum_size = Vector2(312, 245) if mobile else Vector2(1130, 700)
+			panel.custom_minimum_size = Vector2(260, 250) if mobile else Vector2(1130, 700)
 			panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			var links = HFlowContainer.new() if mobile else bar
+			links.add_child(_btn("All dashboards" if mobile else "All LiveView", open_liveview))
+			links.add_child(_btn("Network details", func(): open_network(uid, to_screen)))
+			if views[current] == "Ports":
+				links.add_child(_btn("Port details", func(): open_ports(uid, to_screen)))
+			elif views[current] == "Shared disks":
+				links.add_child(_btn("Mount details", func(): open_shared_disks(uid, to_screen)))
+			if kind == "heimdall":
+				links.add_child(_btn("Open app directory", func(): _open_heimdall(to_screen)))
+			elif p.get("wname") == "image-updater":
+				links.add_child(_btn("Review simulated image updates", _open_image_updates))
 			body.add_child(panel)
+			if mobile:
+				body.add_child(links)
 		"live":
 			for s in live.sessions.values():
 				if str(s.get("mounted", "")) == uid:
@@ -4549,10 +4607,8 @@ func open_krew(focus: String = "") -> void:
 		return
 	_krew_focus = focus
 	_krew_sig = ""
-	# on a touch screen: a narrow layout (two lines a finding), so the dialog
-	# can be enlarged until its text is readable on a phone
 	var compact = touch != null and touch.active
-	var body = _open_modal("krew", focus, "KREW  //  OPERATIONS", Vector2(760, 800) if compact else Vector2(1260, 800))
+	var body = _open_modal("krew", focus, "KREW  //  OPERATIONS", Vector2(540, 0) if compact else Vector2(1260, 800), false, open_pause)
 	# the roster: every worker, what it is doing, and how many findings it holds
 	var roster = GridContainer.new()
 	roster.columns = 2 if compact else 4
@@ -4565,25 +4621,28 @@ func open_krew(focus: String = "") -> void:
 		sb.border_width_left = 4
 		pc.add_theme_stylebox_override("panel", sb)
 		var v = _col(2)
-		v.add_child(_lbl("%s  ·  %s" % [w["name"], w["role"]], 14, w["color"]))
+		v.add_child(_wrapped("%s  ·  %s" % [w["name"], w["role"]], 14, w["color"]))
 		var worst = krew.worst_of(id)
-		v.add_child(_lbl(krew.status_of(id), 12, SEV_COLORS.get(worst, Color(0.45, 0.85, 0.5)) if worst != "" else Color(0.45, 0.85, 0.5)))
-		var b = _btn("Only " + str(w["name"]).capitalize() if _krew_focus != id else "Showing", func(): open_krew("" if _krew_focus == id else id), "normal", true)
+		v.add_child(_wrapped(krew.status_of(id), 12, SEV_COLORS.get(worst, Color(0.45, 0.85, 0.5)) if worst != "" else Color(0.45, 0.85, 0.5)))
+		var filter_label = "Clear filter" if _krew_focus == id else ("Filter" if compact else "Only " + str(w["name"]).capitalize())
+		var b = _btn(filter_label, func(): open_krew("" if _krew_focus == id else id))
 		v.add_child(b)
 		pc.add_child(v)
-		pc.custom_minimum_size.x = 364 if compact else 296
+		pc.custom_minimum_size.x = 0 if compact else 296
+		pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		roster.add_child(pc)
 	body.add_child(roster)
 	var src = str(cluster.state.get("source", ""))
-	var bar = _row(8)
-	var info = bar
+	var bar: Container = HFlowContainer.new() if compact else _row(8)
+	var info: Container = bar
 	if compact:                     # the note on its own line, the buttons below it
 		info = _row(8)
 		body.add_child(info)
 	if src == "simulation":
 		info.add_child(_lbl("SIMULATED", 13, K.health_color("warn")))
-	info.add_child(_lbl("Nothing changes by itself: a proposed action runs only when you approve it." if compact else "Nothing here changes by itself: a proposed action runs only when you approve it.", 12, DIM))
-	bar.add_child(_spacer())
+	info.add_child(_wrapped("Proposed actions run after approval.", 12, DIM))
+	if not compact:
+		bar.add_child(_spacer())
 	if src in ["docker", "simulation"]:
 		bar.add_child(_btn("Scan images and volumes", func():
 			notify("Scrappy is scanning images and volumes...", "info")
@@ -4594,16 +4653,18 @@ func open_krew(focus: String = "") -> void:
 	bar.add_child(_btn("Export Markdown", func(): _krew_export("md")))
 	bar.add_child(_btn("Export JSON", func(): _krew_export("json")))
 	body.add_child(bar)
-	var cols = [["sev", "SEVERITY", 90], ["worker", "WORKER", 100], ["title", "FINDING", 300], ["age", "SEEN FOR", 100]] if compact else \
-		[["sev", "SEVERITY", 100], ["worker", "WORKER", 110], ["title", "FINDING", 560], ["resource", "RESOURCE", 260], ["age", "SEEN FOR", 110]]
-	body.add_child(_table_head("krew", cols, func(): _fill_krew(true), krew.findings.size()))
-	var sc = ScrollContainer.new()
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_krew_list = _col(4)
-	_krew_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(_krew_list)
-	body.add_child(sc)
+	if compact:
+		var filter = TouchFilter.new()
+		filter.placeholder_text = "Filter findings"
+		filter.text = _table_state("krew")["filter"]
+		filter.text_changed.connect(func(text):
+			_table_state("krew")["filter"] = text
+			_fill_krew(true))
+		body.add_child(filter)
+	else:
+		var cols = [["sev", "SEVERITY", 100], ["worker", "WORKER", 110], ["title", "FINDING", 560], ["resource", "RESOURCE", 260], ["age", "SEEN FOR", 110]]
+		body.add_child(_table_head("krew", cols, func(): _fill_krew(true), krew.findings.size()))
+	_krew_list = _menu_list(body, 4)
 	_fill_krew(true)
 
 func on_krew_changed() -> void:
@@ -4626,7 +4687,7 @@ func _fill_krew(force: bool) -> void:
 		var l = _lbl(("Nothing resolved yet." if _krew_history else ("All clear." if rows.is_empty() else "No finding contains that.")), 15, DIM)
 		_krew_list.add_child(l)
 		if krew.status_of("scrappy") == "images not scanned yet" and not _krew_history:
-			_krew_list.add_child(_lbl("Scrappy has not looked at images yet: use Scan images and volumes.", 13, DIM))
+			_krew_list.add_child(_wrapped("Scrappy has not looked at the images yet. Use Scan images and volumes.", 13, DIM))
 		return
 	for f in shown:
 		_krew_list.add_child(_krew_row(f))
@@ -4639,21 +4700,21 @@ func _krew_row(f: Dictionary) -> Control:
 	var v = _col(4)
 	pc.add_child(v)
 	var narrow = touch_u > 0.0          # touch: two lines, the finding wrapped under its heading
-	var tw = 700 if narrow else 1150     # width of wrapped text
+	var tw = 0 if narrow else 1150
 	var r = _row(10)
-	r.add_child(_fixed(_lbl(str(f["severity"]).to_upper(), 13, SEV_COLORS.get(f["severity"], DIM)), 90 if narrow else 100))
-	r.add_child(_fixed(_lbl(krew.worker(f["worker"]).get("name", f["worker"]), 13, krew.worker(f["worker"]).get("color", TXT)), 100 if narrow else 110))
+	var severity = _lbl(str(f["severity"]).to_upper(), 13, SEV_COLORS.get(f["severity"], DIM))
+	var worker = _wrapped(krew.worker(f["worker"]).get("name", f["worker"]), 13, krew.worker(f["worker"]).get("color", TXT))
+	r.add_child(severity if narrow else _fixed(severity, 100))
+	r.add_child(worker if narrow else _fixed(worker, 110))
 	var t = _lbl(str(f["title"]), 14)
 	var res = _lbl(str(f["resource"]), 12, DIM)
 	res.clip_text = true
 	var when = float(f.get("resolved_at", f["first_seen"]))
 	var age = _lbl(("resolved " if f.has("resolved_at") else "") + K.fmt_age(when), 12, DIM)
 	if narrow:
-		r.add_child(_fixed(res, 300))
-		r.add_child(age)
-		r.add_child(_spacer())
+		res.clip_text = false
+		res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		t.custom_minimum_size.x = tw
 	else:
 		t.clip_text = true
 		r.add_child(_fixed(t, 560))
@@ -4669,6 +4730,8 @@ func _krew_row(f: Dictionary) -> Control:
 	v.add_child(r)
 	if narrow:
 		v.add_child(t)
+		v.add_child(res)
+		v.add_child(age)
 	if not _krew_open.has(key):
 		return pc
 	for e in f["evidence"]:
@@ -4686,7 +4749,7 @@ func _krew_row(f: Dictionary) -> Control:
 		rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rl.custom_minimum_size.x = tw
 		v.add_child(rl)
-	var acts = _row(8)
+	var acts: Container = HFlowContainer.new() if narrow else _row(8)
 	var uids: Array = f.get("uids", []).filter(func(u): return world.machines.has(str(u)))
 	if not uids.is_empty():
 		acts.add_child(_btn("Go there", func():
@@ -4742,16 +4805,16 @@ func open_foreman() -> void:
 	var sc_keep = 0.0
 	if _modal_kind == "foreman" and is_instance_valid(_fm_scroll):
 		sc_keep = _fm_scroll.scroll_vertical
-	var narrow = touch_u > 0.0          # touch: a narrow layout, enlarged until readable
-	var tw = 720 if narrow else 1180     # width of wrapped text
-	var body = _open_modal("foreman", "", "FOREMAN  //  OPERATIONS", Vector2(760, 820) if narrow else Vector2(1260, 820))
+	var narrow = touch_u > 0.0
+	var tw = 0 if narrow else 1180
+	var body = _open_modal("foreman", "", "FOREMAN  //  OPERATIONS", Vector2(540, 0) if narrow else Vector2(1260, 820), false, open_pause)
 	var idn = foreman.identity()
-	var head = _row(10)
+	var head: Container = _col(6) if narrow else _row(10)
 	head.add_child(_lbl(str(idn["label"]).to_upper(), 16, idn["color"]))
-	var st = _lbl(foreman.status_line(), 13, K.health_color("bad") if foreman.status in ["offline", "unavailable"] else DIM)
-	st.clip_text = true
-	head.add_child(_fixed(st, 300 if narrow else 640))
-	head.add_child(_spacer())
+	var st = _wrapped(foreman.status_line(), 13, K.health_color("bad") if foreman.status in ["offline", "unavailable"] else DIM)
+	head.add_child(st if narrow else _fixed(st, 640))
+	if not narrow:
+		head.add_child(_spacer())
 	if foreman.available():
 		var names = ["Rules only"]
 		var current = "Rules only"
@@ -4782,8 +4845,8 @@ func open_foreman() -> void:
 	brief.custom_minimum_size.x = tw
 	body.add_child(brief)
 	if foreman.status in ["offline", "unavailable"]:
-		var off = _row(8)
-		off.add_child(_lbl("%s is not answering. Foreman keeps working from rules; nothing is sent anywhere else." % foreman.provider().get("name", "The provider"), 13, K.health_color("warn")))
+		var off: Container = _col(8) if narrow else _row(8)
+		off.add_child(_wrapped("%s is not answering. Foreman will use local rules." % foreman.provider().get("name", "The provider"), 13, K.health_color("warn")))
 		off.add_child(_btn("Use rules only", func(): foreman.select("")))
 		body.add_child(off)
 	# asking
@@ -4806,8 +4869,8 @@ func open_foreman() -> void:
 			ar.add_child(_btn("Ask", go, "primary", not cluster.state.is_empty()))
 		body.add_child(ar)
 		var ctx: String = foreman.build_context(cluster.state, krew)
-		var note = _row(8)
-		note.add_child(_lbl("Sends a redacted summary of this world (%d characters) and your question to %s%s. Nothing runs without your approval." % [ctx.length(), p["name"],
+		var note: Container = _col(8) if narrow else _row(8)
+		note.add_child(_wrapped("Sends a redacted summary of this world (%d characters) and your question to %s%s. Nothing runs without your approval." % [ctx.length(), p["name"],
 			" on this computer" if p.get("local", false) else ", in the cloud"], 12, DIM))
 		note.add_child(_btn("Hide what is sent" if _fm_show_context else "Show what is sent", func():
 			_fm_show_context = not _fm_show_context
@@ -4820,16 +4883,11 @@ func open_foreman() -> void:
 			te.custom_minimum_size = Vector2(tw, 160)
 			body.add_child(te)
 	elif foreman.available():
-		body.add_child(_lbl("To ask in plain words, add an AI provider (a local Ollama or LM Studio, OpenAI, Claude, or your own endpoint). The incidents below need no AI.", 12, DIM))
+		body.add_child(_wrapped("To ask in plain words, add an AI provider (a local Ollama or LM Studio, OpenAI, Claude, or your own endpoint). The incidents below need no AI.", 12, DIM))
 	else:
-		body.add_child(_lbl("This build has no companion, so Foreman works from rules only. AI providers need the desktop version.", 12, DIM))
-	var sc = ScrollContainer.new()
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var list = _col(6)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(list)
-	body.add_child(sc)
+		body.add_child(_wrapped("This build has no companion, so Foreman works from rules only. AI providers need the desktop version.", 12, DIM))
+	var list = _menu_list(body, 6)
+	var sc: ScrollContainer = _mobile_scroll if narrow else list.get_parent()
 	_fm_scroll = sc
 	(func(): if is_instance_valid(sc): sc.scroll_vertical = int(sc_keep)).call_deferred()
 	var last: Dictionary = foreman.last
@@ -4852,7 +4910,7 @@ func _foreman_answer(last: Dictionary) -> Control:
 	pc.add_child(v)
 	var ql = _lbl("You asked:  " + str(last["question"]), 13, DIM)
 	ql.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var aw = 700 if touch_u > 0.0 else 1140
+	var aw = 0 if touch_u > 0.0 else 1140
 	ql.custom_minimum_size.x = aw
 	v.add_child(ql)
 	if foreman.status == "asking":
@@ -4886,7 +4944,7 @@ func _foreman_answer(last: Dictionary) -> Control:
 		if why != "":
 			var wl = _lbl(why, 12, DIM)
 			wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			wl.custom_minimum_size.x = aw - 20
+			wl.custom_minimum_size.x = maxf(aw - 20, 0.0)
 			v.add_child(wl)
 	return pc
 
@@ -4903,17 +4961,14 @@ func _foreman_incident(inc: Dictionary) -> Control:
 	r.add_child(_fixed(_lbl(str(inc["severity"]).to_upper(), 13, SEV_COLORS.get(inc["severity"], DIM)), 80))
 	if not narrow:
 		r.add_child(_fixed(_lbl(str(inc["id"]), 12, DIM), 100))
-	var res = _lbl(str(inc["resource"]), 13)
-	res.clip_text = true
-	r.add_child(_fixed(res, 280))
+	var res = _wrapped(str(inc["resource"]), 13)
+	r.add_child(res if narrow else _fixed(res, 280))
 	var t = _lbl(str(inc["findings"][0]["title"]) + ("  (+%d more)" % (inc["findings"].size() - 1) if inc["findings"].size() > 1 else ""), 13)
-	var workers = _lbl(", ".join(PackedStringArray(inc["workers"].map(func(w): return str(w).capitalize()))), 12, DIM)
+	var workers = _wrapped(", ".join(PackedStringArray(inc["workers"].map(func(w): return str(w).capitalize()))), 12, DIM)
 	if narrow:
-		r.add_child(workers)
-		r.add_child(_spacer())
 		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		t.custom_minimum_size.x = 700
 		v.add_child(t)
+		v.add_child(workers)
 	else:
 		t.clip_text = true
 		r.add_child(_fixed(t, 470))
@@ -5063,14 +5118,75 @@ var _rebind_clash = {}             # a key already in use, waiting for a choice:
 var _settings_note = ""
 
 func open_settings() -> void:
-	var body = _open_modal("settings", null, "SETTINGS", Vector2(980, 820))
-	var sc = ScrollContainer.new()
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var col = _col(8)
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(col)
-	body.add_child(sc)
+	if touch_u > 0.0:
+		_open_touch_settings()
+		return
+	_open_keyboard_settings()
+
+func _touch_toggle(body: VBoxContainer, label: String, value: bool, change: Callable) -> void:
+	var toggle = CheckButton.new()
+	toggle.text = label
+	toggle.button_pressed = value
+	toggle.custom_minimum_size.y = 46
+	toggle.focus_mode = Control.FOCUS_NONE
+	toggle.toggled.connect(change)
+	body.add_child(toggle)
+
+func _open_touch_settings() -> void:
+	var body = _open_modal("touch_settings", null, "SETTINGS", Vector2(460, 0), false, open_pause)
+	var slider = func(label: String, lo: float, hi: float, step: float, value: float, fmt: String, change: Callable):
+		var row = _row()
+		row.add_child(_lbl(label, 15))
+		row.add_child(_spacer())
+		var current = _lbl(fmt % value, 14, DIM)
+		row.add_child(current)
+		body.add_child(row)
+		var bar = HSlider.new()
+		bar.min_value = lo
+		bar.max_value = hi
+		bar.step = step
+		bar.value = value
+		bar.custom_minimum_size.y = 46
+		bar.value_changed.connect(func(x):
+			current.text = fmt % x
+			change.call(x))
+		body.add_child(bar)
+	slider.call("Touch look speed", 0.4, 2.6, 0.1, touch.sensitivity, "%.1fx", func(x):
+		touch.sensitivity = x
+		_save_setting("touch_sensitivity", x))
+	slider.call("Field of view", 60.0, 110.0, 1.0, player.camera.fov, "%d°", func(x):
+		player.camera.fov = x
+		_save_setting("fov", x))
+	if Gfx.web() or not Gfx.lite():
+		body.add_child(_btn("Graphics", open_graphics))
+	_touch_toggle(body, "Sound", not sfx.muted, func(on):
+		sfx.set_muted(not on)
+		_save_setting("muted", not on))
+	_touch_toggle(body, "Minimap", bool(settings.get("minimap", true)), func(_on): toggle_minimap())
+	_touch_toggle(body, "Pipelines", world.show_belts, func(on):
+		world.show_belts = on
+		world.apply_state(cluster.state)
+		_save_setting("belts", on))
+	_touch_toggle(body, "Resource desk in the world", world._gauge.visible, func(on):
+		world.set_gauge_visible(on)
+		_save_setting("gauge_visible", on))
+	_touch_toggle(body, "Read-only mode", cluster.read_only, func(on):
+		cluster.read_only = on
+		on_state(cluster.state))
+	body.add_child(_btn("Toggle fullscreen", func():
+		var window = get_window()
+		window.mode = Window.MODE_WINDOWED if window.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
+		_save_setting("fullscreen", window.mode == Window.MODE_FULLSCREEN)))
+	body.add_child(_btn("Text editor", func(): open_editor()))
+	body.add_child(_btn("More settings", _open_keyboard_settings))
+
+func _open_keyboard_settings() -> void:
+	var body = _open_modal("settings", null, "SETTINGS", Vector2(980, 820), false, open_settings)
+	var col = _menu_list(body, 8)
+	if touch_u > 0.0:
+		col.add_child(_btn("Turn off touch controls", func():
+			touch.set_allowed(false)
+			open_pause()))
 	var slider = func(label: String, lo: float, hi: float, step: float, value: float, fmt: String, on_change: Callable):
 		var r = _row(10)
 		r.add_child(_fixed(_lbl(label, 13, DIM), 220))
@@ -5096,7 +5212,7 @@ func open_settings() -> void:
 	col.add_child(_btn("Invert look up / down:  %s" % ("ON" if player.invert_y else "OFF"), func():
 		player.invert_y = not player.invert_y
 		_save_setting("invert_y", player.invert_y)
-		open_settings()))
+		_open_keyboard_settings()))
 	if _settings_note != "":
 		col.add_child(_lbl(_settings_note, 13, K.health_color("warn")))
 	if not _rebind_clash.is_empty():
@@ -5125,7 +5241,7 @@ func open_settings() -> void:
 			_rebind = act
 			_rebind_clash = {}
 			_settings_note = "Press the new key or mouse button for %s. Esc cancels." % a[1]
-			open_settings(), "primary" if waiting else "normal")
+			_open_keyboard_settings(), "primary" if waiting else "normal")
 		b.custom_minimum_size.x = 200
 		r.add_child(b)
 		var x = _btn("×", func():
@@ -5134,7 +5250,7 @@ func open_settings() -> void:
 			Controls.set_bindings(act, [])
 			_keys_changed()
 			_settings_note = "%s has no key now." % a[1]
-			open_settings())
+			_open_keyboard_settings())
 		x.tooltip_text = "Unbind " + a[1]
 		x.disabled = names.is_empty()
 		r.add_child(x)
@@ -5147,7 +5263,7 @@ func open_settings() -> void:
 		_rebind_clash = {}
 		_settings_note = ""
 		_keys_changed()
-		open_settings()))
+		_open_keyboard_settings()))
 	col.add_child(kr)
 	# --- controller
 	col.add_child(_lbl("CONTROLLER", 15, ORANGE))
@@ -5168,7 +5284,7 @@ func open_settings() -> void:
 		_save_setting("ui_scale", x))
 	col.add_child(_btn("Apply interface size", func():
 		get_tree().root.content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
-		open_settings()))
+		_open_keyboard_settings()))
 	# --- accessibility
 	col.add_child(_lbl("ACCESSIBILITY: STATUS COLOURS", 15, ORANGE))
 	var al = _lbl("Every status is also written out; these change the colours of lamps, beacons, findings and tool tiers.", 12, DIM)
@@ -5188,7 +5304,7 @@ func open_settings() -> void:
 			K.palette = id
 			_save_setting("palette", id)
 			settings_changed.emit("palette")
-			open_settings(), "primary" if chosen else "normal"))
+			_open_keyboard_settings(), "primary" if chosen else "normal"))
 		col.add_child(r)
 	# --- the text editor
 	col.add_child(_lbl("TEXT EDITOR", 15, ORANGE))
@@ -5202,13 +5318,13 @@ func open_settings() -> void:
 			var on = str(settings.get(key, opt[2][0][0])) == val
 			er.add_child(_btn(("IN USE:  " if on else "") + ch[1], func():
 				_save_setting(key, val)
-				open_settings(), "primary" if on else "normal"))
+				_open_keyboard_settings(), "primary" if on else "normal"))
 		col.add_child(er)
 	var lr = _row(10)
 	lr.add_child(_fixed(_lbl("Line numbers", 14), 120))
 	lr.add_child(_btn("ON" if bool(settings.get("editor_lines", true)) else "OFF", func():
 		_save_setting("editor_lines", not bool(settings.get("editor_lines", true)))
-		open_settings()))
+		_open_keyboard_settings()))
 	lr.add_child(_btn("Open the editor", func(): open_editor()))
 	col.add_child(lr)
 	var back = _row(10)
@@ -5257,7 +5373,7 @@ func _resolve_clash(choice: String) -> void:
 	_rebind_clash = {}
 	_settings_note = ""
 	if c.is_empty() or choice == "cancel":
-		open_settings()
+		_open_keyboard_settings()
 		return
 	var key = Controls.name_of(c["binding"])
 	if choice == "move":
@@ -5269,4 +5385,4 @@ func _resolve_clash(choice: String) -> void:
 		Controls.set_bindings(c["action"], [c["binding"]])
 		_settings_note = "%s does both: %s and %s." % [key, Controls.title(c["action"]), ", ".join(PackedStringArray(c["others"].map(func(o): return Controls.title(o))))]
 	_keys_changed()
-	open_settings()
+	_open_keyboard_settings()

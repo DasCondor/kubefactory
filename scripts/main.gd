@@ -142,6 +142,7 @@ func _ready() -> void:
 		touch.main = self
 		touch.hud = hud
 		touch.player = player
+		touch.sensitivity = clampf(float(settings.get("touch_sensitivity", 1.0)), 0.4, 2.6)
 		hud.touch = touch
 		add_child(touch)
 		if _touch_forced:

@@ -73,8 +73,8 @@ func _run() -> void:
 		root.get_texture().get_image().save_png(screenshot)
 	print("Gauge readout: ", game.hud._gauge_readout.text.replace("\n", " | "))
 	if game.touch_on():
-		var center = game.hud._modal.get_child(1)
-		print("Gauge touch layout: viewport=", root.get_visible_rect().size, " window=", root.size, " unit=", game.hud.touch_u, " panel=", center.get_child(0).size, " scale=", center.scale)
+		var panel = game.hud._modal.get_child(1)
+		print("Gauge touch layout: viewport=", root.get_visible_rect().size, " window=", root.size, " unit=", game.hud.touch_u, " panel=", panel.size)
 		var outer = game.hud._gauge_scroll
 		ok = ok and outer != null and outer.get_v_scroll_bar().max_value > outer.get_v_scroll_bar().page
 		outer.scroll_vertical = int(outer.get_v_scroll_bar().max_value)

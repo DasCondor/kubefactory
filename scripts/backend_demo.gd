@@ -53,12 +53,16 @@ const FLAVORS = {
 # (`--demo=<id>`, the chooser on the welcome screen, or the pause menu).
 const DEMO_TYPES = [
 	{"id": "kubernetes", "flavor": "helmsman-sim", "name": "Kubernetes cluster",
+		"short_desc": "A web shop with checkout, a database, and monitoring.",
 		"desc": "A web shop on a four-node cluster: frontend, cart, checkout, database, monitoring. Two workloads are broken on purpose. The cloud variants (EKS, AKS, GKE, Rancher) are at the cluster gates."},
 	{"id": "home-assistant", "flavor": "home-assistant", "name": "Home Assistant",
+		"short_desc": "A smart home with cameras, sensors, and automations.",
 		"desc": "A smart home: Home Assistant, Mosquitto, Zigbee2MQTT, Z-Wave, ESPHome, Node-RED, Frigate cameras, voice, and its database and graphs. The Zigbee stick has gone missing and one image tag is mistyped."},
 	{"id": "dev-containers", "flavor": "dev-containers", "name": "Dev containers",
+		"short_desc": "A build farm with a Git server, CI runners, and a registry.",
 		"desc": "A build farm for compiling: Gitea, CI server and runners, BuildKit, a registry, compile caches, and a dev container per language (C++, Rust, Go, Python, Node). One heavy build keeps running out of memory."},
 	{"id": "media", "flavor": "homelab-media", "name": "Media suite",
+		"short_desc": "A Plex and Jellyfin lab with shared storage and VPN routes.",
 		"desc": "A k3s media lab with Plex, Jellyfin, Heimdall, and Grafana. Follow requests, index searches, VPN egress, downloads, library imports and playback metrics."},
 ]
 
