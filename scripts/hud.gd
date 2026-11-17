@@ -1093,6 +1093,21 @@ func _menu_list(body: VBoxContainer, gap: int, desktop_height: float = 0.0) -> V
 		body.add_child(sc)
 	return list
 
+class TouchFilter extends LineEdit:
+	var _last_text = ""
+
+	func _ready() -> void:
+		custom_minimum_size.y = 46
+		clear_button_enabled = true
+		_last_text = text
+		text_changed.connect(func(value): _last_text = value)
+		set_process(OS.has_feature("web"))
+
+	func _process(_delta: float) -> void:
+		# Godot 4.3's web keyboard assigns LineEdit.text without emitting text_changed.
+		if text != _last_text:
+			text_changed.emit(text)
+
 func open_network(uid: String = "", back: Callable = Callable()) -> void:
 	var mobile = touch_u > 0.0
 	var parent = back if back.is_valid() else open_pause
@@ -1904,19 +1919,18 @@ var _lv_pending = {}           # an endpoint waiting for its port-forward
 var _lv_rect: TextureRect = null
 var _lv_move_t = 0
 
-func open_liveview() -> void:
+func open_liveview(search: String = "") -> void:
 	var mobile = touch_u > 0.0
-	var body = _open_modal("livelist", null, "LIVEVIEW", Vector2(440, 0) if mobile else Vector2(1000, 640), false, open_pause)
+	var body = _open_modal("livelist", null, "DASHBOARDS" if mobile else "LIVEVIEW", Vector2(440, 0) if mobile else Vector2(1000, 640), false, open_pause)
 	var src = cluster.backend.label if cluster.backend != null else ""
 	if src == "simulation":
 		var intro = _wrapped("SIMULATED · Choose a pod to open its demo dashboard.", 15, DIM)
 		body.add_child(intro)
 		var query: LineEdit
 		if mobile:
-			query = LineEdit.new()
+			query = TouchFilter.new()
 			query.placeholder_text = "Find a pod"
-			query.clear_button_enabled = true
-			query.custom_minimum_size.y = 46
+			query.text = search
 			body.add_child(query)
 		var demo_rows = _menu_list(body, 6, 480)
 		var cards: Array[Control] = []
@@ -1924,13 +1938,23 @@ func open_liveview() -> void:
 			var row = _row(10)
 			row.set_meta("pod_name", str(ds["name"]).to_lower())
 			row.add_child(_wrapped(str(ds["name"])))
-			row.add_child(_btn("View", func(): open_screen(str(ds["uid"]), open_liveview), "primary"))
+			row.add_child(_btn("View", func():
+				var previous = query.text if query != null else ""
+				open_screen(str(ds["uid"]), func(): open_liveview(previous)), "primary"))
 			demo_rows.add_child(row)
 			cards.append(row)
 		if query != null:
-			query.text_changed.connect(func(text):
+			var no_matches = _wrapped("No matching pods.", 14, DIM)
+			demo_rows.add_child(no_matches)
+			var filter_cards = func(value: String):
+				var term = value.strip_edges().to_lower()
+				var any_match = false
 				for card in cards:
-					card.visible = text.strip_edges().to_lower() in str(card.get_meta("pod_name")))
+					card.visible = term in str(card.get_meta("pod_name"))
+					any_match = any_match or card.visible
+				no_matches.visible = not any_match
+			query.text_changed.connect(filter_cards)
+			filter_cards.call(search)
 		return
 	var intro = _lbl("Open a running application's own web page on a screen. It is the real page, drawn by this computer's browser engine in a private, throw-away profile, and it takes your mouse and keyboard.", 13, DIM)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -4630,11 +4654,9 @@ func open_krew(focus: String = "") -> void:
 	bar.add_child(_btn("Export JSON", func(): _krew_export("json")))
 	body.add_child(bar)
 	if compact:
-		var filter = LineEdit.new()
+		var filter = TouchFilter.new()
 		filter.placeholder_text = "Filter findings"
-		filter.custom_minimum_size.y = 46
 		filter.text = _table_state("krew")["filter"]
-		filter.clear_button_enabled = true
 		filter.text_changed.connect(func(text):
 			_table_state("krew")["filter"] = text
 			_fill_krew(true))

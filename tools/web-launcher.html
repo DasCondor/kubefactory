@@ -18,6 +18,7 @@
     [hidden] { display: none !important; }
     body { margin: 0; overscroll-behavior: none; }
     html.playing, html.playing body { overflow: hidden; }
+    html.playing body > :is(input, textarea) { font-size: 16px; }
     #canvas {
       position: fixed;
       inset: 0;
