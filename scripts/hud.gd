@@ -1950,7 +1950,7 @@ func open_liveview(search: String = "") -> void:
 				var term = value.strip_edges().to_lower()
 				var any_match = false
 				for card in cards:
-					card.visible = term in str(card.get_meta("pod_name"))
+					card.visible = term.is_empty() or term in str(card.get_meta("pod_name"))
 					any_match = any_match or card.visible
 				no_matches.visible = not any_match
 			query.text_changed.connect(filter_cards)

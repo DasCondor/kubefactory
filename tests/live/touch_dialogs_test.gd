@@ -143,6 +143,16 @@ func _run() -> void:
 	var look_slider = hud._modal.find_children("*", "HSlider", true, false)[0]
 	look_slider.value = 1.7
 	_check("Touch look speed updates and is saved", is_equal_approx(touch.sensitivity, 1.7) and is_equal_approx(float(hud.settings.get("touch_sensitivity", 0.0)), 1.7))
+	hud.open_liveview()
+	var search = hud._modal.find_children("*", "LineEdit", true, false)[0]
+	var count_views = func(): return hud._modal.find_children("*", "Button", true, false).filter(func(button): return button.text == "View" and button.is_visible_in_tree()).size()
+	var all_views = count_views.call()
+	_check("Dashboards lists every pod with a blank search", all_views > 0 and all_views == game.demo_screens.screens().size())
+	search.text_changed.emit("coredns")
+	var filtered = count_views.call()
+	_check("Dashboard search filters the pod list", filtered > 0 and filtered < all_views)
+	search.clear()
+	_check("Clearing search restores the pod list", count_views.call() == all_views)
 	var uid = game.cluster.state["pods"][0]["uid"]
 	for dialog in [["pause", hud.open_pause], ["vpn", hud.open_vpn], ["dashboard", func(): hud.open_screen(uid)]]:
 		dialog[1].call()
