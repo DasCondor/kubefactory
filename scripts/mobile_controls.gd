@@ -32,7 +32,7 @@ var active = false            # the controls are on screen and own the input
 var allowed = true            # the player's own on/off switch (menu)
 var sensitivity = 1.0
 
-var _u = 100.0                # one control unit, in canvas pixels (about 52 CSS px)
+var _u = 100.0                # one control unit in game coordinates
 var _css = 1.0                # canvas pixels -> CSS pixels
 var _vp = Vector2(1600, 900)
 var _margin = [0.0, 0.0, 0.0, 0.0]     # left, top, right, bottom: safe area
@@ -91,50 +91,60 @@ func set_allowed(on: bool) -> void:
 
 # ---- layout: sizes in units of one comfortable touch target
 
+func display_size() -> Vector2:
+	if OS.has_feature("web"):
+		var document = JavaScriptBridge.get_interface("document")
+		var bounds = document.getElementById("canvas").getBoundingClientRect()
+		return Vector2(float(bounds.width), float(bounds.height))
+	return Vector2(get_window().size)
+
 func _layout() -> void:
 	_vp = get_viewport().get_visible_rect().size
-	var win = Vector2(get_window().size)
-	_css = win.x / maxf(_vp.x, 1.0)
-	_u = clampf(52.0 / maxf(_css, 0.05), 56.0, 320.0)
-	if active and hud != null:
-		hud.set_touch(true, _u)
+	var win = display_size()
+	_css = maxf(win.x / maxf(_vp.x, 1.0), 0.01)
+	_u = clampf(minf(win.x, win.y) * 0.11, 36.0, 48.0) / _css
 	# the area clear of notches and home indicators, where the system reports one
 	var safe = DisplayServer.get_display_safe_area()
 	var screen = Vector2(DisplayServer.screen_get_size())
-	var k = 1.0 / maxf(_css, 0.05)
+	var k = _vp.x / maxf(screen.x, 1.0)
 	_margin = [0.0, 0.0, 0.0, 0.0]
 	if safe.size.x > 0 and screen.x > 0 and safe.size.x <= screen.x and safe.size.y <= screen.y:
 		_margin = [safe.position.x * k, safe.position.y * k, maxf(screen.x - safe.end.x, 0.0) * k, maxf(screen.y - safe.end.y, 0.0) * k]
 	for i in 4:
 		_margin[i] = clampf(_margin[i], 0.0, _u * 1.2) + _u * 0.22
+	if active and hud != null:
+		hud.set_touch(true, _u)
 	var portrait = _vp.y > _vp.x
 	var left = _margin[0]
 	var right = _vp.x - _margin[2]
 	var bottom = _vp.y - _margin[3]
 	var bar_h = _u * 0.95
-	var above_bar = bottom - (bar_h + _u * 0.3 if portrait else 0.0)
+	var above_bar = bottom - bar_h - _u * 0.3
 	_buttons.clear()
 	_stick_at = Vector2(left + _u * 1.55, above_bar - _u * 1.55)
 	_buttons["action"] = {"rect": Rect2(right - _u * 2.25, above_bar - _u * 2.25, _u * 2.1, _u * 2.1), "round": true}
 	_buttons["jump"] = {"rect": Rect2(right - _u * 3.75, above_bar - _u * 1.35, _u * 1.3, _u * 1.3), "round": true, "label": "JUMP"}
 	_buttons["aim"] = {"rect": Rect2(right - _u * 1.85, above_bar - _u * 3.85, _u * 1.3, _u * 1.3), "round": true, "label": "AIM"}
-	_buttons["menu"] = {"rect": Rect2(right - _u * 1.6, _margin[1], _u * 1.6, _u * 0.85), "label": "MENU"}
+	_buttons["menu"] = {"rect": Rect2(right - _u * 1.6, _margin[1], _u * 1.6, _u * 1.05), "label": "MENU"}
 	# the tool bar: bottom centre in landscape, the whole bottom edge in portrait
 	var names = ["SCANNER", "DATAPAD", "BUILD", "ALL TOOLS"]
-	var bw = (right - left - _u * 0.3 * 3) / 4.0 if portrait else _u * 1.7
-	var x0 = left if portrait else (_vp.x - (bw * 4 + _u * 0.25 * 3)) * 0.5
-	var gap = _u * 0.3 if portrait else _u * 0.25
+	var gap = _u * 0.18
+	var bw = (right - left - gap * 3) / 4.0
+	if not portrait:
+		bw = minf(bw, _u * 2.2)
+	var x0 = (left + right - (bw * 4 + gap * 3)) * 0.5
 	for i in 4:
 		_buttons["bar%d" % i] = {"rect": Rect2(x0 + i * (bw + gap), bottom - bar_h, bw, bar_h), "label": names[i]}
 	if _picker:
 		var all = ["SCANNER", "DATAPAD", "BUILD GUN", "WRENCH", "DISMANTLER", "DEMOLISHER"]
-		var cols = 3 if portrait else 6
-		var pw = (right - left - _u * 0.25 * (cols - 1)) / cols if portrait else _u * 1.9
-		var px0 = left if portrait else (_vp.x - (pw * cols + _u * 0.25 * (cols - 1))) * 0.5
+		var cols = 6 if right - left >= _u * 12.25 else 3
+		var pw = minf((right - left - gap * (cols - 1)) / cols, _u * 2.7)
+		var px0 = (left + right - (pw * cols + gap * (cols - 1))) * 0.5
 		var rows = int(ceil(6.0 / cols))
 		for i in 6:
 			var row = int(i / cols)
-			_buttons["tool%d" % i] = {"rect": Rect2(px0 + (i % cols) * (pw + _u * 0.25), bottom - bar_h - _u * 0.3 - (rows - row) * (bar_h + _u * 0.2), pw, bar_h), "label": all[i]}
+			var y = above_bar - _u * 3.95 - bar_h - (rows - row - 1) * (bar_h + gap)
+			_buttons["tool%d" % i] = {"rect": Rect2(px0 + (i % cols) * (pw + gap), y, pw, bar_h), "label": all[i]}
 	_pad.queue_redraw()
 
 func _process(_d: float) -> void:
@@ -314,14 +324,7 @@ func _draw_pad() -> void:
 			_pad.draw_rect(r, Color(0.957, 0.647, 0.227, 0.25) if chosen else fill)
 			_pad.draw_rect(r, col, false, maxf(_u * 0.03, 2.0))
 		var lines = label.split("\n")
-		var px = int(_u * (0.3 if id == "action" else 0.24))
+		var px = int(_u * (0.3 if id == "action" else 0.26))
 		for i in lines.size():
 			var y = r.get_center().y + px * 0.36 + (i - (lines.size() - 1) * 0.5) * px * 1.15
 			_pad.draw_string(font, Vector2(r.position.x, y), lines[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, px, Color(1, 1, 1, 0.95) if label != "" else Color(1, 1, 1, 0.35))
-	# always visible: this is the simulation
-	var chip = "SIMULATION  ·  nothing here is real"
-	var cpx = int(_u * 0.22)
-	var cw = font.get_string_size(chip, HORIZONTAL_ALIGNMENT_LEFT, -1, cpx).x + _u * 0.4
-	var cr = Rect2((_vp.x - cw) * 0.5, _margin[1], cw, _u * 0.5)
-	_pad.draw_rect(cr, Color(0.22, 0.15, 0.05, 0.85))
-	_pad.draw_string(font, Vector2(cr.position.x, cr.position.y + _u * 0.34), chip, HORIZONTAL_ALIGNMENT_CENTER, cw, cpx, Color(0.957, 0.647, 0.227))

@@ -401,6 +401,16 @@ func _process(delta: float) -> void:
 		pos += Vector3(0, 0.006, -0.012) * charge
 		if _index == 3:
 			rot.z += sin(_t * 10.0) * 0.22 * charge   # cranking the wrench
+	# A tall viewport narrows the perspective frustum around the held tool.
+	var viewport_size = get_viewport().get_visible_rect().size
+	var aspect = viewport_size.x / maxf(viewport_size.y, 1.0)
+	var fit = 1.0
+	if aspect < 1.25:
+		fit = (aspect / 1.25) * minf(1.0, tan(deg_to_rad(player.camera.fov * 0.5)) / tan(deg_to_rad(40.0)))
+		var portrait = clampf((1.25 - aspect) / 0.68, 0.0, 1.0)
+		pos.x *= fit * lerpf(1.0, 0.76, portrait)
+		pos.y += 0.03 * portrait * _raise  # keep the readout clear of the touch controls
+	_pivot.scale = Vector3.ONE * fit
 	_pivot.position = pos
 	_pivot.rotation = rot
 
