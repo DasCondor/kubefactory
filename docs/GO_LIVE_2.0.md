@@ -1,16 +1,14 @@
 # 2.0 go-live checklist
 
-<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.2 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.3 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.3) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
 
 What stands between the published beta and a stable 2.0.0. Status words as in
 [FEATURE_PARITY.md](FEATURE_PARITY.md): **verified live**, **verified in
 simulation**, **not tested**, **unsupported**.
 
-**Where things stand (2026-11-15):** `2.0.0-beta.2` is published as a
-pre-release with Windows, Linux and macOS packages, checksums and
-build-provenance attestations. `main` has fixes the beta does not have (see
-the Unreleased section of [CHANGELOG.md](CHANGELOG.md)), among them a crash
-when switching away from a KubeFactory server.
+**Where things stand (2026-11-17):** `2.0.0-beta.3` is the Windows, Linux and
+macOS pre-release with the new startup menu, mobile fixes and Media Suite
+updates. See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 Each item says what "done" looks like and what it needs. "Here" means it can
 be done on the development machine with throw-away infrastructure; anything

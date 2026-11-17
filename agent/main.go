@@ -27,7 +27,7 @@ import (
 	"sync"
 )
 
-const agentVersion = "2.0.0-beta.2"
+const agentVersion = "2.0.0-beta.3"
 
 type request struct {
 	ID   int64           `json:"id"`
