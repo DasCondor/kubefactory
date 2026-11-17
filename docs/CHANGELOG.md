@@ -1,8 +1,8 @@
 # Changelog
 
-<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.2 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.2) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
+<sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.3 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.3) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
 
-## Unreleased
+## 2.0.0-beta.3 (2026-11-17)
 
 ### Added
 
@@ -46,6 +46,14 @@
 
 ### Fixed
 
+- Startup shows the KubeFactory menu. The browser lets players pick a graphics
+  preset and shows loading progress before the demo opens.
+- Phone menus keep Back and Close within reach, with shortcuts to demos,
+  settings, dashboards and network views. The dashboard picker starts with the
+  complete list and accepts input from the phone keyboard on the web.
+- The browser fits the canvas, HUD, held tools and touch controls to the phone
+  viewport, including after rotation. Large scenes use single-threaded culling
+  in the Godot 4.3 web build.
 - VPN pipes enter labeled ports on the factory side of the Internet Output
   station. One WWW outlet leaves from the public side. The VPN panel lists each
   gateway's apps and can trace one, several, or all gateways in the factory.
