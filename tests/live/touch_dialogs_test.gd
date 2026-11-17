@@ -16,6 +16,26 @@ func _check(what: String, ok: bool, note = "") -> void:
 	if not ok:
 		_fails.append(what)
 
+func _button(hud: Node, caption: String) -> Button:
+	for node in hud._modal.find_children("*", "Button", true, false):
+		if node.text.strip_edges() == caption or node.tooltip_text == caption:
+			return node
+	return null
+
+func _tap(button: Button) -> void:
+	if button == null:
+		_check("A menu action is available to tap", false)
+		return
+	var at = root.get_final_transform() * (button.get_global_transform_with_canvas() * (button.size * 0.5))
+	for down in [true, false]:
+		var e = InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_LEFT
+		e.pressed = down
+		e.position = at
+		e.global_position = at
+		root.push_input(e)
+		await process_frame
+
 func _run() -> void:
 	var path = OS.get_user_data_dir().path_join("settings.json")
 	var before = FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
@@ -50,15 +70,24 @@ func _run() -> void:
 		d[1].call()
 		for i in 8:
 			await process_frame
-		var scroll = hud._modal.get_child(1)
+		var scroll = hud._mobile_scroll
 		var vp = root.get_visible_rect().size
-		_check("%s: scroll frame fits the viewport" % d[0], Rect2(Vector2.ZERO, vp).encloses(scroll.get_rect()), scroll.get_rect())
+		_check("%s: scroll frame fits the viewport" % d[0], Rect2(Vector2.ZERO, vp).encloses(scroll.get_global_rect()), scroll.get_global_rect())
 		_check("%s: stays upright" % d[0], is_zero_approx(scroll.rotation), scroll.rotation)
 		if d[0] == "demos":
 			_check("Demo cards use the available width", hud._demo_cards.columns == (2 if win.x >= 660.0 else 1))
 		# body text (13 px in the dialog) as drawn on the screen, in window pixels
 		var text_px = 13.0 * win.x / vp.x
 		_check("%s: body text at least 10 px on screen" % d[0], text_px >= 9.95,"%.1f px" % text_px)
+		if d[0] in ["settings", "demos", "pause", "vpn", "foreman", "krew"]:
+			_check("%s: fits without horizontal swiping" % d[0], not scroll.get_h_scroll_bar().visible)
+		var close = _button(hud, "Close")
+		var close_pos = close.get_global_rect()
+		scroll.scroll_vertical = int(scroll.get_v_scroll_bar().max_value)
+		await process_frame
+		_check("%s: Close stays pinned after scrolling" % d[0], root.get_visible_rect().encloses(close_pos) and close.get_global_rect().is_equal_approx(close_pos))
+		scroll.scroll_vertical = 0
+		await process_frame
 		if shots != "":
 			DirAccess.make_dir_recursive_absolute(shots)
 			root.get_texture().get_image().save_png(shots.path_join("touch_%s_%s.png" % [d[0], "upright" if upright else "sideways"]))
@@ -66,24 +95,14 @@ func _run() -> void:
 	hud.open_demos()
 	for i in 8:
 		await process_frame
-	var b: Button = null
-	for x in hud._modal.find_children("*", "Button", true, false):
-		if x.text.strip_edges() != "X":
-			b = x
-			break
+	var b = _button(hud, "Play")
+	if b == null:
+		b = _button(hud, "Resume")
 	var label = b.text.strip_edges()             # pressing it may close the dialog
 	var hit = [false]
 	b.pressed.connect(func(): hit[0] = true)
-	var at =root.get_final_transform() * (b.get_global_transform_with_canvas() * (b.size * 0.5))
-	for down in [true, false]:
-		var e = InputEventMouseButton.new()
-		e.button_index = MOUSE_BUTTON_LEFT
-		e.pressed = down
-		e.position = at
-		e.global_position = at
-		root.push_input(e)
-		await process_frame
-	_check("a tap on '%s' presses it" % label, hit[0], at.round())
+	await _tap(b)
+	_check("a tap on '%s' presses it" % label, hit[0])
 	hud.close_modal()
 	await process_frame
 	_check("closing restores the player's interface size", is_equal_approx(root.content_scale_factor, own), root.content_scale_factor)
@@ -101,11 +120,34 @@ func _run() -> void:
 	touch._begin(0, touch._buttons["menu"]["rect"].get_center())
 	touch._end(0)
 	_check("a fresh landscape tap still opens the menu", hud._modal_kind == "pause")
+	for i in 8:
+		await process_frame
+	await _tap(_button(hud, "Network"))
+	for i in 8:
+		await process_frame
+	_check("Network opens from the pause menu", hud._modal_kind == "network" and not hud._mobile_scroll.get_h_scroll_bar().visible)
+	await _tap(_button(hud, "Ports and readiness"))
+	for i in 8:
+		await process_frame
+	_check("Ports open from Network", hud._modal_kind == "ports" and not hud._mobile_scroll.get_h_scroll_bar().visible)
+	await _tap(_button(hud, "Back"))
+	for i in 8:
+		await process_frame
+	_check("Back from Ports returns to Network", hud._modal_kind == "network")
+	await _tap(_button(hud, "Back"))
+	_check("Back from Network returns to the pause menu", hud._modal_kind == "pause")
+	for i in 8:
+		await process_frame
+	await _tap(_button(hud, "Settings"))
+	_check("Settings opens the touch controls page", hud._modal_kind == "touch_settings")
+	var look_slider = hud._modal.find_children("*", "HSlider", true, false)[0]
+	look_slider.value = 1.7
+	_check("Touch look speed updates and is saved", is_equal_approx(touch.sensitivity, 1.7) and is_equal_approx(float(hud.settings.get("touch_sensitivity", 0.0)), 1.7))
 	var uid = game.cluster.state["pods"][0]["uid"]
 	for dialog in [["pause", hud.open_pause], ["vpn", hud.open_vpn], ["dashboard", func(): hud.open_screen(uid)]]:
 		dialog[1].call()
 		var modal: Control = hud._modal
-		var scroll = modal.get_child(1)
+		var scroll = hud._mobile_scroll
 		for size in [portrait, landscape]:
 			root.size = size
 			for i in 12:
@@ -113,7 +155,7 @@ func _run() -> void:
 			var turned = size == portrait
 			_check("%s reflows when turned %s" % [dialog[0], "to portrait" if turned else "to landscape"],
 				hud._modal == modal and touch.active and is_equal_approx(hud.touch_u, touch._u) and
-				is_zero_approx(scroll.rotation) and root.get_visible_rect().encloses(scroll.get_rect()), scroll.get_rect())
+				is_zero_approx(scroll.rotation) and root.get_visible_rect().encloses(scroll.get_global_rect()), scroll.get_global_rect())
 			if shots != "":
 				root.get_texture().get_image().save_png(shots.path_join("rotated_%s_%s.png" % [dialog[0], "portrait" if turned else "landscape"]))
 		hud.close_modal()
