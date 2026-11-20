@@ -65,6 +65,22 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
 - Read-only for another host is switched on when you connect; turning it off
   from the Esc menu is your choice, and only the proxy makes it binding.
 
+## Check from here
+
+- It checks from **this computer** only. A LAN or VLAN binding is shown with
+  the command to run from a client on that network; the game does not check
+  from other machines.
+- On Windows, a connection to a closed port is not reported as refused by the
+  engine: it times out after 3 seconds, and the result says a closed and a
+  firewalled port look the same from here. Linux and macOS report the refusal.
+- UDP is never checked: no reply cannot be told from a closed port.
+- HTTP is a single `HEAD /` request; only the status line is read.
+- A remote Docker engine's loopback and wildcard bindings are not checked:
+  they are on the other machine. Kubernetes Service and node ports are not
+  checked: the game does not read node addresses.
+- The browser build cannot open connections, so it offers only the demo
+  worlds' simulated check.
+
 ## Komodo
 
 - **A contributor checked the read requests against a real Komodo Core

@@ -26,6 +26,14 @@
   a container on a macvlan or ipvlan network shows its ports at its own LAN
   address, marked "listener unverified" since nothing is published; host
   networking and shared container networks are named as the mode.
+- **Check from here** in Ports and readiness: on request, one binding is
+  checked from this computer. It reports when, the TCP result (connected,
+  refused, timed out) and, separately, whether HTTP answered. UDP stays
+  unknown. For a LAN or VLAN binding it gives the command to repeat the check
+  from a client on that network. Every check is in the audit log. The demo
+  worlds simulate it; the browser build offers only the simulated check. On
+  Windows a closed port times out rather than being refused, and the result
+  says a closed and a firewalled port look the same from here.
 
 ### Fixed
 
