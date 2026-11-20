@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+scrape_config_files:
+  - /etc/prometheus/scrapes/*.yml
+rule_files:
+  - /etc/prometheus/alerts.yml
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+  - job_name: media-http
+    metrics_path: /probe
+    params:
+      module: [http]
+    static_configs:
+      - targets: ["http://plex:32400/identity"]
+        labels: {app: Plex}
+      - targets: ["http://seerr:5055/api/v1/settings/public"]
+        labels: {app: Seerr}
+      - targets: ["http://tautulli:8181/"]
+        labels: {app: Tautulli}
+      - targets: ["http://grafana:3000/api/health"]
+        labels: {app: Grafana}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+

@@ -27,7 +27,7 @@ if (Get-Process -Name "KubeFactory" -ErrorAction SilentlyContinue) {
 }
 
 New-Item -ItemType Directory -Force $Target | Out-Null
-$configs = @("policy.json", "catalogs.json", "log-providers.json", "portainer.json", "bob.json")
+$configs = @("policy.json", "catalogs.json", "log-providers.json", "portainer.json", "bob.json", "media-lab.json")
 foreach ($item in Get-ChildItem $src) {
     $dest = Join-Path $Target $item.Name
     if ($configs -contains $item.Name -and (Test-Path $dest) -and -not $ResetConfig) {

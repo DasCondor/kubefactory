@@ -4,11 +4,12 @@ extends RefCounted
 
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
+const StorageFiles = preload("res://scripts/storage_files.gd")
 
 var label = "docker"
 var poll_interval = 2.5
 var caps = {"remove_image": true, "scale": false, "delete_pod": true, "restart": true, "delete_workload": false,
-	"create": true, "cordon": false, "drain": false, "logs": true, "files": true}
+	"create": true, "cordon": false, "drain": false, "logs": true, "files": true, "file_write": true}
 var context = ""
 var log_cfg = {}
 var providers = [{"id": "kube", "name": "Docker Engine", "ready": true, "note": "docker logs"}]
@@ -87,7 +88,7 @@ func _inspect_all(rows: Array) -> void:
 		var fin = str(i.get("State", {}).get("FinishedAt", ""))
 		var finished = 0.0 if fin == "" or fin.begins_with("0001") else Time.get_unix_time_from_datetime_string(fin.get_slice(".", 0))
 		_inspect[str(i.get("Id", ""))] = {"state": str(i.get("State", {}).get("Status", "")), "sec": K.container_security(i), "store": K.container_storage(i),
-			"net": K.container_net(i), "finished": finished}
+			"net": K.container_net(i), "ports": K.container_ports(i), "finished": finished}
 
 # A VPN's outside address. Images that record it themselves (Gluetun writes
 # /tmp/gluetun/ip) are read with the container's own `head`, at most every
@@ -166,6 +167,7 @@ func fetch() -> Dictionary:
 				"reason": status_text, "ready": state == "running", "restarts": 0}],
 			"phase": "Running" if state == "running" else ("Succeeded" if status == "Completed" else ("Failed" if state in ["exited", "dead"] else "Pending")),
 			"finished": float(_inspect.get(str(c.get("ID", "")), {}).get("finished", 0.0)),
+			"docker_ports": _inspect.get(str(c.get("ID", "")), {}).get("ports"),
 			"sec": _inspect.get(str(c.get("ID", "")), {}).get("sec", K.empty_security()),
 			"store": _inspect.get(str(c.get("ID", "")), {}).get("store", K.empty_storage()),
 			"net": _inspect.get(str(c.get("ID", "")), {}).get("net", K.empty_net()).duplicate(true)})
@@ -256,10 +258,9 @@ func _tail(r: Dictionary) -> String:
 	var lines = all.split("\n")
 	return lines[lines.size() - 1]
 
-# ---- read-only storage inspection (the storage doors)
-# Uses only `docker inspect` and `docker exec <container> ls / head / dd` with
-# fixed arguments: nothing is mounted, started or written, and browsing stays
-# inside one of the container's own mounts.
+# ---- mounted storage inspection and guarded text-file saves
+# Browsing stays inside declared mounts; the shared writer checks and backs up
+# a regular file before replacing it. No helper containers or mounts are created.
 
 func _mounts(container: String) -> Array:
 	var r = _run(["inspect", "--format", "{{json .Mounts}}|{{.State.Running}}", container], false)
@@ -289,6 +290,25 @@ func _file_action(a: Dictionary) -> Dictionary:
 	var full = K.path_inside(a["root"], str(a.get("path", "")))
 	if full == "":
 		return {"ok": false, "kind": "invalid", "msg": "That path is outside the mounted volume.", "data": {}}
+	if a["op"] == "file_write":
+		if m.get("read_only", true):
+			return {"ok": false, "kind": "rbac", "msg": "This mount is read-only.", "data": {}}
+		var problem = StorageFiles.write_problem(a)
+		if problem != "":
+			return {"ok": false, "kind": "invalid", "msg": problem, "data": {}}
+		var read = a.duplicate()
+		read.merge({"op": "file_read", "page": 0}, true)
+		var current = _file_action(read)
+		if not current.get("ok", false):
+			return current
+		var bytes = Marshalls.base64_to_raw(str(current["data"]["data"]))
+		problem = StorageFiles.text_problem(bytes)
+		if problem != "" or bytes.size() != int(current["data"]["size"]):
+			return {"ok": false, "kind": "invalid", "msg": problem if problem != "" else "Reopen a complete UTF-8 text file of 64 KiB or less.", "data": {}}
+		var script = FileAccess.get_file_as_string("res://agent/storage_write.sh").replace("\r\n", "\n")
+		if script == "":
+			return {"ok": false, "kind": "unsupported", "msg": "The storage writer is missing from this build.", "data": {}}
+		return StorageFiles.docker_write(_args(["exec", "-i", a["name"], "sh", "-c", script, "kf-write", str(a["root"]).simplify_path(), full, a["expected"], str(str(a["text"]).to_utf8_buffer().size())]), a)
 	# no directory between the mount and the target may be a link
 	var chain = []
 	var p = full.get_base_dir()
@@ -322,6 +342,12 @@ func _file_action(a: Dictionary) -> Dictionary:
 	if st.code != 0 or f.size() < 5 or not st.out.begins_with("-"):
 		return {"ok": false, "kind": "invalid", "msg": "Only regular files can be previewed (links and devices are not followed).", "data": {}}
 	var size = f[4].to_int()
+	# ASCII transport keeps UTF-8 and binary bytes intact on Windows consoles.
+	var command = "head -c 65536 -- \"$1\" | base64" if page == 0 else "dd if=\"$1\" bs=65536 skip=\"$2\" count=1 2>/dev/null | base64"
+	var encoded = []
+	if OS.execute("docker", StorageFiles.cli_args(_args(["exec", a["name"], "sh", "-c", command, "kf-read", full, str(page)])), encoded, false) == 0 and not encoded.is_empty():
+		return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "size": size, "page": page, "pages": mini(int(ceil(size / 65536.0)), 256),
+			"data": str(encoded[0]).replace("\r", "").replace("\n", "")}}
 	var tmp = OS.get_user_data_dir().path_join("preview-%d.bin" % OS.get_process_id())
 	# `docker cp` would follow the file out of the container; a bounded read through exec does not
 	var args = ["exec", a["name"], "head", "-c", "65536", "--", full] if page == 0 else ["exec", a["name"], "dd", "if=" + full, "bs=65536", "skip=%d" % page, "count=1"]
@@ -332,7 +358,7 @@ func _file_action(a: Dictionary) -> Dictionary:
 		return {"ok": false, "kind": "rbac", "msg": "The container's user may not read this file.", "data": {}}
 	var text = str(out[0]) if out.size() > 0 else ""
 	return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "size": size, "page": page, "pages": mini(int(ceil(size / 65536.0)), 256),
-		"data": Marshalls.utf8_to_base64(text), "text_only": true}}
+		"data": Marshalls.utf8_to_base64(text) if text != "" else "", "text_only": true}}
 
 # "12.5MiB", "1.2kB", "3GB" -> bytes (docker stats mixes binary and decimal units)
 static func _size(s: String) -> Variant:
@@ -430,7 +456,7 @@ func _app_action(a: Dictionary) -> Dictionary:
 		# no --force: the engine refuses while any container still uses it
 		var rr = _run(["image", "rm", str(a.get("id", a["name"]))])
 		return {"ok": rr.code == 0, "msg": ("Removed image " + str(a["name"])) if rr.code == 0 else _tail(rr)}
-	if a["op"] in ["file_mounts", "file_list", "file_read"]:
+	if a["op"] in ["file_mounts", "file_list", "file_read", "file_write"]:
 		return _file_action(a)
 	match a["op"]:
 		"apply_app":

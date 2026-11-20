@@ -1,0 +1,18 @@
+modules:
+  tautulli:
+    http_client_config:
+      follow_redirects: false
+      http_headers:
+        X-Api-Key:
+          files: ["/run/secrets/tautulli-api-key"]
+    metrics:
+      - name: tautulli_session_count
+        help: Number of active Plex sessions.
+        path: "{.response.data.stream_count}"
+        valuetype: gauge
+        allow_missing_key: true
+      - name: tautulli_total_bandwidth_kbps
+        help: Estimated Plex playback bandwidth, in kilobits per second.
+        path: "{.response.data.total_bandwidth}"
+        valuetype: gauge
+        allow_missing_key: true

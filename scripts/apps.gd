@@ -55,7 +55,9 @@ static func find(id: String) -> Variant:
 	return null
 
 static func file_for(id: String, flavor: String) -> String:
-	return KU.data_path("apps/%s.%s.yaml" % [id, flavor])
+	var relative = "apps/%s.%s.yaml" % [id, flavor]
+	var external = KU.data_path(relative)
+	return external if FileAccess.file_exists(external) else "res://" + relative
 
 static func load_config() -> Dictionary:
 	var cfg = {"url": "", "api_key": "", "insecure_tls": false}

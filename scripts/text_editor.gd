@@ -1,6 +1,6 @@
 extends VBoxContainer
 # The in-game text editor: a plain, Notepad++-style editor for KubeFactory's
-# own settings files, and a read-only viewer for files from a container.
+# own settings files and text files from a mounted container volume.
 #
 #   theme        System (the default: follows the computer's light or dark
 #                mode), Light or Dark
@@ -10,11 +10,12 @@ extends VBoxContainer
 #   tools        find / replace, go to line, duplicate / delete / move a line,
 #                upper / lower case, trim trailing spaces, sort lines, comment
 #
-# A container's file opens read-only: storage inspection never writes. JSON is
-# checked before it is saved, and the file before the save is kept as .bak.
+# Mounted-file saves are confirmed by the backend before clearing the buffer.
+# JSON is checked before saving; local files keep their previous version as .bak.
 # Files that hold credentials are not offered (see hud.gd, editor_files()).
 
 signal closed
+signal save_requested(text)
 
 const THEMES = {
 	"dark": {"bg": Color(0.11, 0.12, 0.14), "text": Color(0.86, 0.88, 0.9), "line": Color(0.16, 0.17, 0.2), "num": Color(0.45, 0.48, 0.53),
@@ -33,6 +34,10 @@ var files: Array = []          # [[label, path]] that may be edited
 var path = ""
 var read_only = false
 var title = ""
+var remote_save = false
+var _saving = false
+var _pending_text = ""
+var _close_after_save = false
 
 var ed: CodeEdit
 var _file_pick: OptionButton
@@ -63,6 +68,7 @@ func setup(opts: Dictionary) -> void:
 	path = str(opts.get("path", ""))
 	read_only = bool(opts.get("read_only", false))
 	title = str(opts.get("title", ""))
+	remote_save = bool(opts.get("remote_save", false))
 	_build()
 	if opts.has("text"):
 		_load_text(str(opts["text"]))
@@ -94,9 +100,10 @@ func _pick(items: Array, current: String, cb: Callable) -> OptionButton:
 	o.item_selected.connect(func(i): cb.call(str(items[i][0])))
 	return o
 
-func _row() -> HBoxContainer:
-	var r = HBoxContainer.new()
-	r.add_theme_constant_override("separation", 8)
+func _row() -> HFlowContainer:
+	var r = HFlowContainer.new()
+	r.add_theme_constant_override("h_separation", 8)
+	r.add_theme_constant_override("v_separation", 6)
 	add_child(r)
 	_bars.append(r)
 	return r
@@ -188,8 +195,10 @@ func _build() -> void:
 	add_child(ed)
 	_nano_bar = Label.new()
 	_nano_bar.text = NANO_HELP
+	_nano_bar.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_nano_bar)
 	_status = Label.new()
+	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_status)
 
 # ---------------------------------------------------------------- settings and look
@@ -285,11 +294,13 @@ func modified() -> bool:
 	return not read_only and ed.text != _saved_text
 
 func save() -> bool:
+	if _saving:
+		return false
 	if read_only:
 		_msg = "Read-only: this file is not saved anywhere."
 		_refresh_status()
 		return false
-	if path == "":
+	if path == "" and not remote_save:
 		_msg = "Nothing to save to."
 		_refresh_status()
 		return false
@@ -300,6 +311,19 @@ func save() -> bool:
 			go_to_line(j.get_error_line())
 			_refresh_status()
 			return false
+	if remote_save:
+		var problem = preload("res://scripts/storage_files.gd").text_problem(ed.text.to_utf8_buffer())
+		if problem != "":
+			_msg = problem
+			_refresh_status()
+			return false
+		_saving = true
+		_pending_text = ed.text
+		_save_btn.disabled = true
+		_msg = "Waiting for save confirmation..."
+		_refresh_status()
+		save_requested.emit(_pending_text)
+		return false
 	if FileAccess.file_exists(path):
 		DirAccess.copy_absolute(path, path + ".bak")
 	var f = FileAccess.open(path, FileAccess.WRITE)
@@ -314,7 +338,29 @@ func save() -> bool:
 	_refresh_status()
 	return true
 
+func save_result(ok: bool, message: String) -> void:
+	if ok:
+		_saved_text = _pending_text
+	_saving = false
+	_save_btn.disabled = read_only
+	_msg = message
+	_refresh_status()
+	var should_close = _close_after_save and ok and not modified()
+	_close_after_save = false
+	if should_close:
+		closed.emit()
+
+func save_and_close() -> void:
+	if save():
+		closed.emit()
+	else:
+		_close_after_save = _saving
+
 func request_close() -> void:
+	if _saving:
+		_msg = "Finish or cancel the save before closing."
+		_refresh_status()
+		return
 	if modified():
 		_ask_close = true
 		_msg = "Unsaved changes.  Y: save and close   N: close without saving   any other key: keep editing"
@@ -456,12 +502,14 @@ func _on_key(ev: InputEvent) -> void:
 	if not (ev is InputEventKey) or not ev.pressed:
 		return
 	var k: InputEventKey = ev
+	if _saving:
+		ed.accept_event()
+		return
 	if _ask_close:
 		_ask_close = false
 		ed.accept_event()
 		if k.keycode == KEY_Y:
-			if save():
-				closed.emit()
+			save_and_close()
 		elif k.keycode == KEY_N:
 			_saved_text = ed.text
 			closed.emit()
@@ -688,8 +736,10 @@ func _vim_run(c: String) -> void:
 			_saved_text = ed.text
 			closed.emit()
 		"wq", "x":
-			if not modified() or save():
+			if not modified():
 				closed.emit()
+			else:
+				save_and_close()
 		"set nu", "set number": _set_opt("editor_lines", true)
 		"set nonu", "set nonumber": _set_opt("editor_lines", false)
 		"set wrap": _set_opt("editor_wrap", true)

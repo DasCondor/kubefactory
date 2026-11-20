@@ -30,7 +30,7 @@ const Remote = preload("res://scripts/backend_remote.gd")
 const LogSources = preload("res://scripts/log_sources.gd")
 const VIEW_OPS = ["logs", "events", "cluster_events", "templates"]
 # read-only operations that hand back data (not text): storage inspection and loopback forwards
-const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan", "vpn_check"]
+const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan", "vpn_check", "export_config"]
 const APP_OPS = ["apply_app", "remove_app", "portainer_install", "portainer_open", "deploy_template", "remove_template"]
 
 var backend = null
@@ -148,6 +148,14 @@ static func describe(a: Dictionary) -> String:
 			return "delete pod %s/%s" % [a["ns"], a["name"]]
 		"restart":
 			return "restart %s %s/%s" % [a["kind"], a["ns"], a.get("pod", a["name"])]
+		"lab_sync":
+			return "%s simulated file sync" % ("pause" if a.get("paused", false) else "resume")
+		"lab_import":
+			return "import one sample file into the simulated Plex library"
+		"lab_access":
+			return "set simulated Plex and Seerr bindings to %s" % a.get("access", "")
+		"lab_discord":
+			return "change the simulated Seerr alert route" if a.has("enabled") else "send a simulated Seerr alert"
 		"demo_update_image":
 			return "apply the simulated image update to %s/%s" % [a["ns"], a["name"]]
 		"delete_workload":
@@ -192,6 +200,8 @@ static func describe(a: Dictionary) -> String:
 			return "list files %s/%s:%s%s" % [a["ns"], a["name"], a["root"], ("/" + str(a["path"])) if str(a.get("path", "")) != "" else ""]
 		"file_read":
 			return "preview file %s/%s:%s/%s (page %d)" % [a["ns"], a["name"], a["root"], a["path"], int(a.get("page", 0))]
+		"file_write":
+			return "save file %s/%s:%s/%s" % [a["ns"], a["name"], a["root"], a["path"]]
 		"forward":
 			return "port-forward %s/%s:%d to loopback" % [a["ns"], a["service"], int(a["port"])]
 	return str(a["op"])
@@ -529,22 +539,22 @@ func _fetched(st: Dictionary, gen: int) -> void:
 			audit("ERROR polling cluster: " + _last_error)
 	state_updated.emit(state)
 
-func act(a: Dictionary) -> void:
+func act(a: Dictionary) -> bool:
 	if backend == null:
 		action_done.emit(false, "No data source connected yet")
-		return
+		return false
 	var view = a["op"] in VIEW_OPS or a["op"] in DATA_OPS
 	if not view:
 		if read_only:
 			audit("BLOCKED (read-only): " + describe(a))
 			action_done.emit(false, "Read-only mode is on (Esc menu to change)")
-			return
+			return false
 		if a["op"] == "deploy_template":
 			var problem = Apps.template_problem(a["template"]) if typeof(a.get("template")) == TYPE_DICTIONARY else "it is malformed"
 			if problem != "":
 				audit("BLOCKED (unsafe template): " + problem)
 				action_done.emit(false, "Refused: that template is not safe to build because " + problem)
-				return
+				return false
 		# guard rail 1: the tool-tier policy (cluster policy + local per-context rules)
 		var tier = K.tier_of(a, state)
 		var limit = max_tier(str(a.get("ns", "")))
@@ -552,7 +562,7 @@ func act(a: Dictionary) -> void:
 			audit("BLOCKED (policy, MK.%d > MK.%d): %s" % [tier, limit, describe(a)])
 			var why = "this namespace is protected" if limit < max_tier() else "your limit on this cluster is MK.%d" % limit
 			action_done.emit(false, "Policy: that is an MK.%d action and %s" % [tier, why])
-			return
+			return false
 		# guard rail 2: what your account is actually permitted to do
 		if not cap(a["op"]):
 			if backend.label == "kubernetes":
@@ -560,10 +570,11 @@ func act(a: Dictionary) -> void:
 				action_done.emit(false, "Your account (%s) is not permitted to do that on this cluster" % display_name())
 			else:
 				action_done.emit(false, "Not supported by the %s source" % backend.label)
-			return
+			return false
 	if not a.get("quiet", false):
 		audit(describe(a))
 	_spawn(_run_action.bind(backend, a, _gen))
+	return true
 
 func _run_action(b, a: Dictionary, gen: int) -> void:
 	var t0 = Time.get_ticks_msec()

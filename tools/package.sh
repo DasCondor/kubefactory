@@ -55,7 +55,7 @@ else
   (cd "$stage" && unzip -q "$root/dist/app.zip") && rm "$root/dist/app.zip"
 fi
 
-for f in README.md LICENSE docs/ADMIN.md docs/THIRDPARTY.md docs/SECURITY.md docs/KNOWN_LIMITATIONS.md docs/DOCKER_HOSTS.md docs/PLUGINS.md docs/SERVER.md \
+for f in README.md LICENSE media-lab.json docs/ADMIN.md docs/THIRDPARTY.md docs/SECURITY.md docs/KNOWN_LIMITATIONS.md docs/DOCKER_HOSTS.md docs/PLUGINS.md docs/SERVER.md \
          config/catalogs.json config/portainer.json config/log-providers.json config/policy.json config/bob.json; do
   [ -f "$root/$f" ] && cp "$root/$f" "$stage/"
 done

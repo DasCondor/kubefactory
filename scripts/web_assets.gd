@@ -14,7 +14,7 @@ signal progress(done_bytes, total_bytes)
 signal finished(ok, msg)
 
 const CATEGORIES = ["machines", "krew", "tools"]
-const EXTRA = ["pipe_straight", "conduit_elbow", "pipe_valve"]     # the belts' pipe kit (pipes.gd)
+const EXTRA = ["pipe_straight", "conduit_elbow", "pipe_valve", "shipping_container"]
 const PARALLEL = 4
 
 var base = ""

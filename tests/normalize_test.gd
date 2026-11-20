@@ -23,6 +23,21 @@ func _init():
 		"health": "warn", "ip": "127.0.0.1:8080->80/tcp, 53/udp"}]})
 	check.call("Docker port view distinguishes host bindings and marks unhealthy containers", docker_ports.map(func(r): return [r["scope"], r["status"]]),
 		[["Published host port", "Container unhealthy"], ["Container only", "Container unhealthy"]])
+	var stopped_bindings = K.container_ports({"Config": {"ExposedPorts": null},
+		"HostConfig": {"PortBindings": {
+			"80/tcp": [{"HostIp": "192.168.30.12", "HostPort": "8080"}, {"HostIp": "::1", "HostPort": "8080"}],
+			"22000/udp": [{"HostIp": "0.0.0.0", "HostPort": "22000"}]}}, "NetworkSettings": {"Ports": null}})
+	var stopped = K.port_rows({"source": "docker", "pods": [{"uid": "c2", "name": "media", "ready": false,
+		"labels": {"kubefactory.io/vlan-id": "30"}, "docker_ports": stopped_bindings}]})
+	check.call("stopped containers keep configured bind IPs and protocol", stopped.map(func(r): return [r["port"], r["scope"], r["group"], r["status"]]), [
+		["0.0.0.0:22000 → 22000/udp", "All interfaces", 0, "Container offline"],
+		["192.168.30.12:8080 → 80/tcp", "VLAN 30 (declared)", 0, "Container offline"],
+		["[::1]:8080 → 80/tcp", "Loopback", 1, "Container offline"]])
+	var actual = K.container_ports({"Config": {"ExposedPorts": {"80/tcp": {}, "53/udp": {}}},
+		"HostConfig": {"PortBindings": {"80/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}},
+		"NetworkSettings": {"Ports": {"80/tcp": [{"HostIp": "127.0.0.1", "HostPort": "49160"}], "53/udp": null}}})
+	check.call("active published port wins and exposed-only ports remain visible", actual,
+		[{"target": "80/tcp", "ip": "127.0.0.1", "published": "49160"}, {"target": "53/udp", "host_network": false}])
 	var shared_store = K.pod_storage({"volumes": [{"name": "library", "persistentVolumeClaim": {"claimName": "library"}}],
 		"containers": [{"name": "writer", "volumeMounts": [{"name": "library", "mountPath": "/output"}]},
 			{"name": "reader", "volumeMounts": [{"name": "library", "mountPath": "/input", "readOnly": true}]}]})
@@ -157,11 +172,15 @@ line2\" injected: true"]])
 	check.call("homelab runs sonarr and radarr", names.has("sonarr") and names.has("radarr"), true)
 	check.call("homelab runs grafana and cadvisor", names.has("grafana") and names.has("cadvisor"), true)
 	check.call("homelab has nothing failing", home["pods"].filter(func(x): return x["health"] == "bad").size(), 0)
-	check.call("demo types", Demo.DEMO_TYPES.size(), 4)
+	check.call("demo types", Demo.DEMO_TYPES.size(), 6)
 	check.call("demo id to flavor", Demo.demo_flavor("media") + " " + Demo.demo_flavor("home-assistant") + " " + Demo.demo_flavor("nope"), "homelab-media home-assistant ")
 	for dt in Demo.DEMO_TYPES:
 		var dst = Demo.new(dt["flavor"]).fetch()
-		check.call("demo %s has pods" % dt["id"], dst["pods"].size() > 8, true)
+		check.call("demo %s has machines" % dt["id"], not dst["pods"].is_empty(), true)
+	var media = Demo.new("docker-media").fetch()
+	check.call("single-host media lab app count", media["pods"].size(), 7)
+	check.call("single-host media lab node count", media["nodes"].size(), 1)
+	check.call("single-host media lab has no sync lever", media["lab"]["fixtures"].has("sync-switch"), false)
 	var ha = {}
 	for hp in Demo.new("home-assistant").fetch()["pods"]:
 		ha[hp["wname"]] = true

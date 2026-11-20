@@ -17,7 +17,12 @@ const Controls = preload("res://scripts/controls.gd")
 const Minimap = preload("res://scripts/minimap.gd")
 const Models = preload("res://scripts/models.gd")
 const Topology = preload("res://scripts/demo_topology.gd")
+const MediaLab = preload("res://scripts/demo_media_lab.gd")
+const LabConnections = preload("res://scripts/lab_connections.gd")
+const Configuration = preload("res://scripts/configuration.gd")
+const ConfigurationEditor = preload("res://scripts/configuration_editor.gd")
 const FlowPlanner = preload("res://scripts/flow_planner.gd")
+const BuildPlan = preload("res://scripts/build_plan.gd")
 const Agent = preload("res://scripts/agent.gd")
 const Native = preload("res://scripts/backend_native.gd")
 const Connections = preload("res://scripts/connections.gd")
@@ -51,6 +56,16 @@ var version = ""
 var _root: Control
 var _src: Label
 var _stats: Label
+var _lab_warning: Label
+var _lab_port_source = 0
+var _port_direction = "all"
+var _ports_parent = Callable()
+var _connection_graph
+var _configuration_editor
+var _yaml_namespace = ""
+var _porter_proposal = {}
+var _disk_volume = ""
+var _disks_parent = Callable()
 var _err: Label
 var _target: Label
 var _bp: Label
@@ -238,6 +253,9 @@ func _ready() -> void:
 	_err.visible = false
 	sv.add_child(_src)
 	sv.add_child(_stats)
+	_lab_warning = _lbl("", 13, ORANGE)
+	_lab_warning.hide()
+	sv.add_child(_lab_warning)
 	sv.add_child(_who)
 	sv.add_child(_err)
 	_status.add_child(sv)
@@ -462,7 +480,7 @@ func _table_head(key: String, cols: Array, refill: Callable, count: int = 0, fon
 	e.placeholder_text = "show only rows containing..."
 	if font_size != 12:
 		e.add_theme_font_size_override("font_size", font_size)
-	e.custom_minimum_size.x = 300
+	e.custom_minimum_size.x = 180 if touch_u > 0 and key == "storage" else 300
 	e.clear_button_enabled = true
 	fr.add_child(e)
 	if count >= K.TABLE_LIMIT:
@@ -556,6 +574,9 @@ func on_state(st: Dictionary) -> void:
 		ready, st["nodes"].size(), c["ok"], c["warn"], c["bad"], st["workloads"].size()]
 	if touch_u > 0.0:
 		_stats.text = "%d/%d nodes · %d pods running\n%d pending · %d failing" % [ready, st["nodes"].size(), c["ok"], c["warn"], c["bad"]]
+	if st.has("lab"):
+		_stats.text = "%d Docker %s · %d running · %d offline" % [ready, "host" if ready == 1 else "hosts", c["ok"], c["warn"] + c["bad"]]
+	_update_lab_warning(st)
 	_err.text = str(st["error"])
 	_err.visible = st["error"] != ""
 	refresh_who()
@@ -626,7 +647,7 @@ func _player_ui_scale() -> void:
 
 func close_modal(recapture: bool = true) -> void:
 	# the editor asks before unsaved changes are lost, however it is closed
-	if _modal_kind == "editor" and is_instance_valid(_editor) and _editor.modified() and not _editor_closing:
+	if _modal_kind == "editor" and is_instance_valid(_editor) and (_editor.modified() or _editor._saving) and not _editor_closing:
 		_editor.request_close()
 		return
 	_editor_closing = false
@@ -639,6 +660,7 @@ func close_modal(recapture: bool = true) -> void:
 			_fit_cb = Callable()
 			_player_ui_scale()           # a touch dialog enlarged the interface
 	_mobile_scroll = null
+	_connection_graph = null
 	_modal_kind = ""
 	_dyn = null
 	_dyn_sig = ""
@@ -735,6 +757,8 @@ func _open_modal(kind: String, arg, title: String, size: Vector2, pad: bool = fa
 
 func _refresh_modal() -> void:
 	match _modal_kind:
+		"connections":
+			_connection_graph.refresh(cluster.state)
 		"pod":
 			_fill_pod()
 		"codex":
@@ -745,6 +769,10 @@ func _refresh_modal() -> void:
 			_fill_service()
 		"ports":
 			_fill_ports()
+		"media_lab":
+			_fill_media_lab()
+		"shared_disks":
+			_fill_shared_disks()
 		"bob":
 			_fill_bob()
 		"gauge":
@@ -862,7 +890,7 @@ func on_logs(key: String, text: String) -> void:
 		_logs.scroll_vertical = _logs.get_line_count()
 
 # ----- the text editor (text_editor.gd): KubeFactory's own settings files, and
-# a container's file read-only from the storage browser
+# mounted text files from the storage browser
 const TextEditor = preload("res://scripts/text_editor.gd")
 var _editor: Node = null
 var _editor_closing = false
@@ -1113,6 +1141,8 @@ func open_network(uid: String = "", back: Callable = Callable()) -> void:
 	var parent = back if back.is_valid() else open_pause
 	var body = _open_modal("network", uid, "NETWORK AND SHARED DATA", Vector2(440, 0) if mobile else Vector2(820, 660), false, parent)
 	var state: Dictionary = cluster.state
+	var lab = state.has("lab")
+	var colors = MediaLab.COLORS if lab else Topology.COLORS
 	var sim: bool = state.get("source") == "simulation"
 	var pods: Array = state.get("pods", [])
 	var show_app_flows: bool = sim and not state.get("links", []).is_empty()
@@ -1120,38 +1150,69 @@ func open_network(uid: String = "", back: Callable = Callable()) -> void:
 		var controls: Container = _col(4) if mobile else _row(10)
 		controls.add_child(_lbl("SHOW IN THE FACTORY", 13, DIM))
 		var pick = OptionButton.new()
-		var filters = ["All", "Services and VPN", "Internet Output"]
-		if show_app_flows:
-			filters.append_array(["API", "Metrics", "Files"])
+		var filters = ["All"] if lab else ["All", "Services and VPN", "Internet Output"]
+		if show_app_flows or lab:
+			filters.append_array(colors.keys())
 		for filter in filters:
 			pick.add_item(filter)
 		pick.select(maxi(0, filters.find(world.pipe_filter)))
 		pick.item_selected.connect(func(index):
+			world.lab_trace.clear()
 			world.pipe_filter = filters[index]
 			world.apply_state(cluster.state))
 		controls.add_child(pick)
+		if lab:
+			controls.add_child(_btn("Show every route", func():
+				world.lab_trace.clear()
+				world.pipe_filter = "All"
+				world.show_belts = true
+				world.apply_state(cluster.state)
+				close_modal()))
 		body.add_child(controls)
 		if mobile:
 			pick.custom_minimum_size.y = 46
 	var tools: Container = HFlowContainer.new() if mobile else _row(8)
 	var to_network = func(): open_network(uid, parent)
+	tools.add_child(_btn("Edit / export YAML", open_map_yaml))
+	if lab:
+		tools.add_child(_btn("Visual whiteboard", func(): open_connections(uid, to_network), "primary"))
 	tools.add_child(_btn("Ports and readiness", func(): open_ports(uid, to_network), "primary"))
 	tools.add_child(_btn("Shared disk space", func(): open_shared_disks(uid, to_network)))
-	tools.add_child(_btn("VPN tunnels", func(): open_vpn(to_network)))
+	if not lab:
+		tools.add_child(_btn("VPN tunnels", func(): open_vpn(to_network)))
 	if mobile:
 		body.add_child(tools)
 	var list = _menu_list(body, 8, 490)
 	list.add_child(_wrapped("SIMULATED · Only configured demo routes are shown. Arrows follow requests, scrapes or files."
 		if sim else "Configured network attachments, Service selectors and detected VPNs. Application traffic requires flow telemetry.", 14, DIM))
-	for kind in ["API", "Metrics", "Files"]:
+	if lab and state["nodes"].size() > 1:
+		list.add_child(_wrapped("The private management VLAN 40 carries only the shown API calls, metrics scrapes, and file sync between hosts.", 14, DIM))
+	elif lab and state["lab"]["gathered"]:
+		list.add_child(_wrapped("Media and gathering services share this host's private Docker bridge. Only the shown ports are published.", 14, DIM))
+	for kind in colors:
 		var heading_added = false
 		for link in state.get("links", []):
 			if link["kind"] != kind or (uid != "" and uid not in [link["from"], link["to"]]):
 				continue
 			if not heading_added:
-				list.add_child(_lbl(kind.to_upper(), 14, Topology.COLORS[kind]))
+				list.add_child(_lbl(kind.to_upper(), 14, colors[kind]))
 				heading_added = true
-			list.add_child(_wrapped("%s → %s · %s%s" % [link["from_name"], link["to_name"], link["what"], "" if link["ready"] else " · offline"]))
+			var status = ""
+			if not link["ready"]:
+				status = " · offline"
+				if lab and kind == "LAN" and state["lab"]["access"] == "Loopback":
+					status = " · loopback only"
+				elif lab and kind == "Files" and state["lab"]["paused"]:
+					status = " · paused"
+			list.add_child(_wrapped("%s → %s · %s%s" % [link["from_name"], link["to_name"], link["what"], status]))
+			if lab:
+				list.add_child(_btn("Trace %s → %s" % [link["from_name"], link["to_name"]], func():
+					world.lab_trace = [link["from"], link["to"], link["kind"]]
+					world.pipe_filter = "All"
+					world.show_belts = true
+					world.apply_state(cluster.state)
+					close_modal()
+					notify("Tracing %s → %s" % [link["from_name"], link["to_name"]], "info")))
 	if sim and state.get("context") == "homelab-media":
 		list.add_child(_wrapped("Orange pipes show file imports. Downloaders write to /downloads. Arr apps import into /media. Plex and Jellyfin read the library.", 13, Topology.COLORS["Files"]))
 	list.add_child(_lbl("NETWORK ATTACHMENTS", 14, ORANGE))
@@ -1175,7 +1236,7 @@ func open_network(uid: String = "", back: Callable = Callable()) -> void:
 			for svc in state.get("services", []):
 				if svc["ns"] == pod["ns"] and K.selects(svc["selector"], pod["labels"]):
 					items.append("Service " + str(svc["name"]) + " → pod")
-		if sim:
+		if sim and not lab:
 			var mounts = Topology.volumes(pod["ns"], pod["wname"])
 			for claim in mounts:
 				var peers = []
@@ -1189,13 +1250,275 @@ func open_network(uid: String = "", back: Callable = Callable()) -> void:
 	if not mobile:
 		body.add_child(tools)
 
-func open_shared_disks(uid: String = "", back: Callable = Callable()) -> void:
+func _update_lab_warning(st: Dictionary) -> void:
+	var warnings = PackedStringArray()
+	if st.has("lab"):
+		var threshold = float(settings.get("storage_warn_pct", 87))
+		for disk in K.shared_disks(st):
+			var pct = 100.0 * float(disk["used"]) / float(disk["capacity"])
+			if pct > threshold:
+				warnings.append("%s %.1f%%" % [disk["label"].get_slice(" · ", 1), pct])
+	_lab_warning.text = "DISK WARNING · " + "\n".join(warnings)
+	_lab_warning.visible = not warnings.is_empty()
+
+func open_connections(uid: String = "", back: Callable = Callable()) -> void:
+	if not cluster.state.has("lab"):
+		return
+	var viewport_size = get_viewport().get_visible_rect().size
+	var body = _open_modal("connections", uid, "CONNECTION WHITEBOARD", Vector2(440, 0) if touch_u > 0 else viewport_size - Vector2(32, 32), false, back if back.is_valid() else open_media_lab)
+	body.add_child(_wrapped("SIMULATED · Select a card to trace or inspect it. Double-click an app or storage card to open its config / storage files. Drag cards or pan blank space on touch.", 13, DIM))
+	var graph = LabConnections.new()
+	_connection_graph = graph
+	graph.configure(settings.get("lab_whiteboard", {}))
+	graph.selected_uid = uid
+	graph.endpoint_activated.connect(func(selected):
+		if K.find_pod(cluster.state, selected) != null or MediaLab.DISKS.has(str(selected).trim_prefix("lab:")):
+			open_connection_files(selected, func(): open_connections(selected, back)))
+	var controls = HFlowContainer.new()
+	var category = OptionButton.new()
+	var categories = ["All", "Reporting", "Storage", "LAN / VLAN", "Internet / VPN"]
+	for value in categories:
+		category.add_item(value)
+	category.select(categories.find(graph.category))
+	category.item_selected.connect(func(index):
+		graph.category = categories[index]
+		graph.refresh(cluster.state)
+		graph.fit_routes.call_deferred())
+	controls.add_child(category)
+	controls.add_child(_btn("Fit board", graph.fit_routes))
+	controls.add_child(_btn("Spider layout", func():
+		graph.layout.clear()
+		graph.arrange_spider()
+		graph.fit_routes.call_deferred()))
+	controls.add_child(_btn("Edit / export YAML", open_map_yaml))
+	controls.add_child(_btn("Config / storage files", func():
+		var selected = graph.selected_uid
+		open_connection_files(selected, func(): open_connections(selected, back))))
+	controls.add_child(_btn("+", func(): graph.zoom = minf(2.0, graph.zoom * 1.25)))
+	controls.add_child(_btn("-", func(): graph.zoom = maxf(0.08, graph.zoom / 1.25)))
+	controls.add_child(_btn("Show every route", func():
+		graph.category = "All"
+		category.select(0)
+		graph.refresh(cluster.state)
+		world.lab_trace.clear()
+		world.pipe_filter = "All"
+		world.show_belts = true
+		world.apply_state(cluster.state)
+		graph.fit_routes.call_deferred()))
+	controls.add_child(_btn("Save whiteboard", func():
+		var config = {"category": graph.category, "layout_style": "spider", "layout": graph.layout.duplicate(true)}
+		_save_setting("lab_whiteboard", config)
+		world._lab_board.get_meta("graph").configure(config)
+		world._update_lab_board(cluster.state)
+		var saved = K.load_settings().get("lab_whiteboard", {}) == config
+		notify("Whiteboard layout saved on this device." if saved else "Whiteboard updated for this session. Device settings could not be saved.", "info" if saved else "warn")))
+	controls.add_child(_btn("Trace selected", func():
+		var selected = graph.selected_uid
+		if selected == "":
+			notify("Select an app or storage card first.", "info")
+			return
+		world.lab_trace = cluster.state["links"].filter(func(link): return selected in [link["from"], link["to"]]).map(func(link): return [link["from"], link["to"], link["kind"]])
+		world.pipe_filter = "All"
+		world.show_belts = true
+		world.apply_state(cluster.state)
+		close_modal()))
+	controls.add_child(_btn("Inspect selected", func():
+		var selected = graph.selected_uid
+		var return_to_board = func(): open_connections(selected, back)
+		if selected.begins_with("lab:") and MediaLab.DISKS.has(selected.trim_prefix("lab:")):
+			open_shared_disks("", return_to_board, selected.trim_prefix("lab:"))
+		elif selected.begins_with("lab:"):
+			open_ports("", return_to_board, "inbound" if selected == "lab:lan" else "outbound")
+		elif selected != "":
+			open_ports(selected, return_to_board)
+		else:
+			notify("Select an app or storage card first.", "info")))
+	body.add_child(controls)
+	var legend = HFlowContainer.new()
+	for kind in MediaLab.COLORS:
+		legend.add_child(_lbl(("Storage mounts" if kind == "Mounts" else kind) + "  ", 13, MediaLab.COLORS[kind]))
+	body.add_child(legend)
+	graph.custom_minimum_size.y = 400 if touch_u > 0 else maxf(240, viewport_size.y - 250)
+	graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(graph)
+	graph.refresh(cluster.state)
+	graph.fit_routes.call_deferred()
+	var find_card = OptionButton.new()
+	find_card.add_item("Find app / storage...")
+	find_card.set_item_metadata(0, "")
+	var ids = graph.cards.keys()
+	ids.sort_custom(func(a, b): return graph.cards[a].title < graph.cards[b].title)
+	for id in ids:
+		find_card.add_item(graph.cards[id].title)
+		find_card.set_item_metadata(find_card.item_count - 1, id)
+	find_card.item_selected.connect(func(index):
+		if index == 0:
+			return
+		var selected: String = find_card.get_item_metadata(index)
+		if not graph.cards.has(selected):
+			graph.category = "All"
+			category.select(0)
+			graph.refresh(cluster.state)
+		graph.select_endpoint(selected)
+		graph.focus_selected())
+	controls.add_child(find_card)
+
+func open_connection_files(uid: String, back: Callable = Callable()) -> void:
+	if not uid.begins_with("lab:"):
+		if K.find_pod(cluster.state, uid) != null:
+			open_storage(uid, back)
+		else:
+			notify("Select an app or storage card first.", "info")
+		return
+	var volume = uid.trim_prefix("lab:")
+	var mounts = []
+	for pod in cluster.state.get("pods", []):
+		for mount in pod.get("store", {}).get("shared_mounts", []):
+			if mount.get("name", "") == volume:
+				mounts.append({"uid": pod["uid"], "pod": pod["name"], "path": mount["path"], "container": mount.get("container", ""), "read_only": mount.get("read_only", true)})
+	if mounts.is_empty():
+		notify("This boundary has no mounted files. Select an app or data container.", "info")
+		return
+	if mounts.size() == 1:
+		open_storage(mounts[0]["uid"], back, mounts[0])
+		return
+	var body = _open_modal("storage_access", uid, "SHARED FILES  //  " + volume, Vector2(650, 430), false, back)
+	body.add_child(_wrapped("These apps use the same storage. Choose an access path; read-only mounts stay read-only."))
+	if back.is_valid():
+		body.add_child(_btn("Back to whiteboard", back))
+	for mount in mounts:
+		body.add_child(_btn("%s · %s · %s" % [mount["pod"], mount["path"], "read-only" if mount["read_only"] else "read / write"], func(): open_storage(mount["uid"], back, mount)))
+
+func open_media_lab() -> void:
+	if not cluster.state.has("lab"):
+		return
+	var body = _open_modal("media_lab", null, "DOCKER MEDIA LAB", Vector2(460, 0) if touch_u > 0.0 else Vector2(750, 660), false, open_pause)
+	var tools = HFlowContainer.new()
+	tools.add_child(_btn("Visual whiteboard", func(): open_connections("", open_media_lab), "primary"))
+	tools.add_child(_btn("Block builder", open_blueprint_graph))
+	tools.add_child(_btn("Visit whiteboard", func():
+		var point: Vector3 = world._lab_board.global_position
+		close_modal()
+		player.flying = true
+		player.teleport(point + Vector3(0, 4.3, 13), point + Vector3(0, 6.6, 0))))
+	tools.add_child(_btn("View the factory", func():
+		var wide: bool = world.platforms.size() > 1
+		var depth = 0.0
+		for platform in world.platforms.values():
+			depth = maxf(depth, platform.depth)
+		var viewport_size = get_viewport().get_visible_rect().size
+		var distance = 1.25 * maxf(1.0, 1.6 * viewport_size.y / viewport_size.x)
+		var target = Vector3(0, 4, world.FRONT_Z - depth * 0.5)
+		var offset = Vector3(0, 33, 40) if wide else Vector3(0, maxf(22, depth * 0.7), maxf(29, depth * 0.85))
+		close_modal()
+		player.flying = true
+		player.teleport(target + offset * distance, target)))
+	tools.add_child(_btn("Trace connections", func(): open_network("", open_media_lab), "primary"))
+	tools.add_child(_btn("Ports and readiness", func(): open_ports("", open_media_lab)))
+	tools.add_child(_btn("Storage and mounts", func(): open_shared_disks("", open_media_lab)))
+	body.add_child(tools)
+	var threshold = _row()
+	threshold.add_child(_wrapped("Show disk warning over (%)", 14))
+	var percent = SpinBox.new()
+	percent.min_value = 0
+	percent.max_value = 100
+	percent.value = float(settings.get("storage_warn_pct", 87))
+	percent.value_changed.connect(func(value):
+		_save_setting("storage_warn_pct", int(value))
+		_update_lab_warning(cluster.state))
+	threshold.add_child(percent)
+	body.add_child(threshold)
+	_dyn = _menu_list(body, 8, 420)
+	_fill_media_lab()
+
+func _lab_operate(a: Dictionary, label: String) -> void:
+	guarded_act(a, label + "?", "")
+
+func _lab_allowed(op: String) -> bool:
+	return cluster.cap(op) and not cluster.read_only and K.tier_of({"op": op}, cluster.state) <= cluster.max_tier()
+
+func use_lab_lever() -> void:
+	var lab: Dictionary = cluster.state.get("lab", {})
+	if not lab.get("sync_ready", false) or not _lab_allowed("lab_sync"):
+		open_media_lab()
+		return
+	var pause = not bool(lab["paused"])
+	_lab_operate({"op": "lab_sync", "paused": pause}, "Pause file sync" if pause else "Resume file sync")
+
+func _fill_media_lab() -> void:
+	var lab: Dictionary = cluster.state.get("lab", {})
+	if lab.is_empty():
+		return
+	var sig = str(lab) + str(cluster.read_only) + str(cluster.max_tier())
+	if sig == _dyn_sig:
+		return
+	_dyn_sig = sig
+	_clear(_dyn)
+	var layout = "Single media host"
+	if lab["gathered"]:
+		layout = "Media host and gathering node" if cluster.state["nodes"].size() > 1 else "Single host · full media and gathering stack"
+	_dyn.add_child(_wrapped("SIMULATED · " + layout, 15, ORANGE))
+	if lab["gathered"]:
+		_dyn.add_child(_wrapped("Host count is set in media-lab.json. Restart the game after editing the config.", 13, DIM))
+	_dyn.add_child(_wrapped("Follow the color-coded pipes from LAN / VLAN IN to the apps, and out through WWW OUT. Inspect a machine for its dashboard. Use Trace connections to highlight a route."))
+	var access = OptionButton.new()
+	var bindings = ["Loopback", "LAN", "VLAN 30"]
+	for binding in bindings:
+		access.add_item(binding)
+	access.select(bindings.find(lab["access"]))
+	access.disabled = not _lab_allowed("lab_access")
+	access.item_selected.connect(func(i):
+		access.select(bindings.find(lab["access"]))
+		_lab_operate({"op": "lab_access", "access": bindings[i]}, "Set Plex and Seerr to " + bindings[i]))
+	_dyn.add_child(_wrapped("Plex 32400/tcp and Seerr 5055/tcp bindings. Reporting stays local."))
+	_dyn.add_child(access)
+	if lab["gathered"]:
+		var sync_status = "Paused" if lab["paused"] else ("Copying" if lab["transfer"] else ("Ready" if lab["sync_ready"] else "Offline"))
+		_dyn.add_child(_wrapped("FILE SYNC · " + sync_status, 15, ORANGE))
+		_dyn.add_child(_wrapped("The downloader queues a 512 MiB sample every 20 seconds. Each sync takes about 4 seconds. Import moves the received sample into the Plex library.", 13, DIM))
+		_dyn.add_child(_wrapped("%d queued · %d ready to import · %d synced in the last hour (%s)\nLast sync %s · last import %s" % [
+			lab["queued"], lab["inbox"], lab["recent_count"], K.fmt_bytes(lab["recent_bytes"]), K.fmt_age(lab["last_sync"]), K.fmt_age(lab["last_import"])]))
+		var controls = HFlowContainer.new()
+		controls.add_child(_btn("Resume sync" if lab["paused"] else "Pause sync", use_lab_lever, "mk3", lab["sync_ready"] and _lab_allowed("lab_sync")))
+		controls.add_child(_btn("Import one file", func(): _lab_operate({"op": "lab_import"}, "Import one sample file"), "mk2", lab["inbox"] > 0 and _lab_allowed("lab_import")))
+		controls.add_child(_btn("Visit the sync lever", func():
+			var point: Vector3 = world.lab_fixtures["sync-switch"].global_position
+			close_modal()
+			player.flying = false
+			player.teleport(point + Vector3(0, 0.2, 4.3), point + Vector3(0, 1.3, 0.6))))
+		_dyn.add_child(controls)
+	_dyn.add_child(_wrapped("DISCORD ALERTS · %s" % ("Enabled" if lab["discord"] else "Disabled"), 15, ORANGE))
+	if lab["last_alert"] > 0:
+		_dyn.add_child(_wrapped("Sample request approved · delivered to simulated Discord · " + K.fmt_age(lab["last_alert"])))
+	var discord = HFlowContainer.new()
+	discord.add_child(_btn("Send simulated Seerr alert", func(): _lab_operate({"op": "lab_discord"}, "Send a simulated alert"), "", lab["discord"] and _lab_allowed("lab_discord")))
+	discord.add_child(_btn("Disable alert route" if lab["discord"] else "Enable alert route", func(): _lab_operate({"op": "lab_discord", "enabled": not lab["discord"]}, "Change simulated Discord route"), "", _lab_allowed("lab_discord")))
+	_dyn.add_child(discord)
+
+func open_shared_disks(uid: String = "", back: Callable = Callable(), volume: String = "") -> void:
 	var body = _open_modal("shared_disks", uid, "SHARED DISK SPACE", Vector2(440, 0) if touch_u > 0.0 else Vector2(800, 650), false, back)
+	_disk_volume = volume
+	_disks_parent = back
+	if back.is_valid():
+		body.add_child(_btn("Back", back))
 	var simulated = cluster.state.get("source") == "simulation"
 	body.add_child(_wrapped("One disk total per backing volume. Each mount shows the container, its directory, and its access." +
 		(" Usage comes from the demo's sample files." if simulated else ""), 14, DIM))
-	var list = _menu_list(body, 9)
-	for disk in K.shared_disks(cluster.state):
+	_dyn = _menu_list(body, 9)
+	_fill_shared_disks()
+
+func _fill_shared_disks() -> void:
+	var uid: String = _modal_arg
+	var volume: String = _disk_volume
+	var disks = K.shared_disks(cluster.state)
+	var sig = str(disks)
+	if sig == _dyn_sig:
+		return
+	_dyn_sig = sig
+	_clear(_dyn)
+	for disk in disks:
+		if volume != "" and disk["label"].get_slice(" · ", 1) != volume:
+			continue
 		if uid != "" and not disk["mounts"].any(func(m): return m["uid"] == uid):
 			continue
 		var card = PanelContainer.new()
@@ -1206,16 +1529,50 @@ func open_shared_disks(uid: String = "", back: Callable = Callable()) -> void:
 		for mount in disk["mounts"]:
 			lines.add_child(_wrapped("%s / %s · %s · %s" % [mount["pod"], mount["container"], K.tidy_text(mount["path"]),
 				"Read-only" if mount["read_only"] else "Read/write"], 13, DIM))
+			var return_to_disks = open_shared_disks.bind(uid, _disks_parent, volume)
+			lines.add_child(_btn("Browse files" if mount["read_only"] else "Browse / edit files", func(): open_storage(mount["uid"], return_to_disks, mount)))
 		card.add_child(lines)
-		list.add_child(card)
-	if list.get_child_count() == 0:
-		list.add_child(_wrapped("No shared backing volumes are reported for this view.", 14, DIM))
+		_dyn.add_child(card)
+	if _dyn.get_child_count() == 0:
+		_dyn.add_child(_wrapped("No shared backing volumes are reported for this view.", 14, DIM))
 
-func open_ports(uid: String = "", back: Callable = Callable()) -> void:
+func open_ports(uid: String = "", back: Callable = Callable(), direction: String = "all") -> void:
 	var body = _open_modal("ports", uid, "PORTS AND READINESS", Vector2(440, 0) if touch_u > 0.0 else Vector2(800, 650), false, back)
+	var tools = HFlowContainer.new()
+	if back.is_valid():
+		tools.add_child(_btn("Back", back))
+	if K.find_pod(cluster.state, uid) != null:
+		tools.add_child(_btn("Config / storage files", func(): open_storage(uid, open_ports.bind(uid, back, direction))))
+	if tools.get_child_count() > 0:
+		body.add_child(tools)
+	else:
+		tools.free()
+	_port_direction = direction
+	_ports_parent = back
+	if direction == "inbound":
+		_lab_port_source = 1
 	var simulated = cluster.state.get("source") == "simulation"
-	body.add_child(_wrapped("Each row shows the configured port and which pods or containers are ready. " +
-		("Port status follows the simulation." if simulated else "Live reachability requires a connection check."), 14, DIM))
+	body.add_child(_wrapped("Bindings show where a port is configured. Status follows the backend. " +
+		("This is a simulation." if simulated else "Check reachability from the client network. VLAN labels describe the intended network."), 14, DIM))
+	if cluster.state.has("lab"):
+		body.add_child(_wrapped("Device listeners accept incoming connections. Outbound requests use separate app-initiated connections.", 13, DIM))
+		var view = OptionButton.new()
+		var directions = ["all", "inbound", "outbound"]
+		for caption in ["All device ports and routes", "Device ingress", "Outbound connections"]:
+			view.add_item(caption)
+		view.select(maxi(0, directions.find(direction)))
+		view.item_selected.connect(func(index):
+			_port_direction = directions[index]
+			_fill_ports())
+		body.add_child(view)
+		var probe = OptionButton.new()
+		for source in ["From the media host", "From the media LAN", "From media VLAN 30"]:
+			probe.add_item(source)
+		probe.select(_lab_port_source)
+		probe.item_selected.connect(func(index):
+			_lab_port_source = index
+			_fill_ports())
+		body.add_child(probe)
 	_dyn = _menu_list(body, 8)
 	_fill_ports()
 
@@ -1223,25 +1580,82 @@ func _fill_ports() -> void:
 	var rows = K.port_rows(cluster.state)
 	if _modal_arg != "":
 		rows = rows.filter(func(r): return _modal_arg in r["pods"])
-	var sig = JSON.stringify(rows)
+	var sim_lab = cluster.state.has("lab")
+	var outbound: Array = cluster.state.get("lab", {}).get("egress", [])
+	if _modal_arg != "":
+		outbound = outbound.filter(func(route): return route["uid"] == _modal_arg)
+	var sig = JSON.stringify(rows) + JSON.stringify(outbound) + _port_direction + (str(_lab_port_source) if sim_lab else "")
 	if sig == _dyn_sig:
 		return
 	_dyn_sig = sig
 	_clear(_dyn)
-	if rows.is_empty():
+	if sim_lab and _port_direction == "inbound":
+		rows = rows.filter(func(row): return row["group"] < 2)
+	if sim_lab and _port_direction == "outbound":
+		rows = []
+	if rows.is_empty() and (not sim_lab or _port_direction != "outbound"):
 		_dyn.add_child(_wrapped("This view has no configured ports to report.", 14, DIM))
-	for row in rows:
+	for group in K.PORT_GROUPS.size():
+		var bindings = rows.filter(func(r): return r["group"] == group)
+		if bindings.is_empty():
+			continue
+		_dyn.add_child(_wrapped("%s (%d)" % [K.PORT_GROUPS[group], bindings.size()], 14, DIM))
+		for row in bindings:
+			var card = PanelContainer.new()
+			var color = K.health_color(row["health"])
+			var style = _sb(BG2, color, 0, 9)
+			style.border_width_left = 4
+			card.add_theme_stylebox_override("panel", style)
+			var lines = _col(5)
+			lines.add_child(_wrapped(row["name"], 15))
+			lines.add_child(_wrapped("%s   ·   %s" % [row["port"], row["scope"]], 14, DIM))
+			lines.add_child(_wrapped(row["status"], 14, color))
+			if sim_lab:
+				var matching = row["scope"] == "Media LAN" if _lab_port_source == 1 else (row["scope"].begins_with("VLAN 30") if _lab_port_source == 2 else row["group"] <= 1)
+				var result = "No published route from this source"
+				if matching:
+					result = "Reachable" if row["health"] == "ok" else "Listener offline"
+				lines.add_child(_wrapped("Simulated probe · " + result, 13, color if matching else DIM))
+				if outbound.any(func(route): return route["uid"] in row["pods"]):
+					var previous_uid: String = _modal_arg
+					var previous_direction = _port_direction
+					var parent = _ports_parent
+					var return_to_ports = func(): open_ports(previous_uid, parent, previous_direction)
+					lines.add_child(_btn("Device outbound routes", func(): open_ports(row["pods"][0], return_to_ports, "outbound")))
+			card.add_child(lines)
+			_dyn.add_child(card)
+	if not sim_lab or _port_direction == "inbound":
+		return
+	_dyn.add_child(_wrapped("OUTBOUND CONNECTIONS", 14, ORANGE))
+	for route in outbound:
 		var card = PanelContainer.new()
-		var color = K.health_color(row["health"])
-		var style = _sb(BG2, color, 0, 9)
-		style.border_width_left = 4
-		card.add_theme_stylebox_override("panel", style)
+		var color = K.health_color("ok" if route["ready"] else "bad")
+		card.add_theme_stylebox_override("panel", _sb(BG2, color, 0, 9))
 		var lines = _col(5)
-		lines.add_child(_wrapped(row["name"], 15))
-		lines.add_child(_wrapped("%s   ·   %s" % [row["port"], row["scope"]], 14, DIM))
-		lines.add_child(_wrapped(row["status"], 14, color))
+		var destination = "WWW OUT" if route["target"] == "www" else "Discord"
+		var path = route["app"] + (" → " + route["via"] if route["via"] != "" else "") + " → " + destination
+		lines.add_child(_wrapped(path, 15))
+		lines.add_child(_wrapped("Device listener · " + str(route["listener_port"]), 13, DIM))
+		if route["via"] != "":
+			lines.add_child(_wrapped("App source port · ephemeral · through Gluetun\nVPN outer tunnel → simulated endpoint %s · %s" % [route["port"], route["scope"]], 14))
+		else:
+			lines.add_child(_wrapped("Outbound source port · %s → destination %s · %s" % [route["source_port"], route["port"], route["scope"]], 14))
+		lines.add_child(_wrapped("Available (simulated)" if route["ready"] else "Blocked · source or VPN gateway offline", 13, color))
+		var trace: Array = route["trace"].duplicate(true)
+		for entry in cluster.state["lab"]["gateway_ports"]["lan"]:
+			if entry["uid"] == route["uid"] and entry["reachable"]:
+				trace.push_front(entry["trace"][0])
+		lines.add_child(_btn("Trace device route", func():
+			world.lab_trace = trace
+			world.pipe_filter = "All"
+			world.show_belts = true
+			world.apply_state(cluster.state)
+			close_modal()
+			notify("Tracing " + path, "info"), "", not trace.is_empty()))
 		card.add_child(lines)
 		_dyn.add_child(card)
+	if outbound.is_empty():
+		_dyn.add_child(_wrapped("No outbound routes are reported for this device.", 14, DIM))
 
 func _fill_pod() -> void:
 	var st = cluster.state
@@ -1437,9 +1851,10 @@ func open_codex() -> void:
 	body.add_child(sc)
 	_fill_codex()
 
-func open_blueprint_graph() -> void:
-	var body = _open_modal("planner", null, "CLUSTER CONTROL  //  FLOWCHART", Vector2(1160, 685))
-	body.add_child(_wrapped("Plan app calls, metrics, file movement and VPN egress. VLAN fields record the intended tags.", 14, DIM))
+func open_blueprint_graph(selected: String = "") -> void:
+	var viewport_size = get_viewport().get_visible_rect().size
+	var body = _open_modal("planner", null, "BLOCK BUILDER  //  LOCAL PLAN", Vector2(440,0) if touch_u > 0 else viewport_size-Vector2(32,32),false,open_media_lab if cluster.state.has("lab") else open_codex)
+	body.add_child(_wrapped("Plan locally in the graph or factory blocks. Grid cells snap; cubes are output sockets and spheres are inputs. VLAN tags record intent. Save and export for review before any deployment.", 13, DIM))
 	var toolbar = HFlowContainer.new()
 	body.add_child(toolbar)
 	var planner = FlowPlanner.new()
@@ -1448,15 +1863,84 @@ func open_blueprint_graph() -> void:
 	var saved = settings.get("flowchart", {})
 	if saved is Dictionary and saved.has("nodes"):
 		planner.restore(saved)
+	elif cluster.state.has("lab"):
+		planner.model.from_state(cluster.state)
+		planner.view.fit.call_deferred()
+		planner.fit_graph.call_deferred()
 	else:
 		planner.load_preset(cluster.state.get("context") == "homelab-media")
+	if selected != "":
+		planner.select_block(selected)
+	planner.inspect_observed.connect(func(uid):
+		_save_setting("flowchart",planner.snapshot())
+		if K.find_pod(cluster.state,uid) != null:
+			open_network(uid,open_blueprint_graph)
+		elif uid.begins_with("lab:"):
+			open_connection_files(uid,open_blueprint_graph)
+		else:
+			planner.status.text = "The source workload is not present in the current connection.")
+	toolbar.add_child(_btn("Copy current map", func(): planner.model.from_state(cluster.state); planner.view.fit.call_deferred(); planner.fit_graph.call_deferred()))
 	toolbar.add_child(_btn("Media preset", func(): planner.load_preset(true)))
 	toolbar.add_child(_btn("Shop preset", func(): planner.load_preset(false)))
 	toolbar.add_child(_btn("Add workload", planner.add_workload))
 	toolbar.add_child(_btn("Remove selected", planner.remove_selected))
 	toolbar.add_child(_btn("Save locally", func():
 		_save_setting("flowchart", planner.snapshot())
-		planner.status.text = "Saved this flowchart on this device.", "primary"))
+		_save_setting("show_build_plan",true)
+		world.show_build_plan(planner.snapshot())
+		planner.status.text = "Saved the graph and factory blocks on this device.", "primary"))
+	toolbar.add_child(_btn("Visit factory plan",func():
+		_save_setting("flowchart",planner.snapshot())
+		_save_setting("show_build_plan",true)
+		world.show_build_plan(planner.snapshot())
+		var bounds: AABB = world._build_blocks.bounds
+		var center: Vector3 = world._build_blocks.global_position+bounds.get_center()
+		close_modal()
+		player.flying = true
+		player.teleport(center+Vector3(0,maxf(20,bounds.size.length()*0.65),maxf(30,bounds.size.length()*0.75)),center)))
+	toolbar.add_child(_btn("Plan JSON",func():
+		_save_setting("flowchart",planner.snapshot())
+		open_configuration_yaml(JSON.stringify(planner.snapshot(),"  "),"build-plan.json")
+		var panel = _configuration_editor
+		var apply = _btn("Use this plan",func():
+			var parsed = JSON.parse_string(panel.editor.ed.text)
+			var plan = BuildPlan.migrate(parsed) if parsed is Dictionary else {}
+			var problem = BuildPlan.problem(plan)
+			if problem != "":
+				panel._status.text = problem
+				return
+			_save_setting("flowchart",plan)
+			panel.editor._saved_text = panel.editor.ed.text
+			open_blueprint_graph())
+		panel.get_child(0).add_child(apply)))
+	toolbar.add_child(_btn("Compose preview",func():
+		_save_setting("flowchart",planner.snapshot())
+		open_configuration_yaml(Configuration.yaml(Configuration.compose_plan(planner.snapshot()))+"\n","compose-planned.yaml")))
+	toolbar.add_child(_btn("Edit / export YAML", func():
+		_save_setting("flowchart",planner.snapshot())
+		open_configuration_yaml(Configuration.flowchart_yaml(planner.snapshot()), "planned-configuration.yaml")))
+
+func open_configuration_yaml(text: String = "", filename: String = "configuration.yaml") -> void:
+	var viewport_size = get_viewport().get_visible_rect().size
+	var title = "BUILD PLAN JSON" if filename.ends_with(".json") else ("DOCKER COMPOSE PREVIEW" if filename.begins_with("compose") else "KUBERNETES / K3S YAML")
+	var body = _open_modal("editor", "configuration", title, Vector2(440, 0) if touch_u > 0 else viewport_size - Vector2(32, 32))
+	var panel = ConfigurationEditor.new()
+	body.add_child(panel)
+	panel.setup(text, filename, settings, _save_setting)
+	_configuration_editor = panel
+	_editor = panel.editor
+	panel.closed.connect(func():
+		_editor_closing = true
+		close_modal())
+
+func open_map_yaml() -> void:
+	if cluster.state.get("source") == "kubernetes" and cluster.backend.label == "kubernetes":
+		_yaml_namespace = world.ns_filter
+		var body = _open_modal("configuration_wait", null, "READING CONFIGURATION", Vector2(500, 180))
+		body.add_child(_wrapped("Reading the visible workloads and Services for review..."))
+		cluster.act({"op": "export_config", "key": "configuration:export", "quiet": true})
+	else:
+		open_configuration_yaml(Configuration.draft(cluster.state), "map-configuration.yaml")
 
 func _namespaces() -> Array:
 	var seen = {}
@@ -1819,40 +2303,87 @@ func _komodo_call(op: String, args: Dictionary, done: Callable) -> void:
 			done.call(r)).call_deferred())
 
 # ----- storage: what is behind a machine's service door.
-# A read-only look at the pod's (or container's) mounted volumes: what is mounted
-# where, directory listings, and bounded previews. Nothing is ever written, no
-# file is opened until it is picked, and secret volumes are listed but not read.
+# Mounted volumes, bounded previews and confirmed writes of small text files.
+# No file is opened until picked; secret volumes are listed but never read.
 
 signal storage_modules(uid, mounts)
 
 var _store = {}
+var _file_editor_key = ""
 
-func open_storage(uid: String) -> void:
+func open_storage(uid: String, back: Callable = Callable(), preferred: Dictionary = {}) -> void:
 	var p = K.find_pod(cluster.state, uid)
 	if p == null:
 		notify("That machine is gone already", "warn")
 		return
-	var body = _open_modal("storage", uid, "STORAGE  //  " + str(p["name"]), Vector2(1000, 700))
+	var body = _open_modal("storage", uid, "STORAGE  //  " + str(p["name"]), Vector2(440, 0) if touch_u > 0 else Vector2(1120, 760), false, back)
 	# dock the panel to the right so the open door and its bays stay in view
 	_modal.get_child(0).color.a = 0.12
-	if touch_u <= 0.0:
+	if touch_u <= 0.0 and not back.is_valid():
 		_modal.get_child(1).anchor_left = 0.36
 	var sim = cluster.backend != null and cluster.backend.label == "simulation"
-	var note = _lbl("Read-only. Files are listed and previewed in pages of 64 KiB; nothing is copied, changed or sent anywhere." +
-		("   SIMULATED: this listing is invented by the demo." if sim else ""), 12, K.health_color("warn") if sim else DIM)
+	if back.is_valid():
+		body.add_child(_btn("Back", back))
+	var note = _lbl("Browse mounted files. Complete UTF-8 text files up to 64 KiB can be edited on writable mounts with MK.3 access. Saves keep a backup and check for newer changes." +
+		("   SIMULATED: edits last until this demo closes." if sim else ""), 12, K.health_color("warn") if sim else DIM)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.custom_minimum_size.x = 950
 	body.add_child(note)
 	_dyn = _col(8)
 	_dyn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(_dyn)
-	_store = {"uid": uid, "ns": p["ns"], "pod": p["name"], "mounts": null, "mount": {}, "path": "", "list": null, "file": null, "error": "", "busy": true}
-	cluster.act({"op": "file_mounts", "ns": p["ns"], "name": p["name"], "key": "store:%s:mounts" % uid})
+	_store = {"uid": uid, "ns": p["ns"], "pod": p["name"], "mounts": null, "mount": {}, "path": "", "list": null, "file": null, "error": "", "busy": true, "back": back, "preferred": preferred, "request": str(Time.get_ticks_usec())}
+	cluster.act({"op": "file_mounts", "ns": p["ns"], "name": p["name"], "key": "store:%s:mounts:%s" % [uid, _store["request"]]})
 	_fill_storage()
 
+func _edit_storage_file(text: String, read_only: bool = false) -> void:
+	var state = _store.duplicate(true)
+	var file_path = str(state["file"]["path"])
+	var body = _open_modal("editor", file_path, "MOUNTED FILE  //  " + file_path.get_file(), Vector2(440, 0) if touch_u > 0 else Vector2(1250, 840))
+	var te = TextEditor.new()
+	var restore = func():
+		_editor_closing = true
+		close_modal()
+		open_storage(state["uid"], state["back"], state["mount"])
+	var tools = HFlowContainer.new()
+	tools.add_child(_btn("Back to files", func(): te.request_close()))
+	body.add_child(tools)
+	body.add_child(_wrapped("%s/%s · %s:%s/%s%s" % [state["ns"], state["pod"], state["mount"]["container"], state["mount"]["path"], file_path,
+		" · read-only preview" if read_only else " · Save asks before changing this mounted file; the app may need a reload."], 13, DIM))
+	body.add_child(te)
+	te.setup({"settings": settings, "save_setting": _save_setting, "path": file_path, "text": text, "title": file_path, "read_only": read_only, "remote_save": not read_only})
+	_editor = te
+	te.closed.connect(restore)
+	_file_editor_key = "fileedit:%d" % Time.get_ticks_usec()
+	var target = {"op": "file_write", "key": _file_editor_key, "ns": state["ns"], "name": state["pod"], "container": state["mount"]["container"],
+		"root": state["mount"]["path"], "path": file_path, "expected": text.sha256_text()}
+	te.save_requested.connect(func(contents):
+		var dialog = ConfirmationDialog.new()
+		dialog.title = "Save mounted file?"
+		dialog.dialog_text = "%s/%s\n%s/%s\n\nReplace this file and keep a backup? Other apps sharing this storage will see the change." % [target["ns"], target["name"], target["root"], file_path]
+		dialog.dialog_autowrap = true
+		dialog.exclusive = true
+		dialog.get_ok_button().text = "Save file"
+		dialog.canceled.connect(func():
+			te.save_result(false, "Save cancelled; your edits are still here.")
+			dialog.queue_free())
+		dialog.confirmed.connect(func():
+			var action = target.duplicate()
+			action["expected"] = te.get_meta("file_hash", target["expected"])
+			action["text"] = contents
+			te._msg = "Saving..."
+			te._refresh_status()
+			if not cluster.act(action):
+				te.save_result(false, "Save refused by your permissions or the current connection. Your edits are still here.")
+			dialog.queue_free())
+		te.add_child(dialog)
+		dialog.popup_centered(Vector2i(mini(440, int(get_viewport().get_visible_rect().size.x) - 24), 0))
+		dialog.get_cancel_button().grab_focus.call_deferred())
+	te.ed.grab_focus.call_deferred()
+
 func _store_req(op: String, extra: Dictionary, tag: String) -> void:
+	_store["request"] = str(Time.get_ticks_usec())
 	var a = {"op": op, "ns": _store["ns"], "name": _store["pod"], "container": str(_store["mount"].get("container", "")),
-		"root": str(_store["mount"].get("path", "")), "key": "store:%s:%s" % [_store["uid"], tag]}
+		"root": str(_store["mount"].get("path", "")), "key": "store:%s:%s:%s" % [_store["uid"], tag, _store["request"]]}
 	a.merge(extra)
 	_store["busy"] = true
 	_store["error"] = ""
@@ -1872,6 +2403,16 @@ func _store_file(path: String, page: int) -> void:
 
 # Answers to the storage requests (and, further down, LiveView's).
 func on_data(key: String, r: Dictionary) -> void:
+	if key == "configuration:export":
+		if _modal_kind != "configuration_wait":
+			return
+		if not r.get("ok", false):
+			notify(str(r.get("msg", "Could not read the configuration.")), "warn")
+			close_modal()
+			return
+		open_configuration_yaml(Configuration.documents(Configuration.clean(r.get("data", {}).get("items", []), _yaml_namespace),
+			"Visible Kubernetes / k3s workloads and Services. Runtime metadata removed.\nOpen additional YAML files to include configuration, credentials or resource types outside this map."), "cluster-configuration.yaml")
+		return
 	if key.begins_with("vpn:"):
 		notify(str(r.get("msg", "")), "ok" if r.get("ok", false) else "warn")
 		if r.get("ok", false):
@@ -1886,7 +2427,7 @@ func on_data(key: String, r: Dictionary) -> void:
 	if key.begins_with("live:"):
 		_on_live_data(key, r)
 		return
-	if not key.begins_with("store:") or _modal_kind != "storage" or key.get_slice(":", 1) != str(_store.get("uid", "")):
+	if not key.begins_with("store:") or _modal_kind != "storage" or key.get_slice(":", 1) != str(_store.get("uid", "")) or key.get_slice(":", 3) != str(_store.get("request", "")):
 		return
 	_store["busy"] = false
 	var d = r.get("data", {})
@@ -1896,6 +2437,11 @@ func on_data(key: String, r: Dictionary) -> void:
 			_store["mounts"] = d.get("mounts", []) if r.get("ok", false) else []
 			_store["error"] = err
 			storage_modules.emit(_store["uid"], _store["mounts"])
+			var preferred: Dictionary = _store.get("preferred", {})
+			for m in _store["mounts"]:
+				if m.get("running", true) and m.get("path") == preferred.get("path") and m.get("container") == preferred.get("container"):
+					_store_dir(m, "")
+					return
 			for m in _store["mounts"]:
 				if m.get("running", true):
 					_store_dir(m, "")
@@ -2210,12 +2756,12 @@ func _fill_storage() -> void:
 	if _dyn == null or _modal_kind != "storage":
 		return
 	_clear(_dyn)
-	var h = _row(14)
+	var h = _col(14) if touch_u > 0 else _row(14)
 	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_dyn.add_child(h)
 	# left: the mounts, with the PV / PVC behind each
 	var left = _col(6)
-	left.custom_minimum_size.x = 330
+	left.custom_minimum_size.x = 0 if touch_u > 0 else 240
 	h.add_child(left)
 	left.add_child(_lbl("MOUNTED VOLUMES", 13, ORANGE))
 	if _store["mounts"] == null:
@@ -2231,7 +2777,7 @@ func _fill_storage() -> void:
 			pc.add_child(v)
 			var pl = _lbl(str(m["path"]), 14)
 			pl.clip_text = true
-			pl.custom_minimum_size.x = 300
+			pl.custom_minimum_size.x = 0 if touch_u > 0 else 220
 			v.add_child(pl)
 			var kind = {"pvc": "PersistentVolumeClaim", "configmap": "ConfigMap", "secret": "Secret", "projected": "service-account token", "emptydir": "emptyDir (scratch)",
 				"hostpath": "host path", "bind": "bind mount", "volume": "Docker volume", "csi": "CSI volume", "nfs": "NFS"}.get(str(m.get("type", "")), str(m.get("type", "")))
@@ -2240,7 +2786,7 @@ func _fill_storage() -> void:
 			if str(m.get("claim", "")) != "":
 				var cl = _lbl("%s%s" % [m["claim"], ("  ->  PV " + str(m["pv"])) if str(m.get("pv", "")) != "" else ""], 12, K.tier_color(1))
 				cl.clip_text = true
-				cl.custom_minimum_size.x = 300
+				cl.custom_minimum_size.x = 0 if touch_u > 0 else 220
 				v.add_child(cl)
 			if str(m.get("capacity", "")) != "":
 				v.add_child(_lbl("%s  ·  %s  ·  %s" % [m["capacity"], m.get("storage_class", ""), m.get("phase", "")], 12, DIM))
@@ -2260,7 +2806,7 @@ func _fill_storage() -> void:
 	if _store["mount"].is_empty():
 		right.add_child(_lbl("Pick a volume to look inside." if _store["mounts"] != null else "", 14, DIM))
 		return
-	var crumbs = _row(4)
+	var crumbs = HFlowContainer.new()
 	var root = str(_store["mount"]["path"])
 	crumbs.add_child(_btn(root, func(): _store_dir(_store["mount"], "")))
 	var acc = ""
@@ -2273,7 +2819,6 @@ func _fill_storage() -> void:
 	if _store["error"] != "":
 		var el = _lbl(_store["error"], 14, RED)
 		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		el.custom_minimum_size.x = 580
 		right.add_child(el)
 	if _store["busy"]:
 		right.add_child(_lbl("Reading...", 13, DIM))
@@ -2290,21 +2835,30 @@ func _fill_storage() -> void:
 			if b < 9 or (b > 13 and b < 32):
 				odd += 1
 		binary = binary or odd > 40
-		var head = _row(10)
+		var head = HFlowContainer.new()
 		head.add_child(_lbl(str(f["path"]).get_file(), 15))
 		head.add_child(_lbl("%s  ·  page %d of %d  ·  %s" % [K.fmt_bytes(float(d.get("size", 0))), int(d.get("page", 0)) + 1, maxi(int(d.get("pages", 1)), 1), "binary, shown as hex" if binary else "text"], 12, DIM))
 		head.add_child(_spacer())
 		head.add_child(_btn("  <  ", func(): _store_file(f["path"], int(d["page"]) - 1), "normal", int(d.get("page", 0)) > 0))
 		head.add_child(_btn("  >  ", func(): _store_file(f["path"], int(d["page"]) + 1), "normal", int(d.get("page", 0)) + 1 < int(d.get("pages", 1))))
-		if not binary and not bytes.is_empty():
+		if not binary:
 			var page_text = bytes.get_string_from_utf8()
-			var fname = "%s  (page %d, read-only)" % [str(f["path"]), int(d.get("page", 0)) + 1]
-			head.add_child(_btn("Open in editor", func(): open_editor("", page_text, true, fname)))
+			var problem = preload("res://scripts/storage_files.gd").text_problem(bytes)
+			if int(d.get("page", 0)) != 0 or bytes.size() != int(d.get("size", -1)):
+				problem = "Only complete text files of 64 KiB or less can be edited."
+			elif _store["mount"].get("read_only", true):
+				problem = "This mount is read-only."
+			elif cluster.read_only or not cluster.cap("file_write") or cluster.max_tier(_store["ns"]) < 3:
+				problem = "Editing needs writable access and MK.3 permission."
+			head.add_child(_btn("Edit file" if problem == "" else "View text", func(): _edit_storage_file(page_text, problem != "")))
+			if problem != "":
+				right.add_child(_wrapped(problem, 12, DIM))
 		head.add_child(_btn("Back to the folder", func(): _store_dir(_store["mount"], _store["path"])))
 		right.add_child(head)
 		var te = TextEdit.new()      # plain text only: nothing in a file is ever rendered or run
 		te.editable = false
 		te.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		te.custom_minimum_size.y = 240 if touch_u > 0 else 0
 		te.add_theme_font_override("font", _mono)
 		te.add_theme_font_size_override("font_size", 12)
 		te.add_theme_stylebox_override("read_only", _sb(Color(0.03, 0.035, 0.04), Color(0.25, 0.26, 0.28), 1, 8))
@@ -2319,6 +2873,7 @@ func _fill_storage() -> void:
 		return
 	var sc = ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.custom_minimum_size.y = 240 if touch_u > 0 else 0
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var rows = _col(2)
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2339,28 +2894,31 @@ func _fill_storage() -> void:
 			rows.add_child(_lbl("Only the first 500 entries are listed.", 12, K.health_color("warn")))
 		if not li.get("readable", true):
 			rows.add_child(_lbl("Names only: the contents of this kind of volume are never shown.", 12, RED))
-	right.add_child(_table_head("storage", [["name", "NAME", 300], ["size", "SIZE", 110], ["mode", "MODE", 96], ["mtime", "CHANGED", 160]], st_fill, es.size()))
+	var columns = [["name", "NAME", 160], ["size", "SIZE", 90]] if touch_u > 0 else [["name", "NAME", 300], ["size", "SIZE", 110], ["mode", "MODE", 96], ["mtime", "CHANGED", 160]]
+	right.add_child(_table_head("storage", columns, st_fill, es.size()))
 	right.move_child(right.get_child(right.get_child_count() - 1), sc.get_index())
 	st_fill.call()
 
 func _storage_row(e: Dictionary, li: Dictionary) -> Control:
 	if true:
 		var r = _row(8)
+		var width = 160 if touch_u > 0 else 300
 		var sub = (str(_store["path"]) + "/" + str(e["name"])).trim_prefix("/")
 		match str(e["type"]):
 			"dir":
-				r.add_child(_fixed(_btn(str(e["name"]) + "/", func(): _store_dir(_store["mount"], sub)), 300))
+				r.add_child(_fixed(_btn(str(e["name"]) + "/", func(): _store_dir(_store["mount"], sub)), width))
 			"file":
-				r.add_child(_fixed(_btn(str(e["name"]), func(): _store_file(sub, 0), "normal", li.get("readable", true)), 300))
+				r.add_child(_fixed(_btn(str(e["name"]), func(): _store_file(sub, 0), "normal", li.get("readable", true)), width))
 			"link":
 				var ll = _lbl("%s  ->  %s" % [e["name"], e.get("link", "")], 13, K.health_color("warn"))
 				ll.clip_text = true
-				r.add_child(_fixed(ll, 300))
+				r.add_child(_fixed(ll, width))
 			_:
-				r.add_child(_fixed(_lbl(str(e["name"]), 13, DIM), 300))
-		r.add_child(_fixed(_lbl(K.fmt_bytes(float(e["size"])) if e["type"] == "file" else ("link, not followed" if e["type"] == "link" else ""), 12, DIM), 110))
-		r.add_child(_fixed(_lbl(str(e.get("mode", "")), 12, DIM), 96))
-		r.add_child(_lbl(str(e.get("mtime", "")), 12, DIM))
+				r.add_child(_fixed(_lbl(str(e["name"]), 13, DIM), width))
+		r.add_child(_fixed(_lbl(K.fmt_bytes(float(e["size"])) if e["type"] == "file" else ("link" if e["type"] == "link" else ""), 12, DIM), 90 if touch_u > 0 else 110))
+		if touch_u <= 0:
+			r.add_child(_fixed(_lbl(str(e.get("mode", "")), 12, DIM), 96))
+			r.add_child(_lbl(str(e.get("mtime", "")), 12, DIM))
 		return r
 	return null
 
@@ -2547,7 +3105,7 @@ func open_demos() -> void:
 	offer_demos = false
 	var mobile = touch_u > 0.0
 	var body = _open_modal("demos", null, "DEMO WORLDS", Vector2(440, 0) if mobile else Vector2(980, 600), false, open_pause)
-	var intro = _lbl("Try a simulated cluster. Switch worlds anytime from the game menu." if mobile else "Four simulated worlds. Nothing here is real, so break whatever you like. Switch any time from the pause menu (Esc).", 14, DIM)
+	var intro = _lbl("Choose a simulated world. Switch anytime from the game menu.", 14, DIM)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.custom_minimum_size.x = 0 if mobile else 930
 	body.add_child(intro)
@@ -2558,7 +3116,7 @@ func open_demos() -> void:
 	grid.add_theme_constant_override("v_separation", 12)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	for d in DemoSim.DEMO_TYPES:
-		var f = DemoSim.FLAVORS[d["flavor"]]
+		var f = DemoSim.flavor_info(d["flavor"])
 		var active = cluster.backend != null and cluster.backend.label == "simulation" and cluster.backend.context == d["flavor"]
 		var col = K.provider_color(f["provider"]).lightened(0.25)
 		var pc = PanelContainer.new()
@@ -2580,7 +3138,9 @@ func open_demos() -> void:
 			v.add_child(r)
 		else:
 			v.add_child(title)
-		v.add_child(_lbl("%s  ·  %d nodes" % [f["provider"], f["nodes"].size() + (1 if f["cp"] != "" else 0)], 12, DIM))
+		var count: int = f["nodes"].size() + (1 if f["cp"] != "" else 0)
+		var unit = ("host" if count == 1 else "hosts") if str(d["id"]).begins_with("docker-media") else ("node" if count == 1 else "nodes")
+		v.add_child(_lbl("%s  ·  %d %s" % [f["provider"], count, unit], 12, DIM))
 		var desc = _lbl(d["short_desc"] if mobile else d["desc"], 14)
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		desc.custom_minimum_size.x = 0 if mobile else 420
@@ -2591,7 +3151,7 @@ func open_demos() -> void:
 			r.add_child(action)
 			v.add_child(r)
 		grid.add_child(pc)
-	body.add_child(grid)
+	_menu_list(body, 0, 460).add_child(grid)
 
 # ----- logging station
 
@@ -2924,6 +3484,11 @@ func _installed_forget(e: Dictionary) -> void:
 
 # Keep the install ledger in step with what actually succeeded.
 func on_action(a: Dictionary, r: Dictionary) -> void:
+	if a["op"] == "file_write" and a.get("key", "") == _file_editor_key and _modal_kind == "editor" and is_instance_valid(_editor):
+		if r.get("ok", false):
+			_editor.set_meta("file_hash", str(a["text"]).sha256_text())
+		_editor.save_result(r.get("ok", false), str(r.get("msg", "Save failed; your edits are still here.")))
+		return
 	if not r.get("ok", false):
 		return
 	var e = {"source": cluster.state["source"], "context": cluster.state["context"], "when": Time.get_datetime_string_from_system()}
@@ -3404,6 +3969,37 @@ func _portainer_installed() -> bool:
 			return true
 	return false
 
+func open_porter_preview(app: Dictionary, target_namespace: String, manifest: String, action: Dictionary, back: Callable) -> void:
+	if manifest == "":
+		notify("The setup YAML could not be found.", "warn")
+		return
+	var state = Configuration.porter_board(cluster.state, app, target_namespace, manifest)
+	var context: String = cluster.state["context"]
+	_porter_proposal = {"state": state, "yaml": manifest, "action": action.duplicate(true), "context": context}
+	var viewport_size = get_viewport().get_visible_rect().size
+	var body = _open_modal("porter_preview", target_namespace, "PORTER  //  SETUP PREVIEW", Vector2(440, 0) if touch_u > 0 else viewport_size - Vector2(32, 32), false, back)
+	body.add_child(_wrapped("TARGET: %s / %s. Green cards are proposed additions or updates. Existing node placement remains visible. New Kubernetes workloads use automatic scheduling. Review the proposal, then edit and approve its YAML export." % [context, target_namespace], 13, DIM))
+	var graph = LabConnections.new()
+	var controls = HFlowContainer.new()
+	controls.add_child(_btn("Fit proposal", graph.fit_routes))
+	controls.add_child(_btn("+", func(): graph.zoom = minf(2, graph.zoom * 1.25)))
+	controls.add_child(_btn("-", func(): graph.zoom = maxf(0.08, graph.zoom / 1.25)))
+	controls.add_child(_btn("Review / edit YAML", func(): open_configuration_yaml(manifest, "porter-%s.yaml" % target_namespace), "primary"))
+	controls.add_child(_btn("Deploy this setup", func():
+		if cluster.state["context"] != context:
+			notify("The active cluster changed. Ask Porter for a fresh preview.", "warn")
+			return
+		cluster.act(action)
+		close_modal(), "mk2", not cluster.read_only and cluster.cap(action["op"])))
+	controls.add_child(_btn("Back to Porter", back))
+	body.add_child(controls)
+	graph.custom_minimum_size.y = 400 if touch_u > 0 else maxf(240, viewport_size.y - 210)
+	graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(graph)
+	graph.selected_uid = "target:" + context
+	graph.refresh(state)
+	graph.fit_routes.call_deferred()
+
 func _portrait() -> Control:
 	var model_view = _krew_portrait("porter", Color(0.05, 0.09, 0.11), false)
 	if model_view != null:
@@ -3513,11 +4109,10 @@ func open_talk(screen: String = "main") -> void:
 			r.add_child(warn)
 			box.add_child(r)
 			var b = _row(8)
-			b.add_child(_btn("Deploy this setup", func():
+			b.add_child(_btn("Preview this setup", func():
 				var v = _valid_ns(ns, warn)
 				if v != "":
-					cluster.act({"op": "apply_app", "id": app["id"], "ns": v})
-					close_modal(), "mk2"))
+					open_porter_preview(app, v, Configuration.porter_yaml(app, v), {"op": "apply_app", "id": app["id"], "ns": v}, func(): open_talk("app")), "primary"))
 			b.add_child(_btn("Remove this setup", func():
 				var v = _valid_ns(ns, warn)
 				if v != "":
@@ -3763,12 +4358,17 @@ func open_talk(screen: String = "main") -> void:
 			r.add_child(warn)
 			box.add_child(r)
 			var b = _row(8)
-			b.add_child(_btn("Build it", func():
+			b.add_child(_btn("Preview build", func():
 				var n = _valid_ns(nm, warn)
 				var s = _valid_ns(ns, warn)
 				if n != "" and s != "":
-					cluster.act({"op": "deploy_template", "template": t, "name": n, "ns": s, "list": str(_talk["cat"].get("name", "")), "host_binds": allow_binds.button_pressed})
-					close_modal(), "mk2"))
+					var preview_env = envinfo[0].duplicate(true)
+					for value in preview_env:
+						if value[0] in envinfo[1]:
+							value[1] = "REPLACE_BEFORE_DEPLOYMENT"
+					var manifest = Apps.template_manifest(t, n, preview_env).replace("\nmetadata:\n", "\nmetadata:\n  namespace: " + JSON.stringify(s) + "\n")
+					var model = {"sim": [["Deployment", n, t["image"], 1, ", ".join(ports)]]}
+					open_porter_preview(model, s, manifest, {"op": "deploy_template", "template": t, "name": n, "ns": s, "list": str(_talk["cat"].get("name", "")), "host_binds": allow_binds.button_pressed}, func(): open_talk("tpl")), "primary"))
 			b.add_child(_spacer())
 			b.add_child(_btn("Back", func(): open_talk("catalogue")))
 			box.add_child(b)
@@ -3945,6 +4545,8 @@ func open_pause() -> void:
 	body.add_child(_wrapped("CONNECTED TO  %s  ·  %s" % [cluster.state.get("provider", ""), cluster.state["context"]], 13, DIM))
 	body.add_child(_btn("Settings", open_settings, "primary"))
 	body.add_child(_btn("Demo worlds", open_demos))
+	if cluster.state.has("lab"):
+		body.add_child(_btn("Docker media lab", open_media_lab, "primary"))
 	body.add_child(_btn("Network and shared data", open_network))
 	if touch != null:
 		body.add_child(_btn("Touch controls:  %s" % ("ON" if touch.allowed else "OFF"), func():
@@ -4026,6 +4628,8 @@ func open_pause() -> void:
 func _open_touch_pause() -> void:
 	var body = _open_modal("pause", null, "KUBEFACTORY", Vector2(460, 0))
 	body.add_child(_btn("Resume", close_modal, "primary"))
+	if cluster.state.has("lab"):
+		body.add_child(_btn("Docker media lab", open_media_lab, "primary"))
 	var quick = GridContainer.new()
 	quick.columns = 2
 	for entry in [["Demo worlds", open_demos], ["Settings", open_settings], ["Dashboards", open_liveview], ["Network", open_network]]:

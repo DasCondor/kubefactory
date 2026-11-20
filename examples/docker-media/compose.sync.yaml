@@ -1,0 +1,22 @@
+services:
+  media-sync:
+    image: syncthing/syncthing:2.1.5
+    restart: unless-stopped
+    environment:
+      PUID: ${SYNC_UID:-1000}
+      PGID: ${SYNC_GID:-1000}
+    ports:
+      - "127.0.0.1:18384:8384"
+      - "${SYNC_BIND:-127.0.0.1}:${SYNC_PORT:-22000}:22000/tcp"
+    volumes:
+      - media-sync-config:/var/syncthing/config
+      - ./incoming:/var/syncthing/incoming
+    networks: [sync]
+
+networks:
+  sync:
+    name: kf-media-demo-sync
+
+volumes:
+  media-sync-config:
+

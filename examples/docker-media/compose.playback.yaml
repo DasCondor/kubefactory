@@ -1,0 +1,24 @@
+services:
+  tautulli-exporter:
+    image: quay.io/prometheuscommunity/json-exporter:v0.8.0
+    restart: unless-stopped
+    command: ["--config.file=/config.yml"]
+    volumes:
+      - ./monitoring/tautulli-exporter.yml:/config.yml:ro
+    secrets: [tautulli-api-key]
+    networks: [playback]
+  tautulli:
+    networks: [media, playback]
+  prometheus:
+    networks: [reporting, playback]
+    volumes:
+      - ./monitoring/playback.yml:/etc/prometheus/scrapes/playback.yml:ro
+
+networks:
+  playback:
+    internal: true
+
+secrets:
+  tautulli-api-key:
+    file: ./.tautulli-api-key
+

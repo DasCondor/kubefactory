@@ -5,15 +5,18 @@ extends RefCounted
 const K = preload("res://scripts/kutil.gd")
 const Apps = preload("res://scripts/apps.gd")
 const Topology = preload("res://scripts/demo_topology.gd")
+const MediaLab = preload("res://scripts/demo_media_lab.gd")
+const StorageFiles = preload("res://scripts/storage_files.gd")
 const GI = 1073741824.0
 
 var label = "simulation"
 var poll_interval = 1.0
 var caps = {"remove_image": true, "scale": true, "delete_pod": true, "restart": true, "delete_workload": true,
-	"create": true, "cordon": true, "drain": true, "logs": true, "files": true, "demo_update_image": true}
+	"create": true, "cordon": true, "drain": true, "logs": true, "files": true, "file_write": true, "demo_update_image": true}
 const DEMO_UPDATES = {"media/heimdall": "lscr.io/linuxserver/heimdall:demo-reviewed",
 	"media/library-check": "kubefactory/demo-library-check:1"}
 var context = "helmsman-sim"
+var _lab: MediaLab
 
 var _mx = Mutex.new()
 var _nodes = []
@@ -22,6 +25,7 @@ var _pods = []
 var _svcs = []
 var _rng = RandomNumberGenerator.new()
 var _seq = 0
+var _edited_files = {}
 
 # Simulated clusters, one per "flavor", so multi-cloud switching can be tried.
 const FLAVORS = {
@@ -47,9 +51,13 @@ const FLAVORS = {
 	# a build farm: source hosting, CI runners, compile caches and dev containers per language
 	"dev-containers": {"provider": "Dev containers (k3s)", "version": "v1.31.2+k3s1", "itype": "build-box",
 		"zones": ["rack-1", "rack-1", "rack-2"], "nodes": ["build-01", "build-02", "build-03"], "cp": ""},
+	"docker-media": {"provider": "Docker Engine", "version": "29", "itype": "Media Lab",
+		"zones": ["Media LAN"], "nodes": [MediaLab.MEDIA], "cp": ""},
+	"docker-media-gatherer": {"provider": "Docker Engine", "version": "29", "itype": "Media Lab",
+		"zones": ["Media LAN", "Management VLAN 40"], "nodes": [MediaLab.MEDIA, MediaLab.GATHER], "cp": ""},
 }
 
-# The four demo worlds offered when you start the simulation without naming one
+# The demo worlds offered when you start the simulation without naming one
 # (`--demo=<id>`, the chooser on the welcome screen, or the pause menu).
 const DEMO_TYPES = [
 	{"id": "kubernetes", "flavor": "helmsman-sim", "name": "Kubernetes cluster",
@@ -64,6 +72,12 @@ const DEMO_TYPES = [
 	{"id": "media", "flavor": "homelab-media", "name": "Media suite",
 		"short_desc": "A Plex and Jellyfin lab with shared storage and VPN routes.",
 		"desc": "A k3s media lab with Plex, Jellyfin, Heimdall, and Grafana. Follow requests, index searches, VPN egress, downloads, library imports and playback metrics."},
+	{"id": "docker-media", "flavor": "docker-media", "name": "Docker media lab",
+		"short_desc": "Plex, requests and reporting on one Docker host.",
+		"desc": "Follow Seerr requests and Grafana queries. Inspect Plex's read-only library, Prometheus storage and the optional Discord route. Try loopback, LAN or media VLAN bindings."},
+	{"id": "docker-media-gatherer", "flavor": "docker-media-gatherer", "name": "Docker media lab + gatherer",
+		"short_desc": "Full media stack, VPN egress and file sync. Hosts come from config.",
+		"desc": "Trace Jackett searches and downloader traffic through Gluetun. Operate the sync lever and import into Plex. Set host_count in media-lab.json to use one or two hosts."},
 ]
 
 static func demo_flavor(id: String) -> String:
@@ -72,6 +86,13 @@ static func demo_flavor(id: String) -> String:
 			return d["flavor"]
 	return ""
 
+static func flavor_info(flavor: String) -> Dictionary:
+	var info: Dictionary = FLAVORS.get(flavor, FLAVORS["helmsman-sim"]).duplicate(true)
+	if flavor == "docker-media-gatherer" and MediaLab.configured_host_count() == 1:
+		info["nodes"] = [MediaLab.MEDIA]
+		info["zones"] = ["Media LAN"]
+	return info
+
 var provider = ""
 var log_cfg = {}
 var providers = []
@@ -79,7 +100,7 @@ var providers = []
 func _init(flavor: String = "helmsman-sim"):
 	if not FLAVORS.has(flavor):
 		flavor = "helmsman-sim"
-	var f = FLAVORS[flavor]
+	var f = flavor_info(flavor)
 	context = flavor
 	provider = f["provider"]
 	providers = [{"id": "kube", "name": "Kubernetes API", "ready": true, "note": "live from the kubelet (simulated)"},
@@ -102,6 +123,19 @@ func _init(flavor: String = "helmsman-sim"):
 		n["zone"] = f["zones"][i % f["zones"].size()]
 		n["itype"] = f["itype"]
 		n["created"] = _now() - 86400.0 * 41
+	if flavor in ["docker-media", "docker-media-gatherer"]:
+		_lab = MediaLab.new(flavor == "docker-media-gatherer", _now(), f["nodes"].size())
+		providers = [{"id": "kube", "name": "Docker logs", "ready": true, "note": "simulated container output"}]
+		caps.merge({"lab_sync": _lab.gathered, "lab_import": _lab.gathered, "lab_access": true,
+			"lab_discord": true, "cordon": false, "drain": false, "create": false, "demo_update_image": false}, true)
+		var apps = _lab.apps()
+		for host in apps:
+			for spec in apps[host]:
+				_add_wl("Compose", host, spec[0], [[spec[0], spec[1]]], 1, 0.25, 0.4)
+				_wl[-1]["host"] = host
+				_wl[-1]["port"] = spec[2]
+		_settle()
+		return
 	var healthy = flavor == "gke-analytics"
 	_add_wl("Deployment", "kube-system", "coredns", [["coredns", "registry.k8s.io/coredns/coredns:v1.11.3"]], 2, 0.1, 0.07)
 	_add_wl("DaemonSet", "kube-system", "kube-proxy", [["kube-proxy", "registry.k8s.io/kube-proxy:v1.31.2"]], 0, 0.1, 0.05)
@@ -367,6 +401,12 @@ func _spawn(w: Dictionary, fixed_node: String = "") -> void:
 	_seq += 1
 	var pname = ""
 	match w["kind"]:
+		"Compose":
+			pname = w["name"]
+			for other in _pods:
+				if other["name"] == pname:
+					pname = "%s-%d" % [w["name"], _seq]
+					break
 		"Deployment":
 			pname = "%s-%s-%s" % [w["name"], w["hash"], _rand_id(5)]
 		"StatefulSet":
@@ -434,9 +474,9 @@ func _tick() -> void:
 			if p["wl"] == w and p["st"] != "Terminating":
 				live.append(p)
 		match w["kind"]:
-			"Deployment", "StatefulSet":
+			"Deployment", "StatefulSet", "Compose":
 				for i in range(live.size(), w["replicas"]):
-					_spawn(w)
+					_spawn(w, str(w.get("host", "")))
 				for i in range(w["replicas"], live.size()):
 					var victim = live[live.size() - 1 - (i - w["replicas"])]
 					victim["st"] = "Terminating"
@@ -492,6 +532,8 @@ func fetch() -> Dictionary:
 			"finished": float(p.get("since", 0.0)) - 5400.0 if p["st"] in ["Completed", "Error"] else 0.0,
 			"sec": sim_security(w["name"], w["containers"]), "store": store,
 			"net": sim_net(w, p, running)})
+		if _lab != null:
+			st.pods[-1]["lab_port"] = w.get("port", 0)
 	if context == "homelab-media":
 		_link_shared_vpn(st.pods)
 	for w in _wl:
@@ -515,7 +557,10 @@ func fetch() -> Dictionary:
 				st["image_updates"].append({"ns": w["ns"], "name": w["name"], "kind": w["kind"], "current": w["containers"][0][1], "next": next})
 	for s in _svcs:
 		st.services.append(s.duplicate(true))
-	st["links"] = Topology.links(st)
+	if _lab == null:
+		st["links"] = Topology.links(st)
+	else:
+		_lab.present(st, _now())
 	_mx.unlock()
 	return st
 
@@ -547,6 +592,12 @@ func _sim_mounts(p: Dictionary) -> Array:
 	var w = p["wl"]
 	var c = str(w["containers"][0][0])
 	var res = []
+	if _lab != null:
+		for disk in _lab.mounts(w["name"]):
+			res.append({"container": c, "path": disk["path"], "read_only": disk["read_only"],
+				"volume": disk["name"], "type": "volume", "usage": K.shared_disk_usage(disk),
+				"readable": true, "running": p["st"] == "Running"})
+		return res
 	var shared = Topology.volumes(w["ns"], w["name"])
 	for claim in shared:
 		var disk = Topology.disk(claim)
@@ -576,7 +627,7 @@ func _sim_files(a: Dictionary) -> Dictionary:
 		return {"ok": true, "msg": "", "kind": "", "data": {"mounts": mounts, "simulated": true}}
 	var m = null
 	for x in mounts:
-		if x["path"] == a["root"]:
+		if x["path"] == a["root"] and x["container"] == a.get("container", x["container"]):
 			m = x
 	if m == null:
 		return {"ok": false, "kind": "invalid", "msg": "%s is not a mounted volume of this container" % a["root"], "data": {}}
@@ -599,12 +650,25 @@ func _sim_files(a: Dictionary) -> Dictionary:
 			tree = {"": [["ca.crt", "file", 1107], ["namespace", "file", 4], ["token", "file", 1024]]}
 	if Topology.SHARED_FILES.has(m["volume"]):
 		tree = Topology.SHARED_FILES[m["volume"]]
+	if _lab != null:
+		tree = {"": _lab.files(m["volume"])}
+		if m["volume"] == "prometheus-data":
+			tree["wal"] = [["00000001", "file", 16777216]]
+	var disk_id = JSON.stringify([pod.get("node", "") if m["type"] == "volume" else pod["wl"]["ns"], m.get("claim", m["volume"])])
+	var changes: Dictionary = _edited_files.get(disk_id, {})
+	for changed in changes:
+		var folder = str(changed).get_base_dir()
+		if not tree.has(folder):
+			tree[folder] = []
+		if not tree[folder].any(func(row): return row[0] == str(changed).get_file()):
+			tree[folder].append([str(changed).get_file(), "file", str(changes[changed]).to_utf8_buffer().size()])
 	if a["op"] == "file_list":
 		if not tree.has(rel):
 			return {"ok": false, "kind": "notfound", "msg": "%s is not a directory" % full, "data": {}}
 		var es = []
 		for row in tree[rel]:
-			es.append({"name": row[0], "type": row[1], "size": row[2], "mode": {"dir": "drwxr-xr-x", "file": "-rw-r--r--", "link": "lrwxrwxrwx"}[row[1]], "owner": "999", "group": "999",
+			var key = str(row[0]) if rel == "" else rel + "/" + str(row[0])
+			es.append({"name": row[0], "type": row[1], "size": str(changes[key]).to_utf8_buffer().size() if changes.has(key) else row[2], "mode": {"dir": "drwxr-xr-x", "file": "-rw-r--r--", "link": "lrwxrwxrwx"}[row[1]], "owner": "999", "group": "999",
 				"mtime": "Nov 13 21:19", "link": "/etc/passwd" if row[1] == "link" else ""})
 		return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "entries": es, "truncated": false, "readable": m["readable"], "simulated": true}}
 	if not m["readable"]:
@@ -619,16 +683,34 @@ func _sim_files(a: Dictionary) -> Dictionary:
 		return {"ok": false, "kind": "invalid", "msg": "Only regular files can be previewed (links and devices are not followed).", "data": {}}
 	var page = clampi(int(a.get("page", 0)), 0, 255)
 	var bytes = PackedByteArray()
-	if fname.ends_with(".yaml") or fname.ends_with(".conf") or fname == "PG_VERSION" or fname.ends_with(".pid"):
-		bytes = ("# SIMULATED FILE - invented by the demo, not read from anywhere\n# %s\n\nlisten_addresses = '*'\nmax_connections = 100\nshared_buffers = 128MB\nlog_min_messages = warning\n" % full).to_utf8_buffer() if page == 0 else PackedByteArray()
+	var text_file = changes.has(rel) or fname.get_extension() in ["yaml", "conf", "xml", "ini", "txt"] or fname == "PG_VERSION" or fname.ends_with(".pid")
+	if text_file:
+		var text = str(changes[rel]) if changes.has(rel) else ("# SIMULATED FILE - edits last until the demo is closed\n# %s\n\ndemo: true\nlog_level: info\n" % m["volume"] if fname.ends_with(".yaml") else "# SIMULATED FILE - invented by the demo\n# %s\n\nlog_level = info\n" % m["volume"])
+		bytes = text.to_utf8_buffer() if page == 0 else PackedByteArray()
 	else:
 		var r = RandomNumberGenerator.new()
 		r.seed = (full + str(page)).hash()
 		bytes.resize(mini(int(found[2]) - page * 65536, 65536) if int(found[2]) > page * 65536 else 0)
 		for i in bytes.size():
 			bytes[i] = r.randi() % 256
-	return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "size": int(found[2]), "page": page, "pages": mini(int(ceil(int(found[2]) / 65536.0)), 256),
-		"data": Marshalls.raw_to_base64(bytes), "simulated": true}}
+	if a["op"] == "file_write":
+		var problem = StorageFiles.write_problem(a)
+		if m.get("read_only", true):
+			problem = "This mount is read-only."
+		elif not text_file:
+			problem = "Binary files and databases cannot be edited."
+		elif str(a.get("expected", "")) != bytes.get_string_from_utf8().sha256_text():
+			problem = "File changed since it was opened. Reopen it before saving."
+		if problem != "":
+			return {"ok": false, "kind": "invalid", "msg": problem, "data": {}}
+		var backup = rel + ".kf-backup-" + str(Time.get_ticks_usec())
+		changes[backup] = bytes.get_string_from_utf8()
+		changes[rel] = str(a["text"])
+		_edited_files[disk_id] = changes
+		return {"ok": true, "msg": "Saved in this simulation. Previous file: " + backup, "kind": "", "data": {"backup": backup, "simulated": true}}
+	var size = bytes.size() if text_file and page == 0 else int(found[2])
+	return {"ok": true, "msg": "", "kind": "", "data": {"path": full, "size": size, "page": page, "pages": mini(int(ceil(size / 65536.0)), 256),
+		"data": Marshalls.raw_to_base64(bytes) if not bytes.is_empty() else "", "simulated": true}}
 
 # Simulated usage for one pod: it wanders around a share of what the pod asks
 # for, and its counters only ever go up, as real ones do.
@@ -678,8 +760,9 @@ func _sim_scan() -> Dictionary:
 
 func run_action(a: Dictionary) -> Dictionary:
 	if a["op"] == "vpn_check":      # nothing is asked of the internet in a demo
-		return {"ok": true, "msg": "The internet sees 203.0.113.%d from inside that pod (SIMULATED: nothing was asked)." % (40 + abs(str(a.get("pod", "")).hash()) % 200),
-			"data": {"ip": "203.0.113.%d" % (40 + abs(str(a.get("pod", "")).hash()) % 200), "simulated": true}}
+		var ip = MediaLab.EXIT_IP if _lab != null else "203.0.113.%d" % (40 + abs(str(a.get("pod", "")).hash()) % 200)
+		return {"ok": true, "msg": "The internet sees %s from inside that container (SIMULATED)." % ip,
+			"data": {"ip": ip, "simulated": true}}
 	if a["op"] == "cleanup_scan":
 		_mx.lock()
 		var sres = _sim_scan()
@@ -696,7 +779,7 @@ func run_action(a: Dictionary) -> Dictionary:
 		var mres = _sim_metrics(a)
 		_mx.unlock()
 		return mres
-	if a["op"] in ["file_mounts", "file_list", "file_read"]:
+	if a["op"] in ["file_mounts", "file_list", "file_read", "file_write"]:
 		_mx.lock()
 		var fr = _sim_files(a)
 		_mx.unlock()
@@ -718,6 +801,8 @@ func run_action(a: Dictionary) -> Dictionary:
 
 func _action(a: Dictionary) -> Dictionary:
 	var now = _now()
+	if _lab != null and str(a.get("op", "")).begins_with("lab_"):
+		return _lab.action(a, now)
 	var special = _app_action(a)
 	if not special.is_empty():
 		return special

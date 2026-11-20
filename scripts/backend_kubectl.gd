@@ -342,6 +342,11 @@ func run_action(a: Dictionary) -> Dictionary:
 		return {"ok": lr.ok, "msg": "", "text": lr.text}
 	var args = []
 	match a["op"]:
+		"export_config":
+			var scope = ["-n", scoped_ns] if scoped_ns != "" else ["-A"]
+			var result = _run(["get", "pods,deployments.apps,statefulsets.apps,daemonsets.apps,services"] + scope + ["-o", "json", "--request-timeout=15s"])
+			var data = JSON.parse_string(result.out) if result.code == 0 else null
+			return {"ok": data is Dictionary, "data": data if data is Dictionary else {}, "msg": "" if data is Dictionary else _last_line(result.out)}
 		"scale":
 			args = ["scale", a["kind"].to_lower(), a["name"], "-n", a["ns"], "--replicas=%d" % a["replicas"]]
 		"delete_pod":
