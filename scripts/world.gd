@@ -124,6 +124,8 @@ func _ready() -> void:
 	_build_gauge()
 	_build_krew_stations()
 	var saved = K.load_settings()
+	Machine.look = "blocks" if saved.get("workload_look", "machines") == "blocks" else "machines"
+	Machine.role_overrides = saved.get("role_overrides", {}) if saved.get("role_overrides") is Dictionary else {}
 	if saved.get("show_build_plan",false) and saved.get("flowchart") is Dictionary:
 		show_build_plan(BuildPlan.migrate(saved["flowchart"]))
 	_belt_mm = _make_mm(Vector3.ONE, Tex.mat(Color.WHITE, 0.6, 0.4))
