@@ -63,7 +63,8 @@ var _ports_parent = Callable()
 var _port_group = -1        # ports view filters: scope group (-1 all), host and network ("" all)
 var _port_host = ""
 var _port_network = ""
-var _port_checks = {}       # "name port" -> the last Check from here result for that binding
+var _port_checks = {}
+var _activity_window = "1 hour"   # the media lab's activity rows: which window they count over       # "name port" -> the last Check from here result for that binding
 var _connection_graph
 var _configuration_editor
 var _yaml_namespace = ""
@@ -1506,8 +1507,7 @@ func _fill_media_lab() -> void:
 		var sync_status = "Paused" if lab["paused"] else ("Copying" if lab["transfer"] else ("Ready" if lab["sync_ready"] else "Offline"))
 		_dyn.add_child(_wrapped("FILE SYNC · " + sync_status, 15, ORANGE))
 		_dyn.add_child(_wrapped("The downloader queues a 512 MiB sample every 20 seconds. Each sync takes about 4 seconds. Import moves the received sample into the Plex library.", 13, DIM))
-		_dyn.add_child(_wrapped("%d queued · %d ready to import · %d synced in the last hour (%s)\nLast sync %s · last import %s" % [
-			lab["queued"], lab["inbox"], lab["recent_count"], K.fmt_bytes(lab["recent_bytes"]), K.fmt_age(lab["last_sync"]), K.fmt_age(lab["last_import"])]))
+		_activity_rows(lab.get("activity", []))
 		var controls = HFlowContainer.new()
 		controls.add_child(_btn("Resume sync" if lab["paused"] else "Pause sync", use_lab_lever, "mk3", lab["sync_ready"] and _lab_allowed("lab_sync")))
 		controls.add_child(_btn("Import one file", func(): _lab_operate({"op": "lab_import"}, "Import one sample file"), "mk2", lab["inbox"] > 0 and _lab_allowed("lab_import")))
@@ -1524,6 +1524,41 @@ func _fill_media_lab() -> void:
 	discord.add_child(_btn("Send simulated Seerr alert", func(): _lab_operate({"op": "lab_discord"}, "Send a simulated alert"), "", lab["discord"] and _lab_allowed("lab_discord")))
 	discord.add_child(_btn("Disable alert route" if lab["discord"] else "Enable alert route", func(): _lab_operate({"op": "lab_discord", "enabled": not lab["discord"]}, "Change simulated Discord route"), "", _lab_allowed("lab_discord")))
 	_dyn.add_child(discord)
+
+# File sync and library import, each on its own row: its trigger, its last
+# completed transfer, and files and bytes over the chosen window.
+func _activity_rows(rows: Array) -> void:
+	if rows.is_empty():
+		return
+	var head = _row(8)
+	head.add_child(_wrapped("ACTIVITY (SIMULATED) · completed in the last", 14, DIM))
+	var pick = OptionButton.new()
+	var labels = MediaLab.ACTIVITY_WINDOWS.keys()
+	for label in labels:
+		pick.add_item(label)
+	pick.select(maxi(0, labels.find(_activity_window)))
+	pick.item_selected.connect(func(index):
+		_activity_window = labels[index]
+		_dyn_sig = ""
+		_fill_media_lab())
+	head.add_child(pick)
+	_dyn.add_child(head)
+	for row in rows:
+		var card = PanelContainer.new()
+		var busy = str(row["state"]) in ["copying one file"] or str(row["state"]).ends_with("queued") or str(row["state"]).ends_with("inbox")
+		var col = K.health_color("bad" if row["state"] == "offline" else ("warn" if row["state"] == "paused" else "ok"))
+		var style = _sb(BG2, col, 0, 9)
+		style.border_width_left = 4
+		card.add_theme_stylebox_override("panel", style)
+		var lines = _col(4)
+		lines.add_child(_wrapped("%s  ·  %s" % [str(row["name"]).to_upper(), row["state"]], 15, col if not busy else ORANGE))
+		lines.add_child(_wrapped("%s → %s · %s" % [row["from"], row["to"], row["trigger"]], 13, DIM))
+		var counts: Array = row["windows"].get(_activity_window, [0, 0])
+		var last = "never" if float(row["last"]) <= 0.0 else K.fmt_age(row["last"]) + " ago"
+		var span = {"15 min": "15 minutes", "1 hour": "hour"}.get(_activity_window, _activity_window)
+		lines.add_child(_wrapped("Last completed %s · %d file%s (%s) in the last %s" % [last, counts[0], "" if counts[0] == 1 else "s", K.fmt_bytes(counts[1]), span], 14))
+		card.add_child(lines)
+		_dyn.add_child(card)
 
 func open_shared_disks(uid: String = "", back: Callable = Callable(), volume: String = "") -> void:
 	var body = _open_modal("shared_disks", uid, "SHARED DISK SPACE", Vector2(440, 0) if touch_u > 0.0 else Vector2(800, 650), false, back)

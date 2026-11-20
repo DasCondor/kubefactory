@@ -34,6 +34,10 @@
   worlds simulate it; the browser build offers only the simulated check. On
   Windows a closed port times out rather than being refused, and the result
   says a closed and a firewalled port look the same from here.
+- The Docker media lab shows file sync and library import as separate
+  activity rows: what starts each (change-driven sync, manual import), its
+  current state, when one last completed, and the files and bytes completed in
+  the last 15 minutes, hour or 24 hours. Simulated.
 
 ### Fixed
 

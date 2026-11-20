@@ -36,7 +36,11 @@ func _run() -> void:
 	var world = game.world
 	var hud = game.hud
 	var st: Dictionary = cluster.state
-	var expected_hosts = 1 if "--expect-hosts=1" in OS.get_cmdline_user_args() else 2
+	# media-lab.json decides the layout; --expect-hosts=1 or =2 overrides it
+	var expected_hosts = load("res://scripts/demo_media_lab.gd").configured_host_count()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--expect-hosts="):
+			expected_hosts = int(arg.trim_prefix("--expect-hosts="))
 	hud.settings.erase("storage_warn_pct")
 	hud._update_lab_warning(st)
 	_check(st["nodes"].size() == expected_hosts and st["pods"].size() == 15, "configured hosts and every container are present")

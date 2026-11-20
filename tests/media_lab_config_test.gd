@@ -72,5 +72,28 @@ func _initialize() -> void:
 		"Prowlarr has its own config volume and nothing points at Jackett")
 	var pv = pst["lab"]["egress"].filter(func(route): return route["via"] == "gluetun")
 	_check(pv.size() == 4 and pv.any(func(route): return route["app"] == "prowlarr"), "Prowlarr is one of the four VPN-protected apps")
+	# transfer activity: sync and import are separate rows, counted per window
+	var lab = Lab.new(true, 0.0, 1)
+	lab.online = {"downloader": true, "gluetun": true, "syncthing": true, "media-sync": true}
+	lab.tick(0.0)
+	lab.tick(5.0)
+	lab.tick(5.0)
+	lab.tick(10.0)
+	lab.action({"op": "lab_import"}, 11.0)
+	var act = lab.activity(12.0)
+	_check(act.map(func(r): return r["name"]) == ["File sync", "Library import"], "file sync and library import are separate activity rows")
+	_check(act[0]["windows"]["15 min"] == [2, 2 * Lab.FILE_BYTES] and act[1]["windows"]["15 min"] == [1, Lab.FILE_BYTES],
+		"each row counts its own completed files and bytes")
+	_check(act[0]["last"] == 10.0 and act[1]["last"] == 11.0, "each row has its own last completed time")
+	_check(act[0]["trigger"].begins_with("change-driven") and act[1]["trigger"].begins_with("manual"), "the trigger is named: change-driven sync, manual import")
+	var later = lab.activity(12.0 + 1000.0)
+	_check(later[0]["windows"]["15 min"][0] == 0 and later[0]["windows"]["1 hour"][0] == 2 and later[0]["windows"]["24 hours"][0] == 2,
+		"older transfers drop out of the shorter windows only")
+	lab.action({"op": "lab_sync", "paused": true}, 13.0)
+	_check(lab.activity(13.0)[0]["state"] == "paused", "a paused sync says so")
+	lab.online["media-sync"] = false
+	_check(lab.activity(13.0)[0]["state"] == "offline", "a missing receiver shows the sync offline")
+	_check(Lab.new(false, 0.0, 1).activity(0.0).size() == 2 and Demo.new("docker-media").fetch()["lab"]["activity"].is_empty(),
+		"the starter without a gatherer reports no transfer activity")
 	print("MEDIA LAB CONFIG PASSED" if failures == 0 else "MEDIA LAB CONFIG FAILED")
 	quit(0 if failures == 0 else 1)
