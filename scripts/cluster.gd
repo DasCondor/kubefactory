@@ -30,7 +30,7 @@ const Remote = preload("res://scripts/backend_remote.gd")
 const LogSources = preload("res://scripts/log_sources.gd")
 const VIEW_OPS = ["logs", "events", "cluster_events", "templates"]
 # read-only operations that hand back data (not text): storage inspection and loopback forwards
-const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan", "vpn_check", "export_config"]
+const DATA_OPS = ["file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan", "vpn_check", "export_config", "port_check"]
 const APP_OPS = ["apply_app", "remove_app", "portainer_install", "portainer_open", "deploy_template", "remove_template"]
 
 var backend = null
@@ -170,6 +170,8 @@ static func describe(a: Dictionary) -> String:
 			return "view logs %s/%s %s%s" % [a["ns"], a["name"], a.get("container", ""), " (previous)" if a.get("previous", false) else ""]
 		"vpn_check":
 			return "ask the internet's view of %s's address from inside its VPN tunnel (ipinfo.io)" % a.get("name", "")
+		"port_check":
+			return "check %s port %s:%s of %s from this computer%s" % [str(a.get("proto", "tcp")).to_upper(), a.get("host", ""), a.get("port", ""), a.get("name", ""), " (simulated)" if a.get("simulated", false) else ""]
 		"events":
 			return "view events %s/%s" % [a["ns"], a["name"]]
 		"apply_app":
@@ -573,8 +575,25 @@ func act(a: Dictionary) -> bool:
 			return false
 	if not a.get("quiet", false):
 		audit(describe(a))
+	if a["op"] == "port_check":       # from this computer, not through the backend
+		_spawn(_run_port_check.bind(a, _gen))
+		return true
 	_spawn(_run_action.bind(backend, a, _gen))
 	return true
+
+func _run_port_check(a: Dictionary, gen: int) -> void:
+	var r: Dictionary
+	if a.get("simulated", false):
+		r = {"tcp": "connected" if a.get("healthy", false) else "refused or unreachable", "http": "", "ms": 2,
+			"at": Time.get_unix_time_from_system(), "simulated": true}
+		if str(a.get("proto", "tcp")) == "udp":
+			r["tcp"] = "unknown"
+			r["http"] = "UDP has no handshake: no reply looks the same as a closed port"
+	else:
+		r = K.port_probe(str(a.get("host", "")), int(a.get("port", 0)), str(a.get("proto", "tcp")))
+	r["ok"] = true
+	r["msg"] = "%s%s" % [r["tcp"], (" · " + r["http"]) if r["http"] != "" else ""]
+	_action_finished.call_deferred(a, r, gen)
 
 func _run_action(b, a: Dictionary, gen: int) -> void:
 	var t0 = Time.get_ticks_msec()
@@ -586,6 +605,8 @@ func _action_finished(a: Dictionary, r: Dictionary, gen: int) -> void:
 	if gen != _gen:
 		return
 	if a["op"] in DATA_OPS:
+		if a["op"] == "port_check":
+			audit("  -> %s" % r.get("msg", ""))
 		if not r.has("data"):
 			r["data"] = {}
 		data_ready.emit(a.get("key", ""), r)

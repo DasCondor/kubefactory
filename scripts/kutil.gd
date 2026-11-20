@@ -844,6 +844,92 @@ static func network_mode_text(pod: Dictionary) -> String:
 		return "no network"
 	return ""
 
+# Where "Check from here" connects for one Docker binding, or why it cannot:
+# {"host", "port", "proto", "local"} where local means the engine's own address
+# (loopback or every interface), or {"none": reason}.
+static func _check_target(binding: Dictionary, pod: Dictionary) -> Dictionary:
+	var target = str(binding.get("target", ""))
+	var proto = target.get_slice("/", 1) if "/" in target else "tcp"
+	var inner = int(target.get_slice("/", 0))
+	if binding.has("published"):
+		var published = str(binding.get("published", ""))
+		if not published.is_valid_int():
+			return {"none": "the host port is chosen when the container starts"}
+		var ip = str(binding.get("ip", ""))
+		var local = ip in ["", "0.0.0.0", "::"] or ip.begins_with("127.") or ip == "::1"
+		var host = ip
+		if ip in ["", "0.0.0.0"]:
+			host = "127.0.0.1"
+		elif ip == "::":
+			host = "::1"
+		return {"host": host, "port": int(published), "proto": proto, "local": local}
+	if binding.get("host_network", false):
+		return {"host": "127.0.0.1", "port": inner, "proto": proto, "local": true}
+	for segment in pod.get("net", {}).get("segments", []):
+		if str(segment.get("driver", "")) in LAN_DRIVERS and str(segment.get("ip", "")) != "":
+			return {"host": str(segment["ip"]), "port": inner, "proto": proto, "local": false}
+	return {"none": "not published: reachable only from its own network"}
+
+# A TCP connection from this computer, and separately an HTTP answer. Blocking:
+# run it off the main thread. UDP has no handshake, so it is never "checked".
+static func port_probe(host: String, port: int, proto: String, timeout_ms: int = 3000) -> Dictionary:
+	var r = {"tcp": "", "http": "", "ms": 0, "at": Time.get_unix_time_from_system()}
+	if proto == "udp":
+		r["tcp"] = "unknown"
+		r["http"] = "UDP has no handshake: no reply looks the same as a closed port"
+		return r
+	if port <= 0 or port > 65535 or host == "":
+		r["tcp"] = "no check"
+		return r
+	var t0 = Time.get_ticks_msec()
+	var peer = StreamPeerTCP.new()
+	if peer.connect_to_host(host, port) != OK:
+		r["tcp"] = "no check"
+		r["http"] = "the address could not be used"
+		return r
+	while Time.get_ticks_msec() - t0 < timeout_ms:
+		peer.poll()
+		var st = peer.get_status()
+		if st == StreamPeerTCP.STATUS_CONNECTED or st == StreamPeerTCP.STATUS_ERROR or st == StreamPeerTCP.STATUS_NONE:
+			break
+		OS.delay_msec(10)
+	r["ms"] = Time.get_ticks_msec() - t0
+	match peer.get_status():
+		StreamPeerTCP.STATUS_CONNECTED:
+			r["tcp"] = "connected"
+		StreamPeerTCP.STATUS_CONNECTING:
+			# Windows does not report a refused connection here: closed and filtered ports
+			# both just run out the clock, so the result says it cannot tell them apart
+			r["tcp"] = "timed out"
+			r["note"] = "no answer in %d s: a closed port and a firewalled one look the same from here" % int(timeout_ms / 1000.0)
+		_:
+			r["tcp"] = "refused or unreachable"
+	if r["tcp"] != "connected":
+		peer.disconnect_from_host()
+		return r
+	# HTTP is a separate question: a HEAD request, and only the status line is read
+	peer.put_data(("HEAD / HTTP/1.0\r\nHost: %s\r\nUser-Agent: KubeFactory-port-check\r\nConnection: close\r\n\r\n" % host).to_ascii_buffer())
+	var got = PackedByteArray()
+	var t1 = Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t1 < 2000 and got.size() < 64:
+		peer.poll()
+		var n = peer.get_available_bytes()
+		if n > 0:
+			var part = peer.get_partial_data(mini(n, 64 - got.size()))
+			if part[0] == OK:
+				got.append_array(part[1])
+		elif peer.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+			break
+		else:
+			OS.delay_msec(10)
+	peer.disconnect_from_host()
+	var line = got.get_string_from_ascii().get_slice("\n", 0).strip_edges()
+	if line.begins_with("HTTP/") and line.get_slice(" ", 1).is_valid_int():
+		r["http"] = "HTTP " + line.get_slice(" ", 1)
+	else:
+		r["http"] = "no HTTP answer"
+	return r
+
 # The values the ports view can be narrowed by: hosts and networks present in the rows.
 static func port_filter_options(rows: Array) -> Dictionary:
 	var hosts = []
@@ -953,7 +1039,8 @@ static func port_rows(state: Dictionary) -> Array:
 								break
 					rows.append({"name": str(pod["name"]), "port": port, "scope": binding_scope,
 						"group": group, "status": status, "health": health, "pods": [pod["uid"]],
-						"hosts": _hosts_of([pod]), "networks": _networks_of([pod]), "mode": network_mode_text(pod)})
+						"hosts": _hosts_of([pod]), "networks": _networks_of([pod]), "mode": network_mode_text(pod),
+						"check": _check_target(binding, pod)})
 				continue
 			var fallback = str(pod.get("ip", "")).split(",", false)
 			if not fallback.is_empty():
@@ -993,7 +1080,7 @@ static func _networks_of(pods: Array) -> Array:
 # How dangerous an action is (1 safe .. 5 critical). Matches the tool tiers.
 static func tier_of(a: Dictionary, state: Dictionary) -> int:
 	match a["op"]:
-		"logs", "events", "cluster_events", "templates", "portainer_open", "file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan", "vpn_check":
+		"logs", "events", "cluster_events", "templates", "portainer_open", "file_mounts", "file_list", "file_read", "forward", "pod_metrics", "cleanup_scan", "vpn_check", "port_check":
 			return 1
 		"create", "apply_app", "deploy_template", "portainer_install":
 			return 2

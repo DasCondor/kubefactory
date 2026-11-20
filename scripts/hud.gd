@@ -63,6 +63,7 @@ var _ports_parent = Callable()
 var _port_group = -1        # ports view filters: scope group (-1 all), host and network ("" all)
 var _port_host = ""
 var _port_network = ""
+var _port_checks = {}       # "name port" -> the last Check from here result for that binding
 var _connection_graph
 var _configuration_editor
 var _yaml_namespace = ""
@@ -1689,6 +1690,7 @@ func _fill_ports() -> void:
 			if not where.is_empty():
 				lines.add_child(_wrapped("   ·   ".join(where), 13, DIM))
 			lines.add_child(_wrapped(row["status"], 14, color))
+			_port_check_lines(lines, row)
 			if sim_lab:
 				var matching = row["scope"] == "Media LAN" if _lab_port_source == 1 else (row["scope"].begins_with("VLAN 30") if _lab_port_source == 2 else row["group"] <= 1)
 				var result = "No published route from this source"
@@ -1735,6 +1737,42 @@ func _fill_ports() -> void:
 		_dyn.add_child(card)
 	if outbound.is_empty():
 		_dyn.add_child(_wrapped("No outbound routes are reported for this device.", 14, DIM))
+
+# "Check from here": one binding, on request, from this computer. TCP and HTTP are
+# reported apart; UDP stays unknown; a LAN or VLAN claim needs a client on that network.
+func _port_check_lines(lines: Container, row: Dictionary) -> void:
+	var target: Dictionary = row.get("check", {})
+	if target.is_empty():
+		return
+	var simulated = cluster.state.get("source") == "simulation"
+	var key = "%s %s" % [row["name"], row["port"]]
+	var last: Dictionary = _port_checks.get(key, {})
+	if not last.is_empty():
+		var when = Time.get_time_string_from_unix_time(int(last["at"]) + int(Time.get_time_zone_from_system().get("bias", 0)) * 60)
+		var tcp = str(last["tcp"])
+		var col = K.health_color("ok" if tcp == "connected" else ("warn" if tcp in ["unknown", "no check", "timed out"] else "bad"))
+		var text = "Checked from this computer at %s%s · TCP %s%s" % [when, " (SIMULATED)" if last.get("simulated", false) else "",
+			tcp, (" in %d ms" % int(last["ms"])) if tcp == "connected" else ""]
+		lines.add_child(_wrapped(text, 13, col))
+		if str(last.get("note", "")) != "":
+			lines.add_child(_wrapped(str(last["note"]), 12, DIM))
+		if str(last.get("http", "")) != "":
+			lines.add_child(_wrapped("HTTP · " + str(last["http"]), 13, DIM))
+	if target.has("none"):
+		lines.add_child(_wrapped("No check from here: " + str(target["none"]), 12, DIM))
+		return
+	if not simulated and OS.has_feature("web"):
+		return
+	if not simulated and target.get("local", false) and bool(cluster.backend.get("remote") if cluster.backend != null else false):
+		lines.add_child(_wrapped("No check from here: this engine runs on another machine, and its loopback is not reachable from this one.", 12, DIM))
+		return
+	lines.add_child(_btn("Check from here  (%s %s:%d)" % [str(target["proto"]).to_upper(), target["host"], int(target["port"])], func():
+		cluster.act({"op": "port_check", "host": target["host"], "port": target["port"], "proto": target["proto"], "name": row["name"],
+			"simulated": simulated, "healthy": row["health"] == "ok", "key": "portcheck:" + key})))
+	var scope = str(row.get("scope", ""))
+	if not target.get("local", false) or scope.begins_with("All interfaces"):
+		var address = "<this host's LAN address>" if target.get("local", false) else str(target["host"])
+		lines.add_child(_wrapped("This tests from this computer only. For the LAN or VLAN claim, run it from a client on that network: Test-NetConnection %s -Port %d (Windows) or nc -zv %s %d." % [address, int(target["port"]), address, int(target["port"])], 12, DIM))
 
 func _fill_pod() -> void:
 	var st = cluster.state
@@ -2482,6 +2520,12 @@ func _store_file(path: String, page: int) -> void:
 
 # Answers to the storage requests (and, further down, LiveView's).
 func on_data(key: String, r: Dictionary) -> void:
+	if key.begins_with("portcheck:"):
+		_port_checks[key.trim_prefix("portcheck:")] = r
+		if _modal_kind == "ports":
+			_dyn_sig = ""
+			_fill_ports()
+		return
 	if key == "configuration:export":
 		if _modal_kind != "configuration_wait":
 			return
