@@ -2,6 +2,19 @@
 
 <sub>[KubeFactory](../README.md) · [All docs](../README.md#-docs-by-topic) · [2.0.0-beta.3 pre-release](https://github.com/DasCondor/kubefactory/releases/tag/v2.0.0-beta.3) · [Known limitations](KNOWN_LIMITATIONS.md)</sub>
 
+## Unreleased
+
+### Fixed
+
+- The Krew hold their tools properly. Gauge's, Blueprint's and every Foreman's
+  tablet floated 18 cm in front of the hand on a small bracket; it now sits in
+  the fist, fingers over its lower edge, at all three detail levels. The LM
+  Studio Foreman's laptop rests on the fingers instead of hovering above them.
+  In the browser's Standard preset, Foreman holds his tablet at the hand, Bob's
+  wrench hangs from his fist and his cane's handle is in his hand, and Blueprint
+  holds its board with both hands. `tools/fix_held_items.py --check` reports any
+  prop that floats again.
+
 ## 2.0.0-beta.3 (2026-11-17)
 
 ### Added

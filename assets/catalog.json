@@ -1349,7 +1349,7 @@
       "id": "gauge",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending; held prop seated in hand by tools/fix_held_items.py; in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8764,
@@ -1362,7 +1362,7 @@
             [
               0.8401365716556867,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -1471,9 +1471,9 @@
             },
             "HandDisplay": {
               "position": [
-                0.6701365716556866,
-                1.1761082502145355,
-                0.6325786038269857
+                0.670137,
+                1.026712,
+                0.539681
               ],
               "size": [
                 0.28,
@@ -1509,7 +1509,7 @@
           },
           "bytes": 236688,
           "path": "assets/krew/gauge_standard.glb",
-          "sha256": "e67b8b7669974cbfb1fddafc8a902b90cf43781e6f41188d7bdbfddac4f2633a"
+          "sha256": "81d2c7120ab08154a32a7784ff6ed067cdd4f059a0b1829199e50732e3d43919"
         },
         "enhanced": {
           "triangles": 12428,
@@ -1522,7 +1522,7 @@
             [
               0.8401365716556867,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -1631,9 +1631,9 @@
             },
             "HandDisplay": {
               "position": [
-                0.6701365716556866,
-                1.1761082502145355,
-                0.6325786038269857
+                0.670137,
+                1.026712,
+                0.539681
               ],
               "size": [
                 0.28,
@@ -1669,7 +1669,7 @@
           },
           "bytes": 308848,
           "path": "assets/krew/gauge_enhanced.glb",
-          "sha256": "a69654e6a82cad10a0bb8949e979844ad71579856fc3c1060c6a2fde812427f9"
+          "sha256": "59e56312f9a13ca53b9e333f999422850f9d4dbe67692ec84ec683c0993385a9"
         },
         "ultra": {
           "triangles": 19020,
@@ -1682,7 +1682,7 @@
             [
               0.8401365716556867,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -1791,9 +1791,9 @@
             },
             "HandDisplay": {
               "position": [
-                0.6701365716556866,
-                1.1761082502145355,
-                0.6325786038269857
+                0.670137,
+                1.026712,
+                0.539681
               ],
               "size": [
                 0.28,
@@ -1829,7 +1829,7 @@
           },
           "bytes": 458656,
           "path": "assets/krew/gauge_ultra.glb",
-          "sha256": "fe579fec43abb19100e9e109e3bee2a02ab1a9d9a155e923aa993a47287a81db"
+          "sha256": "94813e4a256e0f05df8e5be4686afb9b52ad63af3bba997adbbb90b8e1663cfd"
         }
       },
       "demo_patch": "V7"
@@ -2115,7 +2115,7 @@
       "id": "blueprint",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending; held prop seated in hand by tools/fix_held_items.py; in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8390,
@@ -2128,7 +2128,7 @@
             [
               0.8998365716556866,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -2258,7 +2258,7 @@
           },
           "bytes": 227296,
           "path": "assets/krew/blueprint_standard.glb",
-          "sha256": "5ba3569b530ad79580bc1c882150510dd9798c4cb4e7e1c36347de58fe581ada"
+          "sha256": "332ebc5f75df35807f878ff0f0d36d389f007219d82fa81ce312168aa256eaeb"
         },
         "enhanced": {
           "triangles": 12030,
@@ -2271,7 +2271,7 @@
             [
               0.8998365716556866,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -2401,7 +2401,7 @@
           },
           "bytes": 299172,
           "path": "assets/krew/blueprint_enhanced.glb",
-          "sha256": "90ba553f72db44d02b95e3c42fcae20252d633468e67701230eae04061b8dd10"
+          "sha256": "9663f39ae2b99cfc674677a3a20cbf3feaae268ab23176c456967990e74ac1fb"
         },
         "ultra": {
           "triangles": 17630,
@@ -2414,7 +2414,7 @@
             [
               0.8998365716556866,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -2544,7 +2544,7 @@
           },
           "bytes": 420252,
           "path": "assets/krew/blueprint_ultra.glb",
-          "sha256": "564d71ae13d0c178e375d0d2eb4f74569a9753e7dceeb32599c0bb88ce8978a1"
+          "sha256": "d51a53816b468306c68b3f4b93d3895136599cd6ff4b81b9bcc4d720538ab98d"
         }
       },
       "demo_patch": "V7"
@@ -2553,7 +2553,7 @@
       "id": "foreman_offline",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending; held prop seated in hand by tools/fix_held_items.py; in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8078,
@@ -2566,7 +2566,7 @@
             [
               0.9586365716556866,
               2.178,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -2696,7 +2696,7 @@
           },
           "bytes": 216516,
           "path": "assets/krew/foreman_offline_standard.glb",
-          "sha256": "066621c9a8b2c104a468392a5bc289b4f34ffc7fea02e91055d1d7c1ff0cadae"
+          "sha256": "4a75abec59fb47c7dd5a388d936de00574073d58c702e3641a171bde182cc86f"
         },
         "enhanced": {
           "triangles": 11798,
@@ -2709,7 +2709,7 @@
             [
               0.9586365716556866,
               2.178,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -2839,7 +2839,7 @@
           },
           "bytes": 288584,
           "path": "assets/krew/foreman_offline_enhanced.glb",
-          "sha256": "ec776db5b7a80280ad648d530981069528379e8dcb5734fadfb344bb0f51d2ba"
+          "sha256": "ed5eb23f6a8706c59550fc621b3bc2d882e1765d24dcd1573f5ac62d21b32ea9"
         },
         "ultra": {
           "triangles": 16374,
@@ -2852,7 +2852,7 @@
             [
               0.9586365716556866,
               2.178,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -2982,7 +2982,7 @@
           },
           "bytes": 383468,
           "path": "assets/krew/foreman_offline_ultra.glb",
-          "sha256": "d9cc371b138e7de5269f071bb8b64d2ea064e62ead8523eb3ca11b0ec6de0777"
+          "sha256": "8daaf12eaf7a99f2ce9a4997269a4d17d7923a76e85fcc448b6d47ddf379c800"
         }
       },
       "demo_patch": "V7"
@@ -2991,7 +2991,7 @@
       "id": "foreman_ollama",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending; held prop seated in hand by tools/fix_held_items.py; in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8234,
@@ -3004,7 +3004,7 @@
             [
               0.9436365716556867,
               2.2903728498352653,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -3096,9 +3096,9 @@
             ],
             "HandDisplay": {
               "position": [
-                0.7436365716556866,
-                1.2361082502145353,
-                0.6325786038269857
+                0.743637,
+                1.086712,
+                0.539681
               ],
               "size": [
                 0.34,
@@ -3134,7 +3134,7 @@
           },
           "bytes": 217412,
           "path": "assets/krew/foreman_ollama_standard.glb",
-          "sha256": "dddba0b05691ad4392de6237ac4888b6c15e005de6ccd43b9c2ae9a902997754"
+          "sha256": "db592acb060a5285ad4ec595d5ab56d63597ff8fbcd0750afb3d348b24e320e1"
         },
         "enhanced": {
           "triangles": 12018,
@@ -3147,7 +3147,7 @@
             [
               0.9436365716556867,
               2.2903728498352653,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -3239,9 +3239,9 @@
             ],
             "HandDisplay": {
               "position": [
-                0.7436365716556866,
-                1.2361082502145353,
-                0.6325786038269857
+                0.743637,
+                1.086712,
+                0.539681
               ],
               "size": [
                 0.34,
@@ -3277,7 +3277,7 @@
           },
           "bytes": 293540,
           "path": "assets/krew/foreman_ollama_enhanced.glb",
-          "sha256": "eb8b58cb912b226a28f6489b6219e91d05823a1a169b39c3e4a6b9b38979ed97"
+          "sha256": "2a181a3e3c5de0d91fbfacaad45f74f137fd315e0eb2d96b34dbed51f0bfdda7"
         },
         "ultra": {
           "triangles": 15730,
@@ -3290,7 +3290,7 @@
             [
               0.9436365716556867,
               2.2903728498352653,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -3382,9 +3382,9 @@
             ],
             "HandDisplay": {
               "position": [
-                0.7436365716556866,
-                1.2361082502145353,
-                0.6325786038269857
+                0.743637,
+                1.086712,
+                0.539681
               ],
               "size": [
                 0.34,
@@ -3420,7 +3420,7 @@
           },
           "bytes": 361808,
           "path": "assets/krew/foreman_ollama_ultra.glb",
-          "sha256": "928ca488787a40b38c677c81f895119f9253fab6dd410d7de1bd7eba09084a0e"
+          "sha256": "9a97bc9a8e85fb5a3f56f263563912b57803282d3af42b21a4fdc0de98b5c6f9"
         }
       },
       "demo_patch": "V7"
@@ -3429,7 +3429,7 @@
       "id": "foreman_lmstudio",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending; held prop seated in hand by tools/fix_held_items.py; in-game review pending",
       "variants": {
         "standard": {
           "triangles": 9474,
@@ -3589,7 +3589,7 @@
           },
           "bytes": 252988,
           "path": "assets/krew/foreman_lmstudio_standard.glb",
-          "sha256": "2f8a5ed7615a56fadf817847c78e7293b63fc4d347418cd3917b0a491c39643d"
+          "sha256": "dd3ce13fab133ad81ea529797d2552b19f5852f32a13eb14b29546f1685e5370"
         },
         "enhanced": {
           "triangles": 13226,
@@ -3749,7 +3749,7 @@
           },
           "bytes": 327180,
           "path": "assets/krew/foreman_lmstudio_enhanced.glb",
-          "sha256": "0735e02d0e19a2e62d34587207d7a2d9e6b5b30882da204147293ad3cfab117f"
+          "sha256": "50c85002c5f04064f042fdf8764154fd0532fca5ebe507e6e9f76ebafdd664d4"
         },
         "ultra": {
           "triangles": 19466,
@@ -3909,7 +3909,7 @@
           },
           "bytes": 470044,
           "path": "assets/krew/foreman_lmstudio_ultra.glb",
-          "sha256": "3634da57909a793f92c3111afcfc8b7eb97b33d54f39284880428dc7305318b6"
+          "sha256": "3c4485951cae6aa3bd9f4845103b3efd05d336279a9bf461687c0c465762c9b5"
         }
       },
       "demo_patch": "V7"
@@ -4356,7 +4356,7 @@
       "id": "foreman_claude",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending; held prop seated in hand by tools/fix_held_items.py; in-game review pending",
       "variants": {
         "standard": {
           "triangles": 7218,
@@ -4369,7 +4369,7 @@
             [
               0.9146365716556866,
               2.0780000000000003,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -4499,7 +4499,7 @@
           },
           "bytes": 194700,
           "path": "assets/krew/foreman_claude_standard.glb",
-          "sha256": "174b9689700e0991d9d45bfc4ca2c44894d137957fd6f44f97d7245ac9fcdf0e"
+          "sha256": "892ea332822b73cb4b9cfaa46afd67c728dbd05ed3797d69388e37e70ce5fa86"
         },
         "enhanced": {
           "triangles": 10746,
@@ -4512,7 +4512,7 @@
             [
               0.9146365716556866,
               2.0780000000000003,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -4642,7 +4642,7 @@
           },
           "bytes": 266292,
           "path": "assets/krew/foreman_claude_enhanced.glb",
-          "sha256": "aa00d1fbc23713eaa7fc49e1fe34eb9315339d8a25d2ea3252fba80a1fcaafd4"
+          "sha256": "2113e2553dd7f5ac7be6eba080c332b2e0a9454135115b4b79e353e1954b345f"
         },
         "ultra": {
           "triangles": 13882,
@@ -4655,7 +4655,7 @@
             [
               0.9146365716556866,
               2.0780000000000003,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -4785,7 +4785,7 @@
           },
           "bytes": 319580,
           "path": "assets/krew/foreman_claude_ultra.glb",
-          "sha256": "8c95c79fe18e28cea1098abc361ae4d134a1f9738348752fedaf140ca98df505"
+          "sha256": "23cc1c060bb429428f40569a06e412720f1ca6ad8405cab02c71d06720387b83"
         }
       },
       "demo_patch": "V7"
@@ -4794,7 +4794,7 @@
       "id": "foreman_custom",
       "category": "krew",
       "asset_generation": "V6",
-      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending",
+      "release_quality_status": "operator-side displays / mounts revised; manual review pending; V7 readability update, in-game review pending; held prop seated in hand by tools/fix_held_items.py; in-game review pending",
       "variants": {
         "standard": {
           "triangles": 8766,
@@ -4807,7 +4807,7 @@
             [
               0.9432365716556868,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -4899,9 +4899,9 @@
             ],
             "HandDisplay": {
               "position": [
-                0.7632365716556867,
-                1.1861082502145355,
-                0.6325786038269857
+                0.763237,
+                1.036712,
+                0.539681
               ],
               "size": [
                 0.3,
@@ -4937,7 +4937,7 @@
           },
           "bytes": 236508,
           "path": "assets/krew/foreman_custom_standard.glb",
-          "sha256": "b81fe5950094d7d096eccf144bb8d6b8bba0857e9168aa3885fa93ad4233d0f6"
+          "sha256": "71815762cf9062e7400c84a543f7c867b48a2b8dc3218e239d46c4871435b35d"
         },
         "enhanced": {
           "triangles": 12534,
@@ -4950,7 +4950,7 @@
             [
               0.9432365716556868,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -5042,9 +5042,9 @@
             ],
             "HandDisplay": {
               "position": [
-                0.7632365716556867,
-                1.1861082502145355,
-                0.6325786038269857
+                0.763237,
+                1.036712,
+                0.539681
               ],
               "size": [
                 0.3,
@@ -5080,7 +5080,7 @@
           },
           "bytes": 311884,
           "path": "assets/krew/foreman_custom_enhanced.glb",
-          "sha256": "3cd83bf21bfa7ce855808ca30e1cd62fd1e6165b38b0260c087c52f4e4763d8b"
+          "sha256": "ad0f8695e880442fe35489aa94644963f7ab2218506d75548b2eaa38534275f0"
         },
         "ultra": {
           "triangles": 18134,
@@ -5093,7 +5093,7 @@
             [
               0.9432365716556868,
               2.193,
-              0.6325786038269857
+              0.560285
             ]
           ],
           "anchors": {
@@ -5185,9 +5185,9 @@
             ],
             "HandDisplay": {
               "position": [
-                0.7632365716556867,
-                1.1861082502145355,
-                0.6325786038269857
+                0.763237,
+                1.036712,
+                0.539681
               ],
               "size": [
                 0.3,
@@ -5223,7 +5223,7 @@
           },
           "bytes": 432968,
           "path": "assets/krew/foreman_custom_ultra.glb",
-          "sha256": "783dda9bb0fee1c7471237d44b8bc27654c80784cfc21c4a168fb8e13ec9b581"
+          "sha256": "b801ff2c538a725d523346d62e3fed1c73f8d118e0b7d04d500cc167d7c7b0ef"
         }
       },
       "demo_patch": "V7"

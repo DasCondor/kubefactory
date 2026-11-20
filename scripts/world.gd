@@ -580,7 +580,10 @@ func set_foreman(id: Dictionary) -> void:
 	_box(Vector3(0.6, 0.24, 0.52), hat, Vector3(0, 2.24, 0), fallback)
 	for x in [-0.56, 0.56]:
 		_box(Vector3(0.2, 0.7, 0.24), body, Vector3(x, 1.05, 0.05), fallback)
-	_box(Vector3(0.5, 0.36, 0.05), Tex.glow(Color(0.5, 0.85, 1.0), 1.2), Vector3(0.45, 1.05, 0.38), fallback)
+	# the tablet, held by its lower edge in the right hand: flush with the front of the
+	# forearm, its bottom at the hand
+	_box(Vector3(0.4, 0.3, 0.04), Tex.shared("dark"), Vector3(0.56, 0.84, 0.19), fallback)
+	_box(Vector3(0.34, 0.24, 0.02), Tex.glow(Color(0.5, 0.85, 1.0), 1.2), Vector3(0.56, 0.85, 0.215), fallback)
 func _cyl(radius: float, height: float, material: Material, pos: Vector3, parent: Node3D, rot = Vector3.ZERO) -> MeshInstance3D:
 	var mi = MeshInstance3D.new()
 	var c = CylinderMesh.new()
@@ -673,11 +676,14 @@ func _drawn_krew(id: String, p: Node3D, accent: Material, colour: Color) -> void
 			_box(Vector3(0.7, 0.86, 0.46), accent, Vector3(0, 1.08, 0), p)
 			_box(Vector3(0.56, 0.48, 0.46), steel, Vector3(0, 1.8, 0), p)
 			_box(Vector3(0.42, 0.14, 0.05), eyes, Vector3(0, 1.82, 0.24), p)
-			_box(Vector3(0.9, 0.62, 0.05), Tex.glow(Color(0.3, 0.45, 1.0), 1.2), Vector3(0.0, 1.1, 0.42), p)
-			for y in [0.95, 1.1, 1.25]:
-				_box(Vector3(0.7, 0.02, 0.02), Tex.glow(Color(0.9, 0.95, 1.0), 1.6), Vector3(0, y, 0.45), p)
-			for z in [-0.4, 0.4]:
-				_box(Vector3(0.5, 0.08, 0.06), steel, Vector3(0.52, 0.55, z), p)
+			# the board, held up in front of the chest by both hands at its sides
+			_box(Vector3(0.8, 0.56, 0.05), Tex.glow(Color(0.3, 0.45, 1.0), 1.2), Vector3(0.0, 1.05, 0.36), p)
+			for y in [0.92, 1.05, 1.18]:
+				_box(Vector3(0.62, 0.02, 0.02), Tex.glow(Color(0.9, 0.95, 1.0), 1.6), Vector3(0, y, 0.395), p)
+			for x in [-1.0, 1.0]:
+				_box(Vector3(0.14, 0.5, 0.16), accent, Vector3(x * 0.44, 1.22, 0.02), p)       # upper arm
+				_box(Vector3(0.12, 0.12, 0.34), steel, Vector3(x * 0.44, 1.0, 0.18), p)        # forearm, reaching forward
+				_box(Vector3(0.1, 0.16, 0.12), dark, Vector3(x * 0.41, 1.0, 0.36), p)          # hand on the board's edge
 
 # What a station shows: the worker's state, and its lamp in the colour of its worst finding.
 func set_krew_status(id: String, text: String, worst: String) -> void:
@@ -883,12 +889,12 @@ func _build_bob() -> void:
 	_box(Vector3(0.08, 0.1, 0.09), Tex.mat(Color(0.82, 0.62, 0.52), 0.8), Vector3(0, 0.22, 0.27), _bob_head)
 	_box(Vector3(0.32, 0.08, 0.06), white, Vector3(0, 0.14, 0.26), _bob_head)
 	_box(Vector3(0.36, 0.13, 0.07), white, Vector3(0, 0.04, 0.24), _bob_head)
-	# cane, planted beside him
-	_box(Vector3(0.05, 0.94, 0.05), wood_dark, Vector3(0.56, 0.47, 0.23), bfig)
-	_box(Vector3(0.05, 0.05, 0.16), wood_dark, Vector3(0.56, 0.92, 0.16), bfig)
+	# cane, planted beside him, its handle in his hand
+	_box(Vector3(0.05, 0.9, 0.05), wood_dark, Vector3(0.56, 0.45, 0.1), bfig)
+	_box(Vector3(0.05, 0.05, 0.16), wood_dark, Vector3(0.56, 0.9, 0.04), bfig)
 	# wrench in the other hand
 	_bob_wrench = Node3D.new()
-	_bob_wrench.position = Vector3(-0.56, -0.02, 0.18)
+	_bob_wrench.position = Vector3(-0.54, 0.02, 0.06)     # in the fist; it hangs from there
 	torso.add_child(_bob_wrench)
 	_box(Vector3(0.05, 0.5, 0.03), steel, Vector3(0, 0.2, 0), _bob_wrench)
 	_box(Vector3(0.16, 0.1, 0.035), steel, Vector3(0, 0.48, 0), _bob_wrench)
@@ -1995,8 +2001,8 @@ func _process(delta: float) -> void:
 	# Bob: slow breathing, a nod now and then, the wrench ticking in his hand
 	_bob_body.position.y = sin(_t * 1.2) * 0.015
 	_bob_head.rotation.x = 0.06 + sin(_t * 0.7) * 0.05
-	_bob_wrench.rotation.z = 1.03 + sin(_t * 2.1) * 0.08
-	_bob_wrench.rotation.x = 0.45
+	_bob_wrench.rotation.z = PI + sin(_t * 2.1) * 0.08    # hanging down, swinging a little
+	_bob_wrench.rotation.x = -0.17                          # upright, against his stoop
 	if player != null:
 		var bd = player.global_position - _bob.global_position
 		var bwant = atan2(bd.x, bd.z) if bd.length() < 30.0 else 0.0
