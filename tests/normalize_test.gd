@@ -383,6 +383,27 @@ line2\" injected: true"]])
 	check.call("Scrappy: an unused image, removable; a used one not reported", [sf.get("scrappy:unused-image:image/aaaaaaaaaaaa", {}).get("action", {}).get("op"), sf.has("scrappy:unused-image:image/bbbbbbbbbbbb")], ["remove_image", false])
 	check.call("Scrappy: an unattached volume is reported, never offered for removal", [sf.get("scrappy:unattached-volume:volume/data", {}).get("action"), sf.has("scrappy:unattached-volume:volume/used")], [{}, false])
 	check.call("Gauge has nothing to say about Docker requests", sf.keys().filter(func(k): return str(k).begins_with("gauge")).size(), 0)
+	# ---- Sentinel: common fixes for the usual media-stack findings
+	var sec_vpn = K.empty_security()
+	sec_vpn["caps"] = ["gluetun: NET_ADMIN"]
+	sec_vpn["host_paths"] = ["/dev/net/tun"]
+	var sec_plex = K.empty_security()
+	sec_plex["host_network"] = true
+	var sec_tag = K.empty_security()
+	sec_tag["latest"] = ["sonarr: lscr.io/linuxserver/sonarr:latest"]
+	var sec_admin = K.empty_security()
+	sec_admin["caps"] = ["web: NET_ADMIN"]
+	var mp = func(uid, w, sec, net = {}): return {"uid": uid, "name": w + "-1", "ns": "media", "wname": w, "wkind": "Deployment", "node": "n1", "status": "Running",
+		"health": "ok", "restarts": 0, "ready": true, "labels": {}, "sec": sec, "phase": "Running", "net": net}
+	var cf = KrewM.analyze({"source": "kubernetes", "nodes": [], "services": [], "workloads": [], "pods": [
+		mp.call("v1", "deluge", sec_vpn, {"vpn": {"product": "Gluetun", "role": "sidecar"}}), mp.call("v2", "plex", sec_plex),
+		mp.call("v3", "sonarr", sec_tag), mp.call("v4", "web", sec_admin)]}, {}, now)
+	var gw_cap = cf.get("sentinel:capabilities:media/deluge", {})
+	check.call("Sentinel common fix: NET_ADMIN on a VPN gateway is expected and lowered", [gw_cap.get("severity"), "expected for a VPN gateway" in str(gw_cap.get("title")), "gluetun" in str(gw_cap.get("common"))], ["low", true, true])
+	check.call("Sentinel common fix: /dev/net/tun becomes a device", "devices: [/dev/net/tun" in str(cf.get("sentinel:host-path:media/deluge", {}).get("example")), true)
+	check.call("Sentinel common fix: Plex on the host network gets the published-port fix", "32400:32400" in str(cf.get("sentinel:host-namespaces:media/plex", {}).get("example")), true)
+	check.call("Sentinel common fix: a LinuxServer floating tag is pinned", "lscr.io/linuxserver/sonarr:<version>" in str(cf.get("sentinel:floating-tag:media/sonarr", {}).get("example")), true)
+	check.call("Sentinel common fix: NET_ADMIN outside a VPN keeps its severity", [cf.get("sentinel:capabilities:media/web", {}).get("severity"), cf.get("sentinel:capabilities:media/web", {}).has("common")], ["medium", false])
 	# ---- Krew: the manager keeps first-seen times and records what got resolved
 	var km = KrewM.new()
 	km.update(kst, now)
