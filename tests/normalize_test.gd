@@ -38,6 +38,31 @@ func _init():
 		"NetworkSettings": {"Ports": {"80/tcp": [{"HostIp": "127.0.0.1", "HostPort": "49160"}], "53/udp": null}}})
 	check.call("active published port wins and exposed-only ports remain visible", actual,
 		[{"target": "80/tcp", "ip": "127.0.0.1", "published": "49160"}, {"target": "53/udp", "host_network": false}])
+	# a macvlan container: its own address on the LAN, every port reachable there without publishing
+	var mv_inspect = {"Name": "/pihole", "Config": {"ExposedPorts": {"53/udp": {}, "80/tcp": {}}, "Image": "pihole/pihole:2024.07.0"},
+		"HostConfig": {"NetworkMode": "lan30"}, "NetworkSettings": {"Ports": {}, "Networks": {"lan30": {"IPAddress": "192.168.30.53"}}}}
+	var mv_net = K.container_net(mv_inspect)
+	check.call("Docker network mode and per-network address are kept", [mv_net["mode"], mv_net["segments"][0]["ip"]], ["lan30", "192.168.30.53"])
+	var mv_pods = [{"uid": "m1", "name": "pihole", "node": "nas", "ready": true, "health": "ok", "net": mv_net, "docker_ports": K.container_ports(mv_inspect)},
+		{"uid": "h1", "name": "homeassistant", "node": "pi", "ready": true, "health": "ok",
+			"net": {"addrs": [], "via": "", "vpn": {}, "mode": "host", "segments": []},
+			"docker_ports": [{"target": "8123/tcp", "host_network": true}]},
+		{"uid": "b1", "name": "web", "node": "nas", "ready": true, "health": "ok",
+			"net": {"addrs": [], "via": "", "vpn": {}, "mode": "bridge", "segments": [{"name": "bridge", "vlan": 0, "interface": "", "ip": "172.17.0.2"}]},
+			"docker_ports": [{"target": "80/tcp", "ip": "127.0.0.1", "published": "8080"}]}]
+	K.apply_network_drivers(mv_pods, {"lan30": "macvlan", "bridge": "bridge"})
+	var mv_rows = K.port_rows({"source": "docker", "pods": mv_pods})
+	var mv_pihole = mv_rows.filter(func(r): return r["name"] == "pihole")
+	check.call("a macvlan container's ports are on its LAN address, listener unverified",
+		mv_pihole.map(func(r): return [r["port"], r["group"], r["scope"].begins_with("macvlan address on lan30")]),
+		[["192.168.30.53:53/udp", 0, true], ["192.168.30.53:80/tcp", 0, true]])
+	check.call("rows name their host, network and driver", [mv_pihole[0]["hosts"], mv_pihole[0]["networks"]], [["nas"], ["lan30 (macvlan)"]])
+	check.call("host networking is named as the mode", mv_rows.filter(func(r): return r["name"] == "homeassistant")[0]["mode"], "host network")
+	check.call("port filters list every host and network", K.port_filter_options(mv_rows), {"hosts": ["nas", "pi"], "networks": ["bridge", "lan30 (macvlan)"]})
+	check.call("filter by host", K.filter_ports(mv_rows, -1, "pi", "").map(func(r): return r["name"]), ["homeassistant"])
+	check.call("filter by network", K.filter_ports(mv_rows, -1, "", "bridge").map(func(r): return r["name"]), ["web"])
+	check.call("filter by scope: loopback only", K.filter_ports(mv_rows, 1, "", "").map(func(r): return r["port"]), ["127.0.0.1:8080 → 80/tcp"])
+	check.call("filters combine", K.filter_ports(mv_rows, 1, "pi", "").size(), 0)
 	var shared_store = K.pod_storage({"volumes": [{"name": "library", "persistentVolumeClaim": {"claimName": "library"}}],
 		"containers": [{"name": "writer", "volumeMounts": [{"name": "library", "mountPath": "/output"}]},
 			{"name": "reader", "volumeMounts": [{"name": "library", "mountPath": "/input", "readOnly": true}]}]})

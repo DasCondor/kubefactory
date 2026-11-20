@@ -458,7 +458,7 @@ const VPN_REGISTRY = [
 const DOWNLOADERS = ["qbittorrent", "deluge", "transmission", "sabnzbd", "nzbget", "rtorrent", "rutorrent", "aria2", "jdownloader"]
 
 static func empty_net() -> Dictionary:
-	return {"addrs": [], "via": "", "vpn": {}, "segments": []}
+	return {"addrs": [], "via": "", "vpn": {}, "segments": [], "mode": ""}
 
 static func vlan_id(value: Variant) -> int:
 	var text = str(value)
@@ -512,14 +512,15 @@ static func container_net(i: Dictionary) -> Dictionary:
 	var hc: Dictionary = i.get("HostConfig", {}) if typeof(i.get("HostConfig")) == TYPE_DICTIONARY else {}
 	var cfg: Dictionary = i.get("Config", {}) if typeof(i.get("Config")) == TYPE_DICTIONARY else {}
 	var mode = str(hc.get("NetworkMode", ""))
+	n["mode"] = mode
 	if mode.begins_with("container:"):
 		n["via"] = mode.trim_prefix("container:")
 	var ns: Dictionary = i.get("NetworkSettings", {}) if typeof(i.get("NetworkSettings")) == TYPE_DICTIONARY else {}
 	var nets = ns.get("Networks", {})
 	if typeof(nets) == TYPE_DICTIONARY:
 		for name in nets:
-			n["segments"].append({"name": str(name), "vlan": 0, "interface": ""})
 			var ip = str(nets[name].get("IPAddress", "")) if typeof(nets[name]) == TYPE_DICTIONARY else ""
+			n["segments"].append({"name": str(name), "vlan": 0, "interface": "", "ip": ip})
 			if ip != "":
 				n["addrs"].append("%s (%s)" % [ip, name])
 	var env: Array = cfg.get("Env", []) if typeof(cfg.get("Env")) == TYPE_ARRAY else []
@@ -814,6 +815,62 @@ static func selects(selector: Dictionary, labels: Dictionary) -> bool:
 
 # Port exposure is configuration. Readiness comes from the state we already have.
 const PORT_GROUPS = ["External and host bindings", "Loopback bindings", "Internal ports"]
+# Network drivers whose containers get their own address on the host's LAN or VLAN:
+# every port the container listens on is reachable there without being published.
+const LAN_DRIVERS = ["macvlan", "ipvlan"]
+
+# Each Docker network's driver (from `docker network ls`), written onto the
+# containers' network segments so a macvlan or ipvlan address can be told apart.
+static func apply_network_drivers(pods: Array, drivers: Dictionary) -> void:
+	for pod in pods:
+		for segment in pod.get("net", {}).get("segments", []):
+			if drivers.has(segment.get("name", "")):
+				segment["driver"] = str(drivers[segment["name"]])
+
+# A network as a port row names it: its name, VLAN and, when known, its driver.
+static func network_label(segment: Dictionary) -> String:
+	var driver = str(segment.get("driver", ""))
+	var vlan = vlan_id(segment.get("vlan", 0))
+	return "%s%s%s" % [segment.get("name", ""), " · VLAN %d" % vlan if vlan > 0 else "", " (%s)" % driver if driver not in ["", "bridge"] else ""]
+
+# How a container is attached, as the engine reports it.
+static func network_mode_text(pod: Dictionary) -> String:
+	var mode = str(pod.get("net", {}).get("mode", ""))
+	if mode == "host":
+		return "host network"
+	if mode.begins_with("container:"):
+		return "shares another container's network"
+	if mode == "none":
+		return "no network"
+	return ""
+
+# The values the ports view can be narrowed by: hosts and networks present in the rows.
+static func port_filter_options(rows: Array) -> Dictionary:
+	var hosts = []
+	var networks = []
+	for row in rows:
+		for h in row.get("hosts", []):
+			if h not in hosts:
+				hosts.append(h)
+		for n in row.get("networks", []):
+			if n not in networks:
+				networks.append(n)
+	hosts.sort()
+	networks.sort()
+	return {"hosts": hosts, "networks": networks}
+
+# group: -1 for every scope, else a PORT_GROUPS index; host or network "" for all.
+static func filter_ports(rows: Array, group: int, host: String, network: String) -> Array:
+	var out = []
+	for row in rows:
+		if group >= 0 and row["group"] != group:
+			continue
+		if host != "" and host not in row.get("hosts", []):
+			continue
+		if network != "" and network not in row.get("networks", []):
+			continue
+		out.append(row)
+	return out
 
 static func container_ports(inspect: Dictionary) -> Array:
 	var host: Dictionary = inspect.get("HostConfig", {})
@@ -854,7 +911,8 @@ static func port_rows(state: Dictionary) -> Array:
 			var node_port = svc.get("node_ports", {}).get(port)
 			rows.append({"name": "%s/%s" % [svc["ns"], svc["name"]], "port": "%s → %s" % [node_port, port] if node_port != null else port,
 				"scope": scope, "group": 0 if scope in ["Node port", "Load balancer"] else 2,
-				"status": status, "health": health, "pods": targets.map(func(p): return p["uid"])})
+				"status": status, "health": health, "pods": targets.map(func(p): return p["uid"]),
+				"hosts": _hosts_of(targets), "networks": _networks_of(targets), "mode": ""})
 	for pod in pods:
 		var ready: bool = pod.get("ready", false)
 		var healthy: bool = ready and pod.get("health", "ok") == "ok"
@@ -885,22 +943,50 @@ static func port_rows(state: Dictionary) -> Array:
 					elif binding.get("host_network", false):
 						binding_scope = "Host network · listener unverified"
 						group = 0
+					else:
+						# a macvlan or ipvlan address is on the LAN itself: the port needs no publishing
+						for segment in pod.get("net", {}).get("segments", []):
+							if str(segment.get("driver", "")) in LAN_DRIVERS and str(segment.get("ip", "")) != "":
+								port = "%s:%s" % [segment["ip"], port]
+								binding_scope = "%s address on %s · listener unverified" % [segment["driver"], segment.get("name", "")]
+								group = 0
+								break
 					rows.append({"name": str(pod["name"]), "port": port, "scope": binding_scope,
-						"group": group, "status": status, "health": health, "pods": [pod["uid"]]})
+						"group": group, "status": status, "health": health, "pods": [pod["uid"]],
+						"hosts": _hosts_of([pod]), "networks": _networks_of([pod]), "mode": network_mode_text(pod)})
 				continue
 			var fallback = str(pod.get("ip", "")).split(",", false)
 			if not fallback.is_empty():
 				for binding in fallback:
 					var published = "->" in binding
 					rows.append({"name": str(pod["name"]), "port": binding.strip_edges(), "scope": "Published host port" if published else "Container only",
-						"group": 0 if published else 2, "status": status, "health": health, "pods": [pod["uid"]]})
+						"group": 0 if published else 2, "status": status, "health": health, "pods": [pod["uid"]],
+						"hosts": _hosts_of([pod]), "networks": _networks_of([pod]), "mode": network_mode_text(pod)})
 				continue
 		for port in pod.get("sec", {}).get("host_ports", []):
 			rows.append({"name": str(pod["name"]), "port": str(port), "scope": "Host port", "group": 0,
-				"status": "Pod ready" if healthy else "Pod not ready", "health": health, "pods": [pod["uid"]]})
+				"status": "Pod ready" if healthy else "Pod not ready", "health": health, "pods": [pod["uid"]],
+				"hosts": _hosts_of([pod]), "networks": _networks_of([pod]), "mode": ""})
 	var rank = {"bad": 0, "warn": 1, "ok": 2}
 	rows.sort_custom(func(a, b): return rank[a["health"]] < rank[b["health"]] if a["health"] != b["health"] else a["name"] + a["port"] < b["name"] + b["port"])
 	return rows
+
+static func _hosts_of(pods: Array) -> Array:
+	var out = []
+	for p in pods:
+		var h = str(p.get("node", ""))
+		if h != "" and h not in out:
+			out.append(h)
+	return out
+
+static func _networks_of(pods: Array) -> Array:
+	var out = []
+	for p in pods:
+		for segment in p.get("net", {}).get("segments", []):
+			var label = network_label(segment)
+			if label != "" and label not in out:
+				out.append(label)
+	return out
 
 # ---- multi-user: action tiers and policy
 
