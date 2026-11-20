@@ -64,6 +64,24 @@ func probe() -> Dictionary:
 	return {"ok": true, "msg": context}
 
 var _inspect = {}      # container id -> {state, sec, finished}: `docker inspect` is asked only for what changed
+var _drivers = {}      # network name -> driver (bridge, macvlan, ipvlan, ...), read at most once a minute
+var _drivers_at = -1000.0
+
+func _network_drivers() -> Dictionary:
+	var now = Time.get_unix_time_from_system()
+	if now - _drivers_at < 60.0:
+		return _drivers
+	_drivers_at = now
+	var r = _run(["network", "ls", "--no-trunc", "--format", "{{json .}}"], false)
+	if r.code != 0:
+		return _drivers
+	var found = {}
+	for line in r.out.split("\n"):
+		var n = JSON.parse_string(line.strip_edges()) if line.strip_edges() != "" else null
+		if typeof(n) == TYPE_DICTIONARY and str(n.get("Name", "")) != "":
+			found[str(n["Name"])] = str(n.get("Driver", ""))
+	_drivers = found
+	return _drivers
 
 func _inspect_all(rows: Array) -> void:
 	var want = []
@@ -179,6 +197,7 @@ func fetch() -> Dictionary:
 			if state == "running":
 				wl[key]["ready"] += 1
 	st.workloads = wl.values()
+	K.apply_network_drivers(st.pods, _network_drivers())
 	# who goes through whom: a container sharing a VPN gateway's network is
 	# listed on the gateway, and the gateway's outside address is read
 	var by_id = {}

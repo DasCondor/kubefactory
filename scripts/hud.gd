@@ -60,6 +60,9 @@ var _lab_warning: Label
 var _lab_port_source = 0
 var _port_direction = "all"
 var _ports_parent = Callable()
+var _port_group = -1        # ports view filters: scope group (-1 all), host and network ("" all)
+var _port_host = ""
+var _port_network = ""
 var _connection_graph
 var _configuration_editor
 var _yaml_namespace = ""
@@ -1599,6 +1602,43 @@ func open_ports(uid: String = "", back: Callable = Callable(), direction: String
 			_lab_port_source = index
 			_fill_ports())
 		body.add_child(probe)
+	# narrow the list: by scope, and by host and network when there is more than one
+	var options = K.port_filter_options(K.port_rows(cluster.state))
+	# a filter whose picker is not shown (one value or none) never narrows the list
+	if _port_host not in options["hosts"] or options["hosts"].size() < 2:
+		_port_host = ""
+	if _port_network not in options["networks"] or options["networks"].size() < 2:
+		_port_network = ""
+	var filters = HFlowContainer.new()
+	filters.add_theme_constant_override("h_separation", 8)
+	var scope_pick = OptionButton.new()
+	scope_pick.add_item("All scopes")
+	for group_name in K.PORT_GROUPS:
+		scope_pick.add_item(group_name)
+	scope_pick.select(_port_group + 1)
+	scope_pick.item_selected.connect(func(index):
+		_port_group = index - 1
+		_fill_ports())
+	filters.add_child(scope_pick)
+	for pair in [["hosts", "All hosts"], ["networks", "All networks"]]:
+		var values: Array = options[pair[0]]
+		if values.size() < 2:
+			continue
+		var pick = OptionButton.new()
+		pick.add_item(pair[1])
+		for value in values:
+			pick.add_item(value)
+		var current = _port_host if pair[0] == "hosts" else _port_network
+		pick.select(values.find(current) + 1)
+		pick.item_selected.connect(func(index):
+			var chosen = "" if index == 0 else values[index - 1]
+			if pair[0] == "hosts":
+				_port_host = chosen
+			else:
+				_port_network = chosen
+			_fill_ports())
+		filters.add_child(pick)
+	body.add_child(filters)
 	_dyn = _menu_list(body, 8)
 	_fill_ports()
 
@@ -1610,7 +1650,9 @@ func _fill_ports() -> void:
 	var outbound: Array = cluster.state.get("lab", {}).get("egress", [])
 	if _modal_arg != "":
 		outbound = outbound.filter(func(route): return route["uid"] == _modal_arg)
-	var sig = JSON.stringify(rows) + JSON.stringify(outbound) + _port_direction + (str(_lab_port_source) if sim_lab else "")
+	var all_count = rows.size()
+	rows = K.filter_ports(rows, _port_group, _port_host, _port_network)
+	var sig = JSON.stringify(rows) + JSON.stringify(outbound) + _port_direction + (str(_lab_port_source) if sim_lab else "") + str([_port_group, _port_host, _port_network])
 	if sig == _dyn_sig:
 		return
 	_dyn_sig = sig
@@ -1620,7 +1662,9 @@ func _fill_ports() -> void:
 	if sim_lab and _port_direction == "outbound":
 		rows = []
 	if rows.is_empty() and (not sim_lab or _port_direction != "outbound"):
-		_dyn.add_child(_wrapped("This view has no configured ports to report.", 14, DIM))
+		_dyn.add_child(_wrapped("No ports match these filters." if all_count > 0 else "This view has no configured ports to report.", 14, DIM))
+	elif rows.size() < all_count:
+		_dyn.add_child(_wrapped("Showing %d of %d ports." % [rows.size(), all_count], 13, DIM))
 	for group in K.PORT_GROUPS.size():
 		var bindings = rows.filter(func(r): return r["group"] == group)
 		if bindings.is_empty():
@@ -1635,6 +1679,15 @@ func _fill_ports() -> void:
 			var lines = _col(5)
 			lines.add_child(_wrapped(row["name"], 15))
 			lines.add_child(_wrapped("%s   ·   %s" % [row["port"], row["scope"]], 14, DIM))
+			var where = PackedStringArray()
+			if not row.get("hosts", []).is_empty():
+				where.append("Host " + ", ".join(PackedStringArray(row["hosts"])))
+			if not row.get("networks", []).is_empty():
+				where.append("Network " + ", ".join(PackedStringArray(row["networks"])))
+			if str(row.get("mode", "")) != "":
+				where.append(row["mode"])
+			if not where.is_empty():
+				lines.add_child(_wrapped("   ·   ".join(where), 13, DIM))
 			lines.add_child(_wrapped(row["status"], 14, color))
 			if sim_lab:
 				var matching = row["scope"] == "Media LAN" if _lab_port_source == 1 else (row["scope"].begins_with("VLAN 30") if _lab_port_source == 2 else row["group"] <= 1)

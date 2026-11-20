@@ -20,6 +20,12 @@
   Docker media lab menu (the demo world restarts). Sonarr and Radarr search
   through Prowlarr, Prowlarr pushes its indexers into them, it has its own
   config volume, and it reaches the internet only through Gluetun.
+- Ports and readiness can be narrowed by scope (external and host,
+  loopback, internal), host and network, and each port names its host and
+  networks. On Docker, each network's driver is read (`docker network ls`), so
+  a container on a macvlan or ipvlan network shows its ports at its own LAN
+  address, marked "listener unverified" since nothing is published; host
+  networking and shared container networks are named as the mode.
 
 ### Fixed
 
