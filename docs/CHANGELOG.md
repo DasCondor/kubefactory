@@ -38,6 +38,15 @@
   activity rows: what starts each (change-driven sync, manual import), its
   current state, when one last completed, and the files and bytes completed in
   the last 15 minutes, hour or 24 hours. Simulated.
+- **Role blocks.** Workloads can be drawn as a block shaped by what they
+  do instead of a machine: app (glass front), worker (vents), storage (drive
+  bays), gateway (arrows), reporting (a gauge) or generic, with the role
+  written on the front, so it reads without colour. The role is guessed from
+  the image and name and can be changed per workload in its panel. Switch in
+  **Esc → Workloads** (or **Role blocks for workloads** on phones). Only the
+  look changes: IDs, panels and dashboards stay the same. LiveView pages show
+  on an app block's glass; blocks have no door, interior or container list
+  display.
 
 ### Fixed
 

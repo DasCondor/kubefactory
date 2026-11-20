@@ -18,6 +18,7 @@ const Minimap = preload("res://scripts/minimap.gd")
 const Models = preload("res://scripts/models.gd")
 const Topology = preload("res://scripts/demo_topology.gd")
 const MediaLab = preload("res://scripts/demo_media_lab.gd")
+const Machine = preload("res://scripts/machine.gd")
 const LabConnections = preload("res://scripts/lab_connections.gd")
 const Configuration = preload("res://scripts/configuration.gd")
 const ConfigurationEditor = preload("res://scripts/configuration_editor.gd")
@@ -1105,6 +1106,31 @@ func _pod_network(p: Dictionary) -> void:
 	for segment in net.get("segments", []):
 		_dyn.add_child(_wrapped(K.segment_text(segment), 13, DIM))
 	_dyn.add_child(_btn("Connections and shared data", func(): open_network(p["uid"])))
+	if Machine.look == "blocks":
+		# the block's role: guessed from the image and name, or chosen here for the whole workload
+		var key = Machine.workload_key(p)
+		var auto = Machine.auto_role(p)
+		var row = _row(8)
+		row.add_child(_lbl("BLOCK", 13, ORANGE))
+		var pick = OptionButton.new()
+		pick.add_item("Automatic (%s)" % auto)
+		for r in Machine.ROLES:
+			pick.add_item(r.capitalize())
+		var current = str(Machine.role_overrides.get(key, ""))
+		pick.select(Machine.ROLES.find(current) + 1)
+		pick.item_selected.connect(func(index):
+			var overrides: Dictionary = Machine.role_overrides.duplicate()
+			if index == 0:
+				overrides.erase(key)
+			else:
+				overrides[key] = Machine.ROLES[index - 1]
+			Machine.role_overrides = overrides
+			_save_setting("role_overrides", overrides)
+			world.rebuild_graphics(cluster.state)
+			notify("%s is drawn as %s" % [key, Machine.role_for(p)], "info"))
+		row.add_child(pick)
+		_dyn.add_child(row)
+		_dyn.add_child(_wrapped("The look only: the workload, its machine ID and its dashboard stay the same.", 12, DIM))
 
 func _wrapped(value: String, px: int = 14, color: Color = TXT) -> Label:
 	var label = _lbl(value, px, color)
@@ -4750,6 +4776,9 @@ func open_pause() -> void:
 		body.add_child(_btn("Graphics  (%s)" % Gfx.WEB_NAMES[1 if Gfx.web_high else 0], open_graphics))
 	elif not Gfx.lite():
 		body.add_child(_btn("Graphics  (%s)" % (Gfx.NAMES[Gfx.level] + (", automatic" if Gfx.chosen == "auto" else "")), open_graphics))
+	body.add_child(_btn("Workloads:  %s" % ("ROLE BLOCKS" if Machine.look == "blocks" else "MACHINES"), func():
+		set_workload_look("machines" if Machine.look == "blocks" else "blocks")
+		open_pause()))
 	body.add_child(_btn("Pipelines:  %s" % ("ON" if world.show_belts else "OFF"), func():
 		world.show_belts = not world.show_belts
 		world.apply_state(cluster.state)
@@ -5894,6 +5923,13 @@ var _rebind = ""                   # the action waiting for a key, or ""
 var _rebind_clash = {}             # a key already in use, waiting for a choice: {action, binding, others}
 var _settings_note = ""
 
+# Machines or role blocks: only the look changes, so every machine is rebuilt in
+# place with the same IDs, panels and dashboards.
+func set_workload_look(value: String) -> void:
+	Machine.look = "blocks" if value == "blocks" else "machines"
+	_save_setting("workload_look", Machine.look)
+	world.rebuild_graphics(cluster.state)
+
 func open_settings() -> void:
 	if touch_u > 0.0:
 		_open_touch_settings()
@@ -5940,6 +5976,8 @@ func _open_touch_settings() -> void:
 		sfx.set_muted(not on)
 		_save_setting("muted", not on))
 	_touch_toggle(body, "Minimap", bool(settings.get("minimap", true)), func(_on): toggle_minimap())
+	_touch_toggle(body, "Role blocks for workloads", Machine.look == "blocks", func(on):
+		set_workload_look("blocks" if on else "machines"))
 	_touch_toggle(body, "Pipelines", world.show_belts, func(on):
 		world.show_belts = on
 		world.apply_state(cluster.state)

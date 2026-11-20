@@ -9,6 +9,41 @@ const Gfx = preload("res://scripts/gfx.gd")
 const Models = preload("res://scripts/models.gd")
 const Icons = preload("res://scripts/icons.gd")
 const MAX_PILLARS = 4
+const BuildPlan = preload("res://scripts/build_plan.gd")
+
+# How workloads look: "machines" (the library or code-drawn machine) or "blocks"
+# (a shape per role, readable without colour). Set from Settings by the world.
+static var look = "machines"
+static var role_overrides = {}      # "ns/workload" -> a role the player chose
+const ROLES = ["app", "worker", "storage", "gateway", "reporting", "generic"]
+const ROLE_OF_KIND = {"database": "storage", "cache": "storage", "registry": "storage", "queue": "worker",
+	"monitor": "reporting", "logs": "reporting", "proxy": "gateway", "network": "gateway",
+	"build": "worker", "download": "worker", "media": "app", "home": "app", "web": "app"}
+const APP_WORDS = ["web", "ui", "frontend", "app", "api", "server", "seerr", "portal", "dashboard", "heimdall", "portainer", "gitea", "shop", "cart", "checkout"]
+
+static func workload_key(p: Dictionary) -> String:
+	return "%s/%s" % [p.get("ns", ""), p.get("wname", "") if str(p.get("wname", "")) != "" else p.get("name", "")]
+
+# The role a workload's block takes: the player's override, else what its image
+# is (the icon kinds), else its name, else generic.
+static func role_for(p: Dictionary) -> String:
+	var chosen = str(role_overrides.get(workload_key(p), ""))
+	if chosen in ROLES:
+		return chosen
+	return auto_role(p)
+
+static func auto_role(p: Dictionary) -> String:
+	var kind = Icons.kind_of(p)
+	if ROLE_OF_KIND.has(kind):
+		return ROLE_OF_KIND[kind]
+	var images = PackedStringArray(p.get("containers", []).map(func(c): return str(c.get("image", ""))))
+	var text = (str(p.get("wname", "")) + " " + str(p.get("name", "")) + " " + " ".join(images)).to_lower()
+	var guess = BuildPlan.role_of(text)
+	if guess != "app":
+		return guess
+	return "app" if APP_WORDS.any(func(w): return text.contains(w)) else "generic"
+
+var role = ""               # set when the workload is drawn as a role block
 
 static var _m = {}
 static var _merged = {}   # workload colour + detail level -> [core mesh, extra-detail mesh or null]
@@ -183,11 +218,17 @@ func setup(p: Dictionary) -> void:
 	var col = K.hue_color(wkey, 0.5, 0.9) if p["wname"] != "" else Color(0.75, 0.76, 0.78)
 	# On the desktop the machine is a model from the library, chosen by what the
 	# pod is; the browser build (and any missing model) keeps the code-drawn one.
-	if not _build_model(p, col):
+	if look == "blocks":
+		_build_block(p)
+	elif not _build_model(p, col):
 		_build_classic(col)
 	_finish_setup(p)
+	if role != "":
+		_smoke.visible = false        # a block has no chimney: the lamp and pillars carry its state
 
 func pipe_port(offset: Vector2) -> Vector3:
+	if role != "":
+		return Vector3(-0.5 + offset.x, 4.45, 0.3 + offset.y)    # just above the tallest block fitting
 	if _tpl.is_empty():
 		return Vector3(-0.5 + offset.x, 4.3, 0.3 + offset.y)
 	var roof: AABB = _tpl.get("roof_bounds", _tpl["bounds"])
@@ -492,6 +533,41 @@ func screen_rect() -> Dictionary:
 		"size": _screen.mesh.size * g.basis.get_scale().x, "normal": g.basis.z.normalized()}
 
 # ---- the code-drawn machine (the browser build, and the fallback)
+
+# ---- a role block: the builder's shape for what the workload does, the same
+# collider, name and status as any machine, and the app's glass for LiveView.
+func _build_block(p: Dictionary) -> void:
+	role = role_for(p)
+	_body = Node3D.new()
+	add_child(_body)
+	var shape = MeshInstance3D.new()
+	shape.mesh = load("res://scripts/plan_blocks.gd").role_mesh(role)
+	_body.add_child(shape)
+	_fan = Node3D.new()
+	add_child(_fan)
+	if not _m.has("bulb"):
+		var s = SphereMesh.new()
+		s.radius = 0.3
+		s.height = 0.6
+		_m["bulb"] = s
+	_beacon = _add(_m["bulb"], Tex.status_glow("warn"), Vector3(1.55, 4.15, 1.55))
+	if role == "app":
+		# the glass front is where a LiveView page goes
+		_screen = _add(_box("block_glass", Vector3(3.2, 2.3, 0.05)), Tex.mat(Color(0.05, 0.065, 0.085), 0.35), Vector3(0, 2.15, 2.09))
+	else:
+		_screen = MeshInstance3D.new()
+		add_child(_screen)
+	# the role in words on the front plinth, so shape and label say the same thing
+	var tag = Label3D.new()
+	tag.text = role.to_upper()
+	tag.font_size = 56
+	tag.pixel_size = 0.0065
+	tag.outline_size = 10
+	tag.modulate = Color(0.95, 0.96, 0.97)
+	tag.position = Vector3(0, 0.55, 2.2)
+	tag.visibility_range_end = 45.0
+	add_child(tag)
+	_top = 3.85
 
 func _build_classic(col: Color) -> void:
 	# Everything on a machine that never moves is merged into one mesh (a surface
