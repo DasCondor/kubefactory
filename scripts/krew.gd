@@ -202,6 +202,13 @@ static func sentinel_rules(state: Dictionary) -> Array:
 			f["proposal"] = proposal
 			f["risk"] = risk
 			f["uids"] = pods.map(func(p): return str(p["uid"]))
+			var common = _common_fix(rule, o, pods, s)
+			if not common.is_empty():
+				f["common"] = common["fix"]
+				f["example"] = common.get("example", "")
+				if common.get("expected", false):
+					f["severity"] = _lower(f["severity"])
+					f["title"] += " (expected for %s)" % common["what"]
 			out.append(f)
 		if s.get("docker_socket", false):
 			add.call("engine-socket", "high", "%s can control the container engine" % o, ["The engine's socket is mounted: " + ", ".join(PackedStringArray(s.get("host_paths", []).filter(func(x): return K.is_socket_path(str(x)))))],
@@ -238,6 +245,56 @@ static func sentinel_rules(state: Dictionary) -> Array:
 				"Pin a version (or a digest) so a restart cannot quietly change what runs.",
 				"A restart can pull a different image than the one that was reviewed.")
 	return out
+
+# Known, common cases of the findings above, with the usual fix. Recognised from the
+# pod's VPN role, container names and images; anything else keeps the general advice.
+const MEDIA_SERVERS = ["plex", "jellyfin", "emby"]
+const MEDIA_APPS = ["plex", "jellyfin", "emby", "sonarr", "radarr", "lidarr", "readarr", "bazarr", "prowlarr", "jackett", "deluge", "qbittorrent", "transmission", "sabnzbd", "nzbget", "tautulli", "seerr", "overseerr"]
+
+static func _is_vpn_pod(pods: Array) -> bool:
+	return pods.any(func(p): return typeof(p.get("net")) == TYPE_DICTIONARY and not p["net"].get("vpn", {}).is_empty())
+
+static func _common_fix(rule: String, owner: String, pods: Array, s: Dictionary) -> Dictionary:
+	var name = owner.get_slice("/", 1).to_lower()
+	var vpn = _is_vpn_pod(pods) or K.is_vpn_image(name)
+	match rule:
+		"capabilities":
+			var caps: Array = s.get("caps", []).map(func(c): return str(c).get_slice(": ", 1) if ": " in str(c) else str(c))
+			if vpn and caps.all(func(c): return c == "NET_ADMIN"):
+				var who = ", ".join(PackedStringArray(s["caps"].map(func(c): return str(c).get_slice(": ", 0))))
+				return {"expected": true, "what": "a VPN gateway",
+					"fix": "A VPN gateway (%s) needs NET_ADMIN to create its tunnel and firewall. Keep it on the gateway container only: the apps that share its network get no capabilities of their own." % who,
+					"example": "Compose:  gluetun:  cap_add: [NET_ADMIN]   (nothing on the apps using network_mode: service:gluetun)\nKubernetes:  only the gluetun container gets  securityContext.capabilities.add: [NET_ADMIN]"}
+		"host-path":
+			var hp: Array = s.get("host_paths", []).filter(func(x): return not K.is_socket_path(str(x)))
+			if vpn and hp.all(func(x): return str(x) == "/dev/net/tun"):
+				return {"expected": true, "what": "a VPN gateway",
+					"fix": "Only /dev/net/tun, the tunnel device a VPN needs. Pass it as a device rather than a mounted folder, so nothing else of the host is reachable.",
+					"example": "Compose:  devices: [/dev/net/tun:/dev/net/tun]\nKubernetes:  a hostPath of type CharDevice for /dev/net/tun, or a device plugin that hands out /dev/net/tun"}
+			if name.contains("node-exporter"):
+				return {"expected": true, "what": "a node exporter",
+					"fix": "A node exporter reads the host's /proc, /sys and root filesystem to report on the machine. Mount them read-only and with host-to-container propagation only.",
+					"example": "Compose:  - /proc:/host/proc:ro  - /sys:/host/sys:ro  - /:/rootfs:ro,rslave\nKubernetes:  volumeMounts[].readOnly: true (and mountPropagation: HostToContainer for /)"}
+			if not hp.is_empty() and MEDIA_APPS.any(func(m): return name.contains(m)):
+				return {"fix": "Mount the one folder the app needs (its config or the media library), not a parent folder; mount media read-only for players.",
+					"example": "Compose:  - /srv/media/library:/media:ro   instead of  - /srv:/srv\nKubernetes:  volumeMounts[].readOnly: true for the library"}
+		"host-namespaces":
+			if s.get("host_network", false) and MEDIA_SERVERS.any(func(m): return name.contains(m)):
+				return {"fix": "Media servers use the host network for local discovery (DLNA, GDM). Without it, publish the server port and tell the server its own address; keep host networking only if a TV must find it by itself.",
+					"example": "Compose:  ports: [\"32400:32400/tcp\"]  (Plex: set Custom server access URLs; Jellyfin: 8096 and its Published server URL)\nKubernetes:  hostNetwork: false and a Service for the server port"}
+		"floating-tag":
+			var imgs: Array = s.get("latest", []).map(func(i): return str(i).get_slice(": ", 1) if ": " in str(i) else str(i))
+			var lsio = imgs.any(func(i): return i.contains("linuxserver/"))
+			return {"fix": "Pin the version that runs now and let the image updater propose the next one, so updates are reviewed instead of arriving on a restart." + (" LinuxServer images publish version tags for every release." if lsio else ""),
+				"example": "Compose:  image: %s\nKubernetes:  image: <image>:<version>  or  <image>@sha256:<digest>" % (_pinned_hint(imgs[0]) if not imgs.is_empty() else "<image>:<version>")}
+	return {}
+
+static func _pinned_hint(image: String) -> String:
+	var bare = image.get_slice("@", 0)
+	var last = bare.get_slice("/", bare.get_slice_count("/") - 1)
+	if ":" in last:
+		bare = bare.substr(0, bare.length() - last.length() + last.find(":"))
+	return bare + ":<version>"
 
 # ---- Scout: Services that lead nowhere, and what is exposed
 
@@ -486,6 +543,8 @@ func report_markdown() -> String:
 				md.append("  - %s" % e)
 			if f["proposal"] != "":
 				md.append("  - Proposed: %s" % f["proposal"])
+			if str(f.get("common", "")) != "":
+				md.append("  - Common fix: %s" % f["common"])
 			if f["risk"] != "":
 				md.append("  - Risk: %s" % f["risk"])
 		md.append("")

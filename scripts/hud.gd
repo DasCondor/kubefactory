@@ -4744,6 +4744,16 @@ func _krew_row(f: Dictionary) -> Control:
 		pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		pl.custom_minimum_size.x = tw
 		v.add_child(pl)
+	if str(f.get("common", "")) != "":
+		var cl = _lbl("Common fix:  " + str(f["common"]), 13, Color(0.55, 0.95, 0.65))
+		cl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		cl.custom_minimum_size.x = tw
+		v.add_child(cl)
+		if str(f.get("example", "")) != "":
+			var ex = _lbl(str(f["example"]), 12, DIM)
+			ex.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			ex.custom_minimum_size.x = tw
+			v.add_child(ex)
 	if str(f["risk"]) != "":
 		var rl = _lbl("Risk:  " + str(f["risk"]), 13, K.health_color("warn"))
 		rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
