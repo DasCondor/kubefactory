@@ -8,7 +8,7 @@ The [feature and release gap matrix](FEATURE_PARITY.md#21-and-22-feature-matrix)
 
 Open **Demo worlds** and pick **Docker media lab** for the seven-service starter or **Docker media lab + gatherer** for the full fifteen-service stack. From a local Godot checkout, launch with `-- --demo=docker-media` or `-- --demo=docker-media-gatherer`.
 
-Set `host_count` in [media-lab.json](../media-lab.json) to `1` or `2`, then restart the game. The full stack defaults to one host, including Sonarr, Radarr, Jackett, the downloader, Gluetun, reporting and file sync. With two hosts, gathering services move to the separate gathering node. The host count is controlled by the config file. In a desktop package the editable file sits beside the executable. Browser exports bundle the project config, so editing it requires rebuilding the web demo.
+Set `host_count` in [media-lab.json](../media-lab.json) to `1` or `2`, then restart the game. Set `indexer` to `jackett` (default) or `prowlarr` to choose the gathering node's indexer, or switch it in game under **Docker media lab → Use Prowlarr instead**, which restarts the demo world. Prowlarr answers Sonarr's and Radarr's searches like Jackett, and also pushes its indexer list into them; both reach the internet only through Gluetun. The full stack defaults to one host, including Sonarr, Radarr, Jackett, the downloader, Gluetun, reporting and file sync. With two hosts, gathering services move to the separate gathering node. The host count is controlled by the config file. In a desktop package the editable file sits beside the executable. Browser exports bundle the project config, so editing it requires rebuilding the web demo.
 
 1. Open the hub or choose **Docker media lab** from the pause menu. Select **View the factory** to see both ends of the network. Use **Trace connections** to pick an exact route or filter by connection type.
 2. Switch Plex and Seerr from Loopback to LAN or VLAN 30. In **Ports and readiness**, pick a client network to see the simulated result. The single-host full stack uses its private Docker bridge for API calls, scrapes and sync. The two-host layout uses the designated management VLAN 40 between hosts.
@@ -16,7 +16,7 @@ Set `host_count` in [media-lab.json](../media-lab.json) to `1` or `2`, then rest
 4. In the full stack, use **Visit the sync lever**. Aim at the handle and press E or tap the action control to pause and resume. With a file in the inbox, use **Import one file** and inspect the Plex library. The controls follow the normal session and tool-tier permissions in both host layouts.
 5. Send a simulated Seerr alert or disable the Discord route. The demo uses sample files and simulates requests, probes, VPN traffic and notifications locally.
 
-The playable gatherer uses Jackett. The optional [Compose lab](../examples/docker-media/README.md) is a separate setup for testing with a real Docker engine.
+The playable gatherer uses Jackett or Prowlarr. The optional [Compose lab](../examples/docker-media/README.md) is a separate setup for testing with a real Docker engine.
 
 ## 2.1 review
 
@@ -106,7 +106,7 @@ For Discord, show the Seerr source, destination label, selected notification typ
 
 #### Optional VPN gathering node
 
-The 2.1 sync overlay transfers operator-supplied files. The playable 2.2 simulation has Sonarr, Radarr, Jackett, qBittorrent, Syncthing and a Gluetun gateway on the gathering node. The indexer selector is tracked in the 2.2 scope.
+The 2.1 sync overlay transfers operator-supplied files. The playable 2.2 simulation has Sonarr, Radarr, Jackett, qBittorrent, Syncthing and a Gluetun gateway on the gathering node. The indexer is selectable: Jackett or Prowlarr.
 
 [View the LAN/VLAN and WWW routing concept graphic](concepts/kubefactory-2.2-docker-media-network.png).
 

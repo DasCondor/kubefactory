@@ -40,7 +40,7 @@ existing behavior and rerun its checks when the affected code changes.
 
 ### Demos and operator experience
 
-**Local playable 2.2 demo.** The demo picker includes a seven-container Docker starter and a fifteen-container full media stack. Set `host_count` in `media-lab.json` to place the full stack on one or two hosts. Both use the game’s machines, dashboards and pipe renderer. The local implementation includes route tracing, reporting and data cabinets, LAN/VLAN port checks, VPN-only gathering routes, sync controls and simulated Discord alerts. The [play walkthrough](HANDOFF_2.1_TO_2.2.md#play-the-docker-media-lab) describes the controls. The gathering preset uses Jackett. Indexer selection and the voxel builder remain in the 2.2 scope.
+**Local playable 2.2 demo.** The demo picker includes a seven-container Docker starter and a fifteen-container full media stack. Set `host_count` in `media-lab.json` to place the full stack on one or two hosts. Both use the game’s machines, dashboards and pipe renderer. The local implementation includes route tracing, reporting and data cabinets, LAN/VLAN port checks, VPN-only gathering routes, sync controls and simulated Discord alerts. The [play walkthrough](HANDOFF_2.1_TO_2.2.md#play-the-docker-media-lab) describes the controls. The gathering preset uses Jackett or Prowlarr (`indexer` in `media-lab.json`, or switched in game). The voxel builder remains in the 2.2 scope.
 
 | Feature | Released in beta.3 | Local 2.1 and remaining review | Planned for 2.2 | Acceptance check |
 |---|---|---|---|---|

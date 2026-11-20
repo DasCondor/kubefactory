@@ -31,6 +31,12 @@ const APPS = {
 		["syncthing", "syncthing/syncthing:2.1.5", 22000],
 		["gatherer-metrics", "kubefactory/demo-gatherer-metrics:1", 9100]],
 }
+# The gathering node's indexer: Jackett (searchers call it) or Prowlarr (searchers call
+# it, and it also pushes its indexers into Sonarr and Radarr). Chosen at start.
+const INDEXERS = {
+	"jackett": ["lscr.io/linuxserver/jackett:latest", 9117, "Jackett"],
+	"prowlarr": ["lscr.io/linuxserver/prowlarr:latest", 9696, "Prowlarr"],
+}
 const BINDABLE = ["plex", "seerr"]
 const HOST_ONLY = ["tautulli", "prometheus", "grafana"]
 const VPN_APPS = ["sonarr", "radarr", "jackett", "downloader"]
@@ -44,6 +50,7 @@ const DISKS = {
 	"sonarr-config": [4, 1, [["sonarr", "/config", false]]],
 	"radarr-config": [4, 1, [["radarr", "/config", false]]],
 	"jackett-config": [4, 1, [["jackett", "/config", false]]],
+	"prowlarr-config": [4, 1, [["prowlarr", "/config", false]]],
 	"downloader-config": [4, 1, [["downloader", "/config", false]]],
 	"gluetun-config": [4, 1, [["gluetun", "/gluetun", false]]],
 	"syncthing-config": [4, 1, [["syncthing", "/var/syncthing/config", false]]],
@@ -91,6 +98,7 @@ const ROUTES = [
 
 var gathered: bool
 var host_count: int
+var indexer = "jackett"
 static var _configured_hosts = 0
 var access = "Loopback"
 var discord = true
@@ -122,14 +130,34 @@ static func configured_host_count() -> int:
 	_configured_hosts = hosts
 	return _configured_hosts
 
-func _init(include_gatherer: bool, now: float, hosts: int = 2) -> void:
+# The indexer: the player's choice in the game (settings) wins over media-lab.json.
+static var forced_indexer = ""      # tests only: overrides the setting and the config
+
+static func configured_indexer() -> String:
+	if INDEXERS.has(forced_indexer):
+		return forced_indexer
+	var chosen = str(K.load_settings().get("lab_indexer", ""))
+	if INDEXERS.has(chosen):
+		return chosen
+	var path = "res://" + CONFIG_FILE
+	if not OS.has_feature("web") and FileAccess.file_exists(K.data_path(CONFIG_FILE)):
+		path = K.data_path(CONFIG_FILE)
+	var config = K.read_json(path)
+	var named = str(config.get("indexer", "jackett")).to_lower() if config is Dictionary else "jackett"
+	return named if INDEXERS.has(named) else "jackett"
+
+func _init(include_gatherer: bool, now: float, hosts: int = 2, chosen_indexer: String = "jackett") -> void:
 	gathered = include_gatherer
+	indexer = chosen_indexer if INDEXERS.has(chosen_indexer) else "jackett"
 	host_count = hosts if gathered else 1
 	queued = 2 if gathered else 0
 	last_prepared = now
 
 func apps() -> Dictionary:
 	var result = APPS.duplicate(true)
+	for i in result[GATHER].size():
+		if result[GATHER][i][0] == "jackett":
+			result[GATHER][i] = [indexer, INDEXERS[indexer][0], INDEXERS[indexer][1]]
 	if gathered:
 		result[MEDIA].append(["media-sync", "syncthing/syncthing:2.1.5", 22000])
 		if host_count == 1:
@@ -159,6 +187,24 @@ func tick(now: float) -> void:
 		transfer_ends = 0.0
 	if transfer_ends == 0.0 and queued > 0 and used_bytes("inbox") + FILE_BYTES <= DISKS["inbox"][0] * GI:
 		transfer_ends = now + 4.0
+
+# The apps that reach the internet only through Gluetun, with the chosen indexer.
+func vpn_apps() -> Array:
+	return VPN_APPS.map(func(app): return indexer if app == "jackett" else app)
+
+# The routes with the chosen indexer; Prowlarr also syncs its indexers into the searchers.
+func routes() -> Array:
+	var rows = []
+	for row in ROUTES:
+		var r: Array = row.duplicate()
+		for i in 2:
+			if r[i] == "jackett":
+				r[i] = indexer
+		rows.append(r)
+	if indexer == "prowlarr":
+		rows.append(["prowlarr", "sonarr", "API", "Indexer sync: pushes its indexers into Sonarr"])
+		rows.append(["prowlarr", "radarr", "API", "Indexer sync: pushes its indexers into Radarr"])
+	return rows
 
 func used_bytes(disk: String) -> int:
 	var added = 0
@@ -248,20 +294,20 @@ func present(st: Dictionary, now: float) -> void:
 	for pod in st["pods"]:
 		pod["store"]["shared_mounts"] = mounts(pod["wname"])
 		pod["store"]["persistent"] = pod["store"]["shared_mounts"].map(func(m): return m["name"])
-		if gathered and pod["wname"] in VPN_APPS and by_name.has("gluetun"):
+		if gathered and pod["wname"] in vpn_apps() and by_name.has("gluetun"):
 			pod["net"]["via"] = by_name["gluetun"]
 		if pod["wname"] == "gluetun":
 			var vpn: Dictionary = pod["net"]["vpn"]
 			vpn["exit_ip"] = EXIT_IP if online["gluetun"] else ""
-			vpn["through"] = VPN_APPS.filter(func(app): return by_name.has(app))
+			vpn["through"] = vpn_apps().filter(func(app): return by_name.has(app))
 	var fixtures = {"lan": "LAN / VLAN IN", "www": "WWW OUT"}
 	if discord:
 		fixtures["discord"] = "Discord · simulated"
 	if gathered:
 		fixtures["sync-switch"] = "File sync"
-	var rows = ROUTES.duplicate()
+	var rows = routes()
 	var fixture_hosts = {}
-	for app in VPN_APPS:
+	for app in vpn_apps():
 		rows.append([app, "gluetun", "VPN", "VPN-only outbound route"])
 	for name in DISKS:
 		for mount in DISKS[name][2]:
@@ -297,7 +343,7 @@ func present(st: Dictionary, now: float) -> void:
 		links.append({"from": by_name[row[0]], "to": by_name[row[1]], "from_name": row[0],
 			"to_name": row[1], "kind": row[2], "what": description, "port": port, "ready": ready, "flow": flow and ready})
 	var gateway_ports = {"lan": [], "www": [], "discord": []}
-	for row in ROUTES:
+	for row in routes():
 		var inbound = row[0] == "lan"
 		if not inbound and row[1] not in ["www", "discord"]:
 			continue
@@ -319,7 +365,7 @@ func present(st: Dictionary, now: float) -> void:
 	for gateway in gateway_ports["www"]:
 		if gateway["app"] != "gluetun":
 			continue
-		for app in VPN_APPS:
+		for app in vpn_apps():
 			var route: Dictionary = gateway.duplicate(true)
 			route["uid"] = by_name.get(app, "")
 			route["app"] = app
@@ -333,7 +379,7 @@ func present(st: Dictionary, now: float) -> void:
 				route["trace"] = []
 			egress.append(route)
 	st["links"] = links
-	st["lab"] = {"fixtures": fixtures, "fixture_hosts": fixture_hosts, "gathered": gathered, "host_count": host_count, "access": access, "discord": discord,
+	st["lab"] = {"fixtures": fixtures, "fixture_hosts": fixture_hosts, "gathered": gathered, "host_count": host_count, "indexer": indexer, "access": access, "discord": discord,
 		"gateway_ports": gateway_ports, "egress": egress,
 		"sync_ready": online.get("syncthing", false) and online.get("media-sync", false),
 		"paused": paused, "transfer": transfer_ends > now, "queued": queued, "inbox": inbox,

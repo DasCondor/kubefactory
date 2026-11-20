@@ -1095,7 +1095,7 @@ func _interact() -> void:
 				_connect_target(cluster.targets[meta["index"]])
 
 func _connect_target(t: Dictionary) -> void:
-	if cluster.backend != null and t["source"] == cluster.backend.label and t["context"] == cluster.backend.context:
+	if not t.get("reload", false) and cluster.backend != null and t["source"] == cluster.backend.label and t["context"] == cluster.backend.context:
 		hud.notify("Already connected to %s" % t["context"], "info")
 		return
 	hud.notify("Connecting to %s  (%s)..." % [t["context"], t["provider"]], "info")

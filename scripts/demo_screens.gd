@@ -395,6 +395,8 @@ class ScreenPanel extends Control:
 				detail = "HTTP checks · 4 media services"
 			"jackett":
 				detail = "Index searches through Gluetun"
+			"prowlarr":
+				detail = "Searches via Gluetun · syncs indexers"
 			"sonarr", "radarr":
 				detail = "Seerr requests → indexer → downloader"
 			"gatherer-metrics":

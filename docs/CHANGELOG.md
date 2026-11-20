@@ -15,6 +15,12 @@
   show pipes in the factory. Replicas get their own card positions, so cards no
   longer stack on top of each other.
 
+- The Docker media lab's gathering node can use Prowlarr instead of Jackett:
+  set `indexer` in `media-lab.json`, or press **Use Prowlarr instead** in the
+  Docker media lab menu (the demo world restarts). Sonarr and Radarr search
+  through Prowlarr, Prowlarr pushes its indexers into them, it has its own
+  config volume, and it reaches the internet only through Gluetun.
+
 ### Fixed
 
 - The Krew hold their tools properly. Gauge's, Blueprint's and every Foreman's
