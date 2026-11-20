@@ -4,6 +4,17 @@
 
 ## Unreleased
 
+### Added
+
+- The Connection Whiteboard is in every demo world, not only the Docker media
+  lab: the Kubernetes cluster, Home Assistant, Dev containers and Media suite
+  demos open it from the pause menu (Connection whiteboard; Whiteboard on
+  phones) and from Network and shared data. Home Assistant and Dev containers
+  gained their simulated routes (MQTT, Z-Wave, Matter, Frigate, voice and
+  recorder; Git, CI, BuildKit, registry, caches and artifacts), so they also
+  show pipes in the factory. Replicas get their own card positions, so cards no
+  longer stack on top of each other.
+
 ### Fixed
 
 - The Krew hold their tools properly. Gauge's, Blueprint's and every Foreman's

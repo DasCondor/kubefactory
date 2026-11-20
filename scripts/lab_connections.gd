@@ -42,6 +42,11 @@ func fit_routes() -> void:
 	zoom = clampf(minf(size.x / (bounds.size.x + 80), size.y / (bounds.size.y + 80)), 0.08, 1.0)
 	scroll_offset = bounds.position * zoom - (size - bounds.size * zoom) * 0.5
 
+var _keys = {}            # card uid -> its key in the saved layout
+
+func _key(uid: String) -> String:
+	return _keys.get(uid, cards[uid].title)
+
 func arrange_spider(reset: bool = true) -> void:
 	if cards.is_empty():
 		return
@@ -99,24 +104,33 @@ func arrange_spider(reset: bool = true) -> void:
 			sectors[child] = Vector2(start, start + span)
 			start += span
 	for uid in ids:
-		if not reset and layout.has(cards[uid].title):
+		if not reset and layout.has(_key(uid)):
 			centers[uid] = cards[uid].position_offset + cards[uid].get_combined_minimum_size() * 0.5
-	for pass_index in 30:
+	for pass_index in 80:
+		var moved = false
 		for i in ids.size():
 			for j in range(i + 1, ids.size()):
 				var a = ids[i]
 				var b = ids[j]
 				var delta: Vector2 = centers[b] - centers[a]
+				if delta.length() < 0.5:          # stacked exactly: pick a direction
+					delta = Vector2(1, 0.3)
 				var overlap: Vector2 = (cards[a].get_combined_minimum_size() + cards[b].get_combined_minimum_size()) * 0.5 + Vector2(35, 22) - delta.abs()
 				if overlap.x <= 0 or overlap.y <= 0:
 					continue
 				var push = Vector2((1 if delta.x >= 0 else -1) * (overlap.x + 1), 0) if overlap.x < overlap.y else Vector2(0, (1 if delta.y >= 0 else -1) * (overlap.y + 1))
-				if a != hub and (reset or not layout.has(cards[a].title)):
-					centers[a] -= push * 0.5
-				if b != hub and (reset or not layout.has(cards[b].title)):
-					centers[b] += push * 0.5
+				var move_a = a != hub and (reset or not layout.has(_key(a)))
+				var move_b = b != hub and (reset or not layout.has(_key(b)))
+				# a card beside a fixed one (the hub, or one the player placed) takes the whole push
+				if move_a:
+					centers[a] -= push * (0.5 if move_b else 1.0)
+				if move_b:
+					centers[b] += push * (0.5 if move_a else 1.0)
+				moved = moved or move_a or move_b
+		if not moved:
+			break
 	for uid in ids:
-		if reset or not layout.has(cards[uid].title):
+		if reset or not layout.has(_key(uid)):
 			cards[uid].position_offset = centers[uid] - cards[uid].get_combined_minimum_size() * 0.5
 
 func select_endpoint(uid: String) -> void:
@@ -195,16 +209,26 @@ func refresh(state: Dictionary) -> bool:
 	if state.has("board"):
 		endpoints = state["board"].map(func(entry): return [entry[0], entry[1], entry[2], Vector2.ZERO, entry[3]])
 	var ports = {}
+	_keys.clear()
+	var used = {}
 	for endpoint in endpoints:
 		var uid: String = endpoint[0]
+		# a saved position belongs to one card: replicas with the same name get "name #2", ...
+		var key: String = endpoint[1]
+		var n = 2
+		while used.has(key):
+			key = "%s #%d" % [endpoint[1], n]
+			n += 1
+		used[key] = true
+		_keys[uid] = key
 		var node = GraphNode.new()
 		node.name = "Endpoint%d" % cards.size()
 		node.title = endpoint[1]
 		node.position_offset = endpoint[3]
-		var saved = layout.get(endpoint[1])
+		var saved = layout.get(key)
 		if saved is Array and saved.size() == 2 and (saved[0] is float or saved[0] is int) and (saved[1] is float or saved[1] is int):
 			node.position_offset = Vector2(clampf(saved[0], -5000, 5000), clampf(saved[1], -5000, 5000))
-		node.position_offset_changed.connect(func(): layout[endpoint[1]] = [node.position_offset.x, node.position_offset.y])
+		node.position_offset_changed.connect(func(): layout[key] = [node.position_offset.x, node.position_offset.y])
 		node.custom_minimum_size.x = 200
 		var ink = StyleBoxFlat.new()
 		ink.bg_color = Color(0.99, 0.99, 0.97)
