@@ -111,7 +111,11 @@ var last_import = 0.0
 var last_sync = 0.0
 var transfer_ends = 0.0
 var last_prepared: float
-var history = []
+var history = []             # completed syncs in the last hour (the dashboards' files/hour)
+var sync_events = []         # completed syncs and imports, kept a day: [time, bytes]
+var import_events = []
+# The windows the activity rows can be read over, in seconds.
+const ACTIVITY_WINDOWS = {"15 min": 900, "1 hour": 3600, "24 hours": 86400}
 var online = {}
 
 static func configured_host_count() -> int:
@@ -170,6 +174,9 @@ func apps() -> Dictionary:
 func tick(now: float) -> void:
 	while not history.is_empty() and history[0] <= now - 3600.0:
 		history.pop_front()
+	for events in [sync_events, import_events]:
+		while not events.is_empty() and events[0][0] <= now - 86400.0:
+			events.pop_front()
 	if not gathered:
 		return
 	if online.get("downloader", false) and online.get("gluetun", false) and now - last_prepared >= 20.0:
@@ -184,6 +191,7 @@ func tick(now: float) -> void:
 		inbox += 1
 		last_sync = now
 		history.append(now)
+		sync_events.append([now, FILE_BYTES])
 		transfer_ends = 0.0
 	if transfer_ends == 0.0 and queued > 0 and used_bytes("inbox") + FILE_BYTES <= DISKS["inbox"][0] * GI:
 		transfer_ends = now + 4.0
@@ -384,7 +392,38 @@ func present(st: Dictionary, now: float) -> void:
 		"sync_ready": online.get("syncthing", false) and online.get("media-sync", false),
 		"paused": paused, "transfer": transfer_ends > now, "queued": queued, "inbox": inbox,
 		"recent_count": history.size(), "recent_bytes": history.size() * FILE_BYTES,
-		"last_sync": last_sync, "last_import": last_import, "last_alert": last_alert}
+		"last_sync": last_sync, "last_import": last_import, "last_alert": last_alert,
+		"activity": activity(now) if gathered else []}
+
+# File sync and library import as two separate activity rows: what starts each,
+# when one last completed, and files and bytes per window. One event is one
+# completed file, counted once (one sync folder, one importer).
+func activity(now: float) -> Array:
+	var rows = []
+	var sync_state = "paused" if paused else ("copying one file" if transfer_ends > now else ("%d queued" % queued if queued > 0 else "idle"))
+	if not online.get("syncthing", false) or not online.get("media-sync", false):
+		sync_state = "offline"
+	rows.append({"name": "File sync", "from": "gathering outbox", "to": "media inbox", "last": last_sync, "state": sync_state,
+		"trigger": "change-driven: Syncthing sends a file when it appears, and rescans on a schedule",
+		"windows": _windows(sync_events, now)})
+	rows.append({"name": "Library import", "from": "media inbox", "to": "Plex library", "last": last_import,
+		"state": "%d waiting in the inbox" % inbox if inbox > 0 else "nothing waiting",
+		"trigger": "manual: an operator imports each reviewed file",
+		"windows": _windows(import_events, now)})
+	return rows
+
+func _windows(events: Array, now: float) -> Dictionary:
+	var out = {}
+	for label in ACTIVITY_WINDOWS:
+		var since = now - ACTIVITY_WINDOWS[label]
+		var files = 0
+		var size = 0
+		for e in events:
+			if e[0] > since:
+				files += 1
+				size += int(e[1])
+		out[label] = [files, size]
+	return out
 
 func action(a: Dictionary, now: float) -> Dictionary:
 	match a["op"]:
@@ -401,6 +440,7 @@ func action(a: Dictionary, now: float) -> Dictionary:
 			inbox -= 1
 			imported += 1
 			last_import = now
+			import_events.append([now, FILE_BYTES])
 			return {"ok": true, "msg": "Imported one sample file into the Plex library."}
 		"lab_access":
 			if a.get("access") in ["Loopback", "LAN", "VLAN 30"]:
