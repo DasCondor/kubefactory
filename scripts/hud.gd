@@ -1174,7 +1174,7 @@ func open_network(uid: String = "", back: Callable = Callable()) -> void:
 	var tools: Container = HFlowContainer.new() if mobile else _row(8)
 	var to_network = func(): open_network(uid, parent)
 	tools.add_child(_btn("Edit / export YAML", open_map_yaml))
-	if lab:
+	if lab or show_app_flows:
 		tools.add_child(_btn("Visual whiteboard", func(): open_connections(uid, to_network), "primary"))
 	tools.add_child(_btn("Ports and readiness", func(): open_ports(uid, to_network), "primary"))
 	tools.add_child(_btn("Shared disk space", func(): open_shared_disks(uid, to_network)))
@@ -1261,15 +1261,23 @@ func _update_lab_warning(st: Dictionary) -> void:
 	_lab_warning.text = "DISK WARNING · " + "\n".join(warnings)
 	_lab_warning.visible = not warnings.is_empty()
 
+func _has_whiteboard() -> bool:
+	return cluster.state.has("lab") or not cluster.state.get("links", []).is_empty()
+
+# Every demo world has a whiteboard: the Docker media lab with its fixtures, the
+# others from their declared demo routes. Live connections have no app traffic to
+# draw, so it is a simulation view.
 func open_connections(uid: String = "", back: Callable = Callable()) -> void:
-	if not cluster.state.has("lab"):
+	var lab = cluster.state.has("lab")
+	if not _has_whiteboard():
 		return
+	var board_key = "lab_whiteboard" if lab else "whiteboard:" + str(cluster.state.get("context", "demo"))
 	var viewport_size = get_viewport().get_visible_rect().size
-	var body = _open_modal("connections", uid, "CONNECTION WHITEBOARD", Vector2(440, 0) if touch_u > 0 else viewport_size - Vector2(32, 32), false, back if back.is_valid() else open_media_lab)
+	var body = _open_modal("connections", uid, "CONNECTION WHITEBOARD", Vector2(440, 0) if touch_u > 0 else viewport_size - Vector2(32, 32), false, back if back.is_valid() else (open_media_lab if lab else func(): open_network("")))
 	body.add_child(_wrapped("SIMULATED · Select a card to trace or inspect it. Double-click an app or storage card to open its config / storage files. Drag cards or pan blank space on touch.", 13, DIM))
 	var graph = LabConnections.new()
 	_connection_graph = graph
-	graph.configure(settings.get("lab_whiteboard", {}))
+	graph.configure(settings.get(board_key, {}))
 	graph.selected_uid = uid
 	graph.endpoint_activated.connect(func(selected):
 		if K.find_pod(cluster.state, selected) != null or MediaLab.DISKS.has(str(selected).trim_prefix("lab:")):
@@ -1307,10 +1315,11 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 		graph.fit_routes.call_deferred()))
 	controls.add_child(_btn("Save whiteboard", func():
 		var config = {"category": graph.category, "layout_style": "spider", "layout": graph.layout.duplicate(true)}
-		_save_setting("lab_whiteboard", config)
-		world._lab_board.get_meta("graph").configure(config)
-		world._update_lab_board(cluster.state)
-		var saved = K.load_settings().get("lab_whiteboard", {}) == config
+		_save_setting(board_key, config)
+		if lab and is_instance_valid(world._lab_board):      # the lab's whiteboard in the world follows it
+			world._lab_board.get_meta("graph").configure(config)
+			world._update_lab_board(cluster.state)
+		var saved = K.load_settings().get(board_key, {}) == config
 		notify("Whiteboard layout saved on this device." if saved else "Whiteboard updated for this session. Device settings could not be saved.", "info" if saved else "warn")))
 	controls.add_child(_btn("Trace selected", func():
 		var selected = graph.selected_uid
@@ -1335,7 +1344,10 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 			notify("Select an app or storage card first.", "info")))
 	body.add_child(controls)
 	var legend = HFlowContainer.new()
+	var kinds_shown = cluster.state.get("links", []).map(func(link): return link["kind"])
 	for kind in MediaLab.COLORS:
+		if not lab and kind not in kinds_shown:
+			continue
 		legend.add_child(_lbl(("Storage mounts" if kind == "Mounts" else kind) + "  ", 13, MediaLab.COLORS[kind]))
 	body.add_child(legend)
 	graph.custom_minimum_size.y = 400 if touch_u > 0 else maxf(240, viewport_size.y - 250)
@@ -4548,6 +4560,8 @@ func open_pause() -> void:
 	if cluster.state.has("lab"):
 		body.add_child(_btn("Docker media lab", open_media_lab, "primary"))
 	body.add_child(_btn("Network and shared data", open_network))
+	if _has_whiteboard():
+		body.add_child(_btn("Connection whiteboard", func(): open_connections("", open_pause)))
 	if touch != null:
 		body.add_child(_btn("Touch controls:  %s" % ("ON" if touch.allowed else "OFF"), func():
 			touch.set_allowed(not touch.allowed)
@@ -4632,7 +4646,10 @@ func _open_touch_pause() -> void:
 		body.add_child(_btn("Docker media lab", open_media_lab, "primary"))
 	var quick = GridContainer.new()
 	quick.columns = 2
-	for entry in [["Demo worlds", open_demos], ["Settings", open_settings], ["Dashboards", open_liveview], ["Network", open_network]]:
+	var quick_entries = [["Demo worlds", open_demos], ["Settings", open_settings], ["Dashboards", open_liveview], ["Network", open_network]]
+	if _has_whiteboard():
+		quick_entries.append(["Whiteboard", func(): open_connections("", open_pause)])
+	for entry in quick_entries:
 		var button = _btn(entry[0], entry[1])
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		quick.add_child(button)

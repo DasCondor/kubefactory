@@ -61,6 +61,46 @@ const SHOP = [
 	["shop/cart", "shop/redis", "API", "Cart state"]
 ]
 
+# Home Assistant: the hub calls each integration; device bridges publish to MQTT.
+const HOME = [
+	["home/homeassistant", "home/mosquitto", "API", "MQTT devices and events"],
+	["home/zigbee2mqtt", "home/mosquitto", "API", "Zigbee devices over MQTT"],
+	["home/frigate", "home/mosquitto", "API", "Camera detections over MQTT"],
+	["home/homeassistant", "home/zwave-js-ui", "API", "Z-Wave devices (WebSocket)"],
+	["home/homeassistant", "home/matter-server", "API", "Matter devices (WebSocket)"],
+	["home/homeassistant", "home/frigate", "API", "Camera events and clips"],
+	["home/homeassistant", "home/music-assistant", "API", "Media players"],
+	["home/node-red", "home/homeassistant", "API", "Automations (WebSocket API)"],
+	["home/homeassistant", "voice/whisper", "API", "Speech to text (Wyoming)"],
+	["home/homeassistant", "voice/piper", "API", "Text to speech (Wyoming)"],
+	["home/homeassistant", "voice/openwakeword", "API", "Wake word detection (Wyoming)"],
+	["home/homeassistant", "home/mariadb", "API", "Recorder history"],
+	["home/homeassistant", "home/influxdb", "Metrics", "Long-term sensor history"],
+	["home/grafana", "home/influxdb", "Metrics", "Dashboard queries"]
+]
+# The build farm: Git and CI, image builds, caches and artifacts.
+const DEV = [
+	["ci/gitea", "ci/woodpecker-server", "API", "Push webhooks"],
+	["ci/woodpecker-server", "ci/gitea", "API", "Clones and commit status"],
+	["ci/woodpecker-agent", "ci/woodpecker-server", "API", "Pipeline jobs (gRPC)"],
+	["ci/woodpecker-server", "ci/postgres", "API", "Pipeline state"],
+	["ci/gitea", "ci/postgres", "API", "Repositories and users"],
+	["ci/woodpecker-agent", "ci/buildkitd", "API", "Image builds"],
+	["ci/buildkitd", "ci/registry", "Files", "Pushes built images"],
+	["ci/woodpecker-agent", "ci/minio", "Files", "Build artifacts and logs"],
+	["ci/gitea", "ci/minio", "Files", "LFS objects and attachments"],
+	["ci/nightly-engine-build", "ci/sccache-redis", "API", "Compiler cache"],
+	["ci/build-firmware", "ci/minio", "Files", "Firmware images"],
+	["dev/devcontainer-cpp", "ci/sccache-redis", "API", "Compiler cache"],
+	["dev/devcontainer-rust", "ci/sccache-redis", "API", "Compiler cache"],
+	["dev/code-server", "ci/gitea", "API", "Git push and pull"],
+	["dev/devcontainer-cpp", "ci/gitea", "API", "Git push and pull"],
+	["dev/devcontainer-rust", "ci/gitea", "API", "Git push and pull"],
+	["dev/devcontainer-go", "ci/gitea", "API", "Git push and pull"],
+	["dev/devcontainer-python", "ci/gitea", "API", "Git push and pull"],
+	["dev/devcontainer-node", "ci/gitea", "API", "Git push and pull"]
+]
+
 static func key(p: Dictionary) -> String:
 	return "%s/%s" % [p.get("ns", ""), p.get("wname", p.get("name", ""))]
 
@@ -112,7 +152,7 @@ static func links(state: Dictionary) -> Array:
 				pods[id] = []
 			pods[id].append(p)
 	var out = []
-	for row in MEDIA + SHOP:
+	for row in MEDIA + SHOP + HOME + DEV:
 		if not pods.has(row[0]) or not pods.has(row[1]):
 			continue
 		for a in pods[row[0]]:
