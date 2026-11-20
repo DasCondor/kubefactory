@@ -20,7 +20,7 @@ func _initialize() -> void:
 	_check(state["nodes"].size() == expected and state["lab"]["host_count"] == expected,
 		"normal demo entry point applies the config")
 	_check(state["pods"].size() == 15, "both layouts keep all fifteen services")
-	var gathering_apps = ["sonarr", "radarr", "jackett", "downloader", "gluetun", "syncthing", "gatherer-metrics"]
+	var gathering_apps = ["sonarr", "radarr", Lab.configured_indexer(), "downloader", "gluetun", "syncthing", "gatherer-metrics"]
 	for pod in state["pods"]:
 		var host = "gathering-node" if expected == 2 and pod["wname"] in gathering_apps else "media-host"
 		_check(pod["node"] == host, pod["wname"] + " runs on its configured host")
@@ -55,5 +55,22 @@ func _initialize() -> void:
 	var outbox = disks.filter(func(disk): return disk["label"].ends_with(" · outbox"))
 	_check(outbox.size() == 1 and outbox[0]["mounts"].size() == 2, "outbox remains one shared volume")
 	_check(Demo.new("docker-media").fetch()["pods"].size() == 7, "the existing media starter stays available")
+	# Prowlarr instead of Jackett: same place in the stack, behind the VPN, plus indexer sync
+	Lab.forced_indexer = "prowlarr"
+	var pst = Demo.new("docker-media-gatherer").fetch()
+	Lab.forced_indexer = ""
+	var names = pst["pods"].map(func(pod): return pod["wname"])
+	_check("prowlarr" in names and not "jackett" in names and pst["pods"].size() == 15 and pst["lab"]["indexer"] == "prowlarr",
+		"Prowlarr replaces Jackett in the fifteen-service stack")
+	var prowlarr = pst["pods"].filter(func(pod): return pod["wname"] == "prowlarr")[0]
+	var gw = pst["pods"].filter(func(pod): return pod["wname"] == "gluetun")[0]
+	_check(prowlarr["net"]["via"] == gw["uid"] and "prowlarr" in gw["net"]["vpn"]["through"], "Prowlarr reaches the internet only through Gluetun")
+	var pl = pst["links"].map(func(link): return [link["from_name"], link["to_name"], link["kind"]])
+	_check(["sonarr", "prowlarr", "API"] in pl and ["radarr", "prowlarr", "API"] in pl, "Sonarr and Radarr search through Prowlarr")
+	_check(["prowlarr", "sonarr", "API"] in pl and ["prowlarr", "radarr", "API"] in pl, "Prowlarr pushes its indexers into Sonarr and Radarr")
+	_check(["prowlarr", "prowlarr-config", "Mounts"] in pl and not pl.any(func(row): return "jackett" in row[0] or "jackett" in row[1]),
+		"Prowlarr has its own config volume and nothing points at Jackett")
+	var pv = pst["lab"]["egress"].filter(func(route): return route["via"] == "gluetun")
+	_check(pv.size() == 4 and pv.any(func(route): return route["app"] == "prowlarr"), "Prowlarr is one of the four VPN-protected apps")
 	print("MEDIA LAB CONFIG PASSED" if failures == 0 else "MEDIA LAB CONFIG FAILED")
 	quit(0 if failures == 0 else 1)

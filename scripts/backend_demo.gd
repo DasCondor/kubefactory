@@ -77,7 +77,7 @@ const DEMO_TYPES = [
 		"desc": "Follow Seerr requests and Grafana queries. Inspect Plex's read-only library, Prometheus storage and the optional Discord route. Try loopback, LAN or media VLAN bindings."},
 	{"id": "docker-media-gatherer", "flavor": "docker-media-gatherer", "name": "Docker media lab + gatherer",
 		"short_desc": "Full media stack, VPN egress and file sync. Hosts come from config.",
-		"desc": "Trace Jackett searches and downloader traffic through Gluetun. Operate the sync lever and import into Plex. Set host_count in media-lab.json to use one or two hosts."},
+		"desc": "Trace Jackett or Prowlarr searches and downloader traffic through Gluetun. Operate the sync lever and import into Plex. Set host_count in media-lab.json to use one or two hosts."},
 ]
 
 static func demo_flavor(id: String) -> String:
@@ -124,7 +124,7 @@ func _init(flavor: String = "helmsman-sim"):
 		n["itype"] = f["itype"]
 		n["created"] = _now() - 86400.0 * 41
 	if flavor in ["docker-media", "docker-media-gatherer"]:
-		_lab = MediaLab.new(flavor == "docker-media-gatherer", _now(), f["nodes"].size())
+		_lab = MediaLab.new(flavor == "docker-media-gatherer", _now(), f["nodes"].size(), MediaLab.configured_indexer())
 		providers = [{"id": "kube", "name": "Docker logs", "ready": true, "note": "simulated container output"}]
 		caps.merge({"lab_sync": _lab.gathered, "lab_import": _lab.gathered, "lab_access": true,
 			"lab_discord": true, "cordon": false, "drain": false, "create": false, "demo_update_image": false}, true)

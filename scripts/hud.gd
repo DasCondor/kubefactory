@@ -1472,6 +1472,20 @@ func _fill_media_lab() -> void:
 	_dyn.add_child(_wrapped("SIMULATED · " + layout, 15, ORANGE))
 	if lab["gathered"]:
 		_dyn.add_child(_wrapped("Host count is set in media-lab.json. Restart the game after editing the config.", 13, DIM))
+		# Jackett or Prowlarr: the searchers' indexer. Switching rebuilds this demo world.
+		var current = str(lab.get("indexer", "jackett"))
+		var pick = _row(8)
+		pick.add_child(_wrapped("INDEXER · %s" % MediaLab.INDEXERS.get(current, ["", 0, current])[2], 15, ORANGE))
+		for choice in MediaLab.INDEXERS:
+			if choice == current:
+				continue
+			pick.add_child(_btn("Use %s instead" % MediaLab.INDEXERS[choice][2], func():
+				_save_setting("lab_indexer", choice)
+				close_modal()
+				target_requested.emit({"source": "simulation", "context": cluster.backend.context,
+					"provider": str(cluster.state.get("provider", "")), "reload": true})))
+		_dyn.add_child(pick)
+		_dyn.add_child(_wrapped("Jackett answers Sonarr's and Radarr's searches. Prowlarr does too, and also pushes its indexer list into them. Both reach the internet only through Gluetun. Switching restarts this demo world.", 13, DIM))
 	_dyn.add_child(_wrapped("Follow the color-coded pipes from LAN / VLAN IN to the apps, and out through WWW OUT. Inspect a machine for its dashboard. Use Trace connections to highlight a route."))
 	var access = OptionButton.new()
 	var bindings = ["Loopback", "LAN", "VLAN 30"]
