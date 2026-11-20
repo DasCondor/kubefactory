@@ -1,0 +1,86 @@
+name: kf-media-demo
+
+services:
+  plex:
+    image: plexinc/pms-docker:latest
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+      PLEX_CLAIM: ${PLEX_CLAIM:-}
+    labels: {kubefactory.io/vlan-id: "${MEDIA_VLAN_ID:-}"}
+    ports:
+      - "${MEDIA_BIND:-127.0.0.1}:${PLEX_PORT:-32400}:32400"
+    volumes:
+      - plex-config:/config
+      - ./library:/media:ro
+    networks: [media]
+
+  seerr:
+    image: ghcr.io/seerr-team/seerr:v3.5.2
+    init: true
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+    labels: {kubefactory.io/vlan-id: "${MEDIA_VLAN_ID:-}"}
+    ports:
+      - "${MEDIA_BIND:-127.0.0.1}:${SEERR_PORT:-5055}:5055"
+    volumes:
+      - seerr-config:/app/config
+    networks: [media]
+
+  tautulli:
+    image: ghcr.io/tautulli/tautulli:latest
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+    ports:
+      - "127.0.0.1:${TAUTULLI_PORT:-8181}:8181"
+    volumes:
+      - tautulli-config:/config
+    networks: [media]
+
+  blackbox:
+    image: ghcr.io/prometheus/blackbox-exporter:v0.29.1
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/config.yml"]
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox/config.yml:ro
+    networks: [media, reporting]
+
+  prometheus:
+    image: prom/prometheus:v3.5.1
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=7d"]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    networks: [reporting]
+
+  grafana:
+    image: grafana/grafana:12.3.11
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/dashboards:/var/lib/kf-dashboards:ro
+    networks: [reporting]
+
+networks:
+  media:
+  reporting:
+
+volumes:
+  plex-config:
+  seerr-config:
+  tautulli-config:
+  prometheus-data:
+  grafana-data:
+

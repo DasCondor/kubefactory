@@ -56,6 +56,7 @@ func probe() -> Dictionary:
 			role = str(h.get("role", "viewer"))
 			tier = int(h.get("tier", 1))
 			server_read_only = bool(h.get("read_only", false))
+			caps["file_write"] = bool(h.get("file_write", false))
 			server_source = str(h.get("source", ""))
 			context = "%s @ %s" % [str(h.get("context", "")), url.get_slice("://", 1).get_slice("/", 0)]
 			return {"ok": true, "msg": context}

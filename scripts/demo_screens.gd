@@ -181,8 +181,8 @@ func sync(state: Dictionary) -> void:
 			var id: String = l[side]
 			if not connections.has(id):
 				connections[id] = []
-			connections[id].append("%s %s · %s%s" % ["→" if side == "from" else "←", l["to_name" if side == "from" else "from_name"],
-				l["kind"], "" if l.get("ready", true) else " · unavailable"])
+			connections[id].append("%s %s · %s%s%s" % ["→" if side == "from" else "←", l["to_name" if side == "from" else "from_name"],
+				l["kind"], " · " + str(l["port"]) if str(l.get("port", "")) != "" else "", "" if l.get("ready", true) else " · unavailable"])
 	for p in state.get("pods", []):
 		var kind = kind_of(p)
 		if p.get("health") == "bad":
@@ -221,6 +221,7 @@ func sync(state: Dictionary) -> void:
 			route = "%s · %d apps" % [vpn.get("product", "VPN"), vpn.get("through", []).size()]
 			links.push_front("→ %s → Internet Output" % vpn.get("product", "VPN"))
 		s["panel"].pod = pod
+		s["panel"].lab = state.get("lab", {})
 		s["panel"].route = route
 		s["panel"].ports = ports.get(uid, [])
 		s["panel"].disks = disks.get(uid, [])
@@ -250,6 +251,7 @@ class ScreenPanel extends Control:
 	var bw_history = []
 	var streams = {}
 	var pod = {}
+	var lab = {}
 	var ports = []
 	var disks = []
 	var route = ""
@@ -275,6 +277,7 @@ class ScreenPanel extends Control:
 			bw_history = source.bw_history
 			streams = source.streams
 			pod = source.pod
+			lab = source.lab
 			ports = source.ports
 			disks = source.disks
 			route = source.route
@@ -349,6 +352,9 @@ class ScreenPanel extends Control:
 			_text(Vector2(26, y + 30), str(lines[i]), 20, color, 585)
 
 	func _pod_overview() -> void:
+		if not lab.is_empty():
+			_lab_overview()
+			return
 		var status = Rect2(12, 84, 616, 96)
 		_card(status, "%s · %s" % [pod.get("ns", ""), pod.get("node", "Unscheduled")])
 		_text(Vector2(24, 155), str(pod.get("status", "Waiting")), 29, K.health_color(pod.get("health", "warn")), 365)
@@ -369,6 +375,38 @@ class ScreenPanel extends Control:
 			var c: Dictionary = containers[i]
 			_text(Vector2(24, 342 + i * 25), str(c["name"]), 17, TXT, 340)
 			_text(Vector2(376, 342 + i * 25), str(c["state"]), 17, GREEN if c.get("ready", false) else AMBER, 229, HORIZONTAL_ALIGNMENT_RIGHT)
+
+	func _lab_overview() -> void:
+		_card(Rect2(12, 84, 616, 66), str(pod.get("node", "")))
+		_text(Vector2(24, 136), str(pod.get("status", "")), 22, K.health_color(pod.get("health", "warn")), 300)
+		var detail = route
+		match pod.get("wname", ""):
+			"downloader":
+				detail = "%d files awaiting sync" % lab["queued"]
+			"syncthing", "media-sync":
+				detail = "%s · %d files/hour" % ["Paused" if lab["paused"] else ("Copying" if lab["transfer"] else "Waiting"), lab["recent_count"]]
+			"seerr":
+				detail = "Discord · " + ("disabled" if not lab["discord"] else ("sample delivered" if lab["last_alert"] > 0 else "ready"))
+			"prometheus":
+				detail = "Stores metrics in prometheus-data"
+			"tautulli-exporter":
+				detail = "Tautulli JSON → Prometheus metrics"
+			"blackbox":
+				detail = "HTTP checks · 4 media services"
+			"jackett":
+				detail = "Index searches through Gluetun"
+			"sonarr", "radarr":
+				detail = "Seerr requests → indexer → downloader"
+			"gatherer-metrics":
+				detail = "Private Docker bridge" if lab.get("host_count", 2) == 1 else "Private management VLAN 40"
+		_card(Rect2(12, 162, 616, 68), "ACTIVITY")
+		_text(Vector2(24, 215), detail, 20, TXT, 590)
+		_card(Rect2(12, 242, 616, 66), "LISTENER")
+		if not ports.is_empty():
+			_text(Vector2(24, 292), "%s · %s" % [ports[0]["port"], ports[0]["scope"]], 19, TXT, 590)
+		_card(Rect2(12, 320, 616, 116), "DIRECT CONNECTIONS")
+		for i in mini(connections.size(), 3):
+			_text(Vector2(24, 366 + i * 25), str(connections[i]), 18, DIM, 590)
 
 	func _port_panel() -> void:
 		if ports.is_empty():

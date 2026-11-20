@@ -1,0 +1,9 @@
+scrape_configs:
+  - job_name: plex-playback
+    metrics_path: /probe
+    params:
+      module: [tautulli]
+      target: ["http://tautulli:8181/api/v2?cmd=get_activity"]
+    static_configs:
+      - targets: ["tautulli-exporter:7979"]
+

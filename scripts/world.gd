@@ -13,7 +13,11 @@ const Controls = preload("res://scripts/controls.gd")
 const Scenery = preload("res://scripts/scenery.gd")
 const Models = preload("res://scripts/models.gd")
 const Topology = preload("res://scripts/demo_topology.gd")
+const MediaLab = preload("res://scripts/demo_media_lab.gd")
 const Pipes = preload("res://scripts/pipes.gd")
+const LabConnections = preload("res://scripts/lab_connections.gd")
+const PlanBlocks = preload("res://scripts/plan_blocks.gd")
+const BuildPlan = preload("res://scripts/build_plan.gd")
 
 const FRONT_Z = -46.0
 const YARD_Z = -22.0
@@ -62,6 +66,11 @@ var show_belts = true
 
 var platforms = {}
 var machines = {}
+var lab_fixtures = {}
+var lab_trace = []
+var _lab_storage_mesh: ArrayMesh
+var _lab_board: Node3D
+var _build_blocks: Node3D
 var _depots = {}
 var _depot_sig = ""
 var _belt_sig = ""
@@ -114,6 +123,9 @@ func _ready() -> void:
 	_build_bob()
 	_build_gauge()
 	_build_krew_stations()
+	var saved = K.load_settings()
+	if saved.get("show_build_plan",false) and saved.get("flowchart") is Dictionary:
+		show_build_plan(BuildPlan.migrate(saved["flowchart"]))
 	_belt_mm = _make_mm(Vector3.ONE, Tex.mat(Color.WHITE, 0.6, 0.4))
 	_item_mm = _make_mm(Vector3(0.5, 0.5, 0.5), Tex.mat(Color.WHITE, 0.5, 0.1))
 	# on pipes, what flows is a glowing collar sliding along the tube
@@ -1106,6 +1118,23 @@ func select(collider, col: Color = Color(0.98, 0.584, 0.286)) -> void:
 						e.position = pv
 						i += 1
 
+func show_build_plan(plan: Dictionary) -> bool:
+	if BuildPlan.problem(plan) != "":
+		return false
+	if not is_instance_valid(_build_blocks):
+		_build_blocks = PlanBlocks.new()
+		_build_blocks.position = Vector3(110,0.3,80)
+		add_child(_build_blocks)
+	_build_blocks.redraw(plan)
+	var title = Label3D.new()
+	title.text = "LOCAL BUILD PLAN · no deployment\n[E] inspect a block to keep editing"
+	title.position = Vector3(_build_blocks.bounds.get_center().x,9,_build_blocks.bounds.position.z-8)
+	title.font_size = 54
+	title.pixel_size = 0.035
+	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_build_blocks.add_child(title)
+	return true
+
 func _node_rank(n: Dictionary) -> String:
 	return ("0" if str(n["roles"]).contains("control-plane") or str(n["roles"]).contains("master") else "1") + n["name"]
 
@@ -1113,12 +1142,18 @@ func apply_state(st: Dictionary) -> void:
 	var quiet = _first or (st["source"] + "|" + st["context"]) != _source
 	if quiet:
 		vpn_selection.clear()
-		if pipe_filter == "Internet Output":
+		lab_trace.clear()
+		if pipe_filter == "Internet Output" or st.has("lab") or _source.begins_with("simulation|docker-media"):
 			pipe_filter = "All"
+		if st.has("lab"):
+			show_belts = true
 	_first = false
 	_source = st["source"] + "|" + st["context"]
 	var nodes = st["nodes"].duplicate()
-	nodes.sort_custom(func(a, b): return _node_rank(a) < _node_rank(b))
+	if st.has("lab"):
+		nodes.sort_custom(func(a, b): return a["name"] > b["name"])
+	else:
+		nodes.sort_custom(func(a, b): return _node_rank(a) < _node_rank(b))
 	var pods = []
 	var need_yard = false
 	for p in st["pods"]:
@@ -1198,7 +1233,12 @@ func apply_state(st: Dictionary) -> void:
 		var max_depth = 0.0
 		for j in row.size():
 			var pf = platforms[row[j]]
-			pf.set_rows(pf.used_rows())
+			var rows: int = pf.used_rows()
+			if st.has("lab"):
+				var count = st["lab"]["fixture_hosts"].values().count(row[j])
+				var cabinet_rows = ceili(count / 2.0)
+				rows = maxi(rows, ceili((cabinet_rows * 6.0 - 2.0) / Platform.PITCH))
+			pf.set_rows(rows)
 			pf.position = Vector3((j - (row.size() - 1) / 2.0) * (Platform.WIDTH + GAP), 0, row_z)
 			max_depth = maxf(max_depth, pf.depth)
 		row_z -= max_depth + 34.0
@@ -1207,8 +1247,59 @@ func apply_state(st: Dictionary) -> void:
 		# shortcut: the browser build drops sun shadows on big factories to stay under
 		# WebGL's ~4096 elements per frame; merge machine parts into one mesh to lift it
 		sun.shadow_enabled = machines.size() < 45
+	_update_lab_fixtures(st.get("lab", {}))
 	_update_services(st, pods)
+	_update_lab_board(st)
 	_update_hub(st)
+
+func _update_lab_board(st: Dictionary) -> void:
+	if not st.has("lab"):
+		if is_instance_valid(_lab_board):
+			_lab_board.queue_free()
+			_lab_board = null
+		return
+	if not is_instance_valid(_lab_board):
+		_lab_board = Node3D.new()
+		_lab_board.position = Vector3(-34, 0, FRONT_Z + 16)
+		add_child(_lab_board)
+		_box(Vector3(18.5, 12.2, 0.35), Tex.shared("board"), Vector3(0, 6.6, 0), _lab_board)
+		for y in [0.4, 12.8]:
+			_box(Vector3(18.8, 0.18, 0.45), Tex.shared("orange"), Vector3(0, y, 0), _lab_board)
+		for x in [-7.5, 7.5]:
+			_box(Vector3(0.4, 0.5, 1.8), Tex.shared("steel"), Vector3(x, 0.25, 0), _lab_board)
+		_solid(Vector3(18.8, 12.8, 0.45), Vector3(0, 6.4, 0),
+			{"type": "lab_fixture", "id": "connections", "name": "ALL CONNECTIONS · apps, ports and storage"}, _lab_board)
+		var title = Label3D.new()
+		title.text = "CONNECTION WHITEBOARD · [E] configure"
+		title.position = Vector3(0, 12.4, 0.20)
+		title.outline_size = 0
+		title.font_size = 48
+		K.fit_label(title, 17.8, 0.45)
+		_lab_board.add_child(title)
+		var viewport = SubViewport.new()
+		viewport.size = Vector2i(2048, 1536)
+		viewport.disable_3d = true
+		_lab_board.add_child(viewport)
+		var graph = LabConnections.new()
+		viewport.add_child(graph)
+		graph.configure(K.load_settings().get("lab_whiteboard", {}))
+		graph.size = Vector2(viewport.size)
+		var face = MeshInstance3D.new()
+		var quad = QuadMesh.new()
+		quad.size = Vector2(18.0, 11.3)
+		face.mesh = quad
+		var material = StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_texture = viewport.get_texture()
+		face.material_override = material
+		face.position = Vector3(0, 6.35, 0.20)
+		_lab_board.add_child(face)
+		_lab_board.set_meta("graph", graph)
+		_lab_board.set_meta("viewport", viewport)
+	var graph = _lab_board.get_meta("graph")
+	if graph.refresh(st):
+		graph.fit_routes.call_deferred()
+		_lab_board.get_meta("viewport").render_target_update_mode = SubViewport.UPDATE_ONCE
 
 func _update_hub(st: Dictionary) -> void:
 	var ready = 0
@@ -1246,8 +1337,220 @@ func _update_hub(st: Dictionary) -> void:
 	_hub_label.text = "%s  ·  %s\n\nNODES  %d / %d ready\nPODS   %d running  ·  %d pending  ·  %d failing\nWORKLOADS  %d   ·   SERVICES  %d\n\n[E]  open the cluster codex" % [
 		str(st.get("provider", st["source"])).to_upper() if str(st.get("provider", "")) != "" else str(st["source"]).to_upper(), st["context"], ready, st["nodes"].size(),
 		c["ok"], c["warn"], c["bad"], st["workloads"].size(), st["services"].size()]
+	if st.has("lab"):
+		_hub_label.text = "DOCKER MEDIA LAB  ·  SIMULATED\n\n%d %s  ·  %d containers running\n\n[E]  routes, ports, storage and controls" % [
+			st["nodes"].size(), "host" if st["nodes"].size() == 1 else "hosts", c["ok"]]
 	K.fit_label(_hub_label, 8.4, 3.5)
 	K.fit_label(_log_label, 6.0, 1.7)
+
+func _build_lab_storage(parent: Node3D) -> Dictionary:
+	var surface = {"pos": Vector3(0, 1.22, 0.902), "size": Vector2(1.94, 0.15)}
+	var model = Models.instance("shipping_container")
+	if model != null:
+		var bounds: AABB = model.get_meta("bounds")
+		var dimensions = Vector3(2.28, 1.25, 1.70)
+		model.scale = dimensions / bounds.size
+		model.position = Vector3(0, 0.18 + dimensions.y * 0.5, 0) - bounds.get_center() * model.scale
+		var template = Models.template("shipping_container")
+		if template.has("name_surface"):
+			var panel: Dictionary = template["name_surface"]
+			var panel_size: Vector2 = panel["size"] * Vector2(model.scale.x, model.scale.y)
+			panel_size.y = maxf(panel_size.y, 0.12)
+			surface = {"pos": model.transform * panel["pos"], "size": panel_size}
+			_box(Vector3(panel_size.x, panel_size.y, 0.008), Tex.shared("board"), surface["pos"] - Vector3(0, 0, 0.005), parent)
+		if template.has("roof_bounds"):
+			parent.set_meta("pipe_y", model.position.y + template["roof_bounds"].end.y * model.scale.y + 0.20)
+	else:
+		if _lab_storage_mesh == null:
+			var paint = Tex.body(Color(0.22, 0.48, 0.72))
+			var frame = Tex.shared("dark")
+			var steel = Tex.shared("steel")
+			var parts = [
+				Models._box(Vector3(2.20, 1.16, 1.62), Vector3(0, 0.77, 0), paint),
+				Models._box(Vector3(2.40, 0.10, 1.82), Vector3(0, 1.38, 0), frame),
+				Models._box(Vector3(2.40, 0.10, 1.82), Vector3(0, 0.24, 0), frame),
+				Models._box(Vector3(2.08, 0.19, 0.018), Vector3(0, 1.22, 0.889), Tex.shared("board"))]
+			for x in [-1.10, 1.10]:
+				for z in [-0.82, 0.82]:
+					parts.append(Models._box(Vector3(0.12, 1.16, 0.12), Vector3(x, 0.80, z), frame))
+					for y in [0.24, 1.34]:
+						parts.append(Models._box(Vector3(0.20, 0.18, 0.20), Vector3(x, y, z), steel))
+				for i in 7:
+					parts.append(Models._box(Vector3(0.07, 0.92, 0.06), Vector3(x, 0.80, -0.66 + i * 0.22), paint))
+			for side in [-1.0, 1.0]:
+				parts.append(Models._box(Vector3(1.01, 1.04, 0.06), Vector3(side * 0.54, 0.78, 0.85), paint))
+				parts.append(Models._box(Vector3(0.045, 0.83, 0.045), Vector3(side * 0.28, 0.70, 0.91), steel))
+				parts.append(Models._box(Vector3(0.16, 0.055, 0.07), Vector3(side * 0.32, 0.59, 0.94), frame))
+				parts.append(Models._box(Vector3(0.34, 0.11, 0.04), Vector3(side * 0.62, 0.34, 0.90), frame))
+				for y in [0.48, 0.98]:
+					parts.append(Models._box(Vector3(0.14, 0.10, 0.10), Vector3(side * 1.0, y, 0.87), steel))
+			_lab_storage_mesh = Models._merge(parts)
+		model = MeshInstance3D.new()
+		model.mesh = _lab_storage_mesh
+	model.name = "StorageContainer"
+	parent.add_child(model)
+	return surface
+
+func _build_lab_lever(parent: Node3D) -> void:
+	var steel = Tex.shared("steel")
+	var dark = Tex.shared("dark")
+	var paint = Tex.body(Color(0.22, 0.48, 0.72))
+	_box(Vector3(1.24, 0.12, 1.08), dark, Vector3(0, 0.22, 0), parent)
+	_box(Vector3(0.90, 0.96, 0.75), paint, Vector3(0, 0.73, 0), parent)
+	_box(Vector3(1.24, 0.16, 1.04), dark, Vector3(0, 1.23, 0.16), parent)
+	_box(Vector3(0.78, 0.30, 0.04), Tex.shared("board"), Vector3(0, 0.80, 0.40), parent)
+	for x in [-0.31, 0.31]:
+		_box(Vector3(0.16, 0.28, 0.40), steel, Vector3(x, 1.38, 0.24), parent)
+		for z in [-0.40, 0.40]:
+			_cyl(0.065, 0.06, steel, Vector3(x * 1.6, 0.31, z), parent)
+	_cyl(0.13, 0.90, steel, Vector3(0, 1.44, 0.25), parent, Vector3(0, 0, PI * 0.5))
+	_box(Vector3(0.28, 0.05, 0.14), Tex.body(Color(0.31, 0.77, 0.50)), Vector3(0, 1.34, 0.65), parent)
+	_box(Vector3(0.28, 0.05, 0.14), Tex.body(Color(1.0, 0.61, 0.20)), Vector3(0, 1.34, -0.26), parent)
+	var arm = Node3D.new()
+	arm.name = "SyncLever"
+	arm.position = Vector3(0, 1.44, 0.25)
+	parent.add_child(arm)
+	_cyl(0.065, 0.64, steel, Vector3(0, 0.32, 0), arm)
+	_cyl(0.14, 0.78, Tex.body(Tex.ORANGE), Vector3(0, 0.68, 0), arm, Vector3(0, 0, PI * 0.5))
+	for x in [-0.40, 0.40]:
+		_cyl(0.15, 0.07, dark, Vector3(x, 0.68, 0), arm, Vector3(0, 0, PI * 0.5))
+	parent.set_meta("arm", arm)
+	var lamp = _cyl(0.07, 0.04, Tex.status_glow("ok"), Vector3(0, 1.05, 0.40), parent, Vector3(PI * 0.5, 0, 0))
+	parent.set_meta("lamp", lamp)
+
+func _build_lab_gateway(parent: Node3D, height: float, color: Color, count: int) -> void:
+	var body = _box(Vector3(2.15, height - 0.26, 1.42), Tex.mat(Color(0.08, 0.11, 0.13), 0.85, 0.1),
+		Vector3(0, 0.18 + (height - 0.26) * 0.5, 0), parent)
+	body.name = "GatewayBody"
+	var rim = _box(Vector3(2.19, 0.08, 1.46), Tex.mat(color, 0.75, 0.1), Vector3(0, height - 0.04, 0), parent)
+	rim.name = "GatewayRim"
+	_box(Vector3(1.94, 0.62, 0.016), Tex.shared("board"), Vector3(0, 2.60, 0.718), parent)
+	parent.set_meta("port_count", count)
+	var gold = Tex.mat(Color(0.85, 0.67, 0.27), 0.6, 0.3)
+	for i in count:
+		var y = 1.95 - i * 0.60
+		var jack = Node3D.new()
+		jack.name = "GatewayPort%d" % i
+		parent.add_child(jack)
+		_box(Vector3(0.46, 0.30, 0.05), Tex.shared("steel"), Vector3(-0.60, y, 0.745), jack)
+		_box(Vector3(0.31, 0.17, 0.03), Tex.shared("off"), Vector3(-0.60, y, 0.78), jack)
+		for contact in 5:
+			_box(Vector3(0.018, 0.08, 0.012), gold, Vector3(-0.70 + contact * 0.05, y - 0.015, 0.799), jack)
+		var lamp = _cyl(0.045, 0.025, Tex.status_glow("warn"), Vector3(-0.93, y, 0.735), jack, Vector3(PI * 0.5, 0, 0))
+		jack.set_meta("lamp", lamp)
+		var label = Label3D.new()
+		label.position = Vector3(0.32, y, 0.735)
+		label.font_size = 36
+		label.outline_size = 0
+		label.visibility_range_end = 45.0
+		jack.add_child(label)
+		jack.set_meta("label", label)
+		var collider = _solid(Vector3(0.52, 0.36, 0.08), Vector3(-0.60, y, 0.77), {}, jack)
+		collider.name = "PortCollider"
+		var x = (i - (count - 1) * 0.5) * 0.64
+		var point = Vector3(x, height + 0.20, -0.46)
+		var socket = _cyl(0.15, 0.20, Tex.shared("steel"), point - Vector3.UP * 0.10, jack)
+		socket.name = "RoofSocket"
+		_cyl(0.19, 0.06, Tex.shared("dark"), Vector3(0, -0.06, 0), socket)
+		jack.set_meta("pipe_port", point)
+
+func _update_lab_fixtures(lab: Dictionary) -> void:
+	var fixtures: Dictionary = lab.get("fixtures", {})
+	for id in lab_fixtures.keys():
+		if not fixtures.has(id):
+			lab_fixtures[id].queue_free()
+			lab_fixtures.erase(id)
+	var slots = {MediaLab.MEDIA: 0, MediaLab.GATHER: 0}
+	for id in fixtures:
+		var mount = MediaLab.DISKS.has(id)
+		var control = id == "sync-switch"
+		var gateway = not mount and not control
+		var gateway_ports: Array = lab.get("gateway_ports", {}).get(id, [])
+		var host: String = lab["fixture_hosts"].get(id, MediaLab.MEDIA)
+		var base: Vector3 = platforms[host].position
+		var tail: Vector3 = platforms.get(MediaLab.GATHER, platforms[MediaLab.MEDIA]).position
+		var pos: Vector3
+		if mount:
+			var index: int = slots[host]
+			pos = base + Vector3(17.0 if index % 2 == 0 else -17.0, Platform.HEIGHT, -4.0 - 6.0 * floori(index / 2.0))
+			slots[host] += 1
+		else:
+			match id:
+				"lan": pos = base + Vector3(-25, 0, 1)
+				"www": pos = tail + Vector3(25, 0, 1)
+				"discord": pos = tail + Vector3(25, 0, -8)
+				"sync-switch": pos = base + Vector3(12, Platform.HEIGHT, -1.5)
+		if gateway and lab_fixtures.has(id) and lab_fixtures[id].get_meta("port_count", -1) != gateway_ports.size():
+			lab_fixtures[id].queue_free()
+			lab_fixtures.erase(id)
+		if not lab_fixtures.has(id):
+			var d = Node3D.new()
+			add_child(d)
+			lab_fixtures[id] = d
+			var color: Color = MediaLab.COLORS["Mounts" if mount else ("Files" if control else {"lan": "LAN", "www": "VPN", "discord": "Alerts"}[id])]
+			var height = 1.63 if mount else (1.45 if control else 3.1)
+			d.set_meta("pipe_y", height)
+			_box(Vector3(1.65, 0.18, 1.40) if control else Vector3(2.45, 0.18, 2.15), Tex.shared("steel"), Vector3(0, 0.09, 0), d)
+			var storage_surface = {}
+			if mount:
+				storage_surface = _build_lab_storage(d)
+			elif control:
+				_build_lab_lever(d)
+			else:
+				_build_lab_gateway(d, height, color, gateway_ports.size())
+			_solid(Vector3(2.45 if mount else (1.65 if control else 2.25), height + (0.85 if control else 0.0), 2.05 if mount else (1.76 if control else 1.46)), Vector3(0, height * 0.5 + (0.42 if control else 0.0), 0),
+				{"type": "lab_fixture", "id": id, "name": fixtures[id]}, d)
+			var label = Label3D.new()
+			label.text = fixtures[id]
+			label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+			label.font_size = 48
+			label.pixel_size = 0.014
+			label.modulate = color.lightened(0.25)
+			label.position = storage_surface["pos"] if mount else (Vector3(0, 0.80, 0.425) if control else Vector3(0, 2.60, 0.742))
+			label.visibility_range_end = 45.0
+			label.outline_size = 0
+			if mount:
+				var panel_size: Vector2 = storage_surface["size"]
+				K.fit_label(label, panel_size.x, panel_size.y)
+			elif gateway:
+				K.fit_label(label, 1.84, 0.54)
+			d.add_child(label)
+			d.set_meta("label", label)
+		var fixture: Node3D = lab_fixtures[id]
+		fixture.position = pos
+		if control:
+			var angle = -0.55 if lab["paused"] else 0.55
+			var arm: Node3D = fixture.get_meta("arm")
+			if not is_equal_approx(arm.rotation.x, angle):
+				arm.create_tween().tween_property(arm, "rotation:x", angle, 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			var status = "PAUSED" if lab["paused"] else ("COPYING" if lab["transfer"] else "READY")
+			var health = "warn" if lab["paused"] else "ok"
+			if not lab["sync_ready"]:
+				status = "OFFLINE"
+				health = "bad"
+			fixture.get_meta("label").text = "SYNC\n" + status
+			fixture.get_meta("label").modulate = K.health_color(health).lightened(0.25)
+			fixture.get_meta("lamp").material_override = Tex.status_glow(health)
+			K.fit_label(fixture.get_meta("label"), 0.70, 0.24)
+		elif id == "lan":
+			fixture.get_meta("label").text = "LAN / VLAN IN\n" + str(lab["access"])
+			K.fit_label(fixture.get_meta("label"), 1.84, 0.54)
+		if gateway:
+			var mapping = {}
+			for i in gateway_ports.size():
+				var port: Dictionary = gateway_ports[i]
+				var jack = fixture.get_node("GatewayPort%d" % i)
+				var health = "bad" if not port["ready"] else ("ok" if port["reachable"] else "warn")
+				var status = "OFFLINE" if not port["ready"] else ("LOCAL" if not port["reachable"] else ("OPEN" if id == "lan" else "OUT"))
+				jack.get_meta("label").text = "%d · %s\n%s · %s" % [i + 1, str(port["port"]).to_upper(), port["app"], status]
+				jack.get_meta("label").modulate = K.health_color(health).lightened(0.2)
+				K.fit_label(jack.get_meta("label"), 1.20, 0.44)
+				jack.get_meta("lamp").material_override = Tex.status_glow(health)
+				jack.get_node("PortCollider").set_meta("kf", {"type": "lab_fixture", "id": id, "uid": port["uid"],
+					"name": "%s · %s" % [port["app"], port["port"]], "port": port["port"]})
+				if port["uid"] != "":
+					mapping[port["uid"]] = jack.get_meta("pipe_port")
+			fixture.set_meta("gateway_ports", mapping)
 
 func _update_services(st: Dictionary, pods: Array) -> void:
 	var svcs = []
@@ -1299,9 +1602,10 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 	# Belt routes: depot -> lift -> trunk -> drop onto every selected machine
 	var paths = []
 	var bsig = pipe_filter if show_belts else "off"
-	var infrastructure = show_belts and pipe_filter in ["All", "Services and VPN"]
-	var show_egress = infrastructure or (show_belts and pipe_filter == "Internet Output")
-	var exits = _update_vpn_signs(pods, show_egress)
+	var lab = st.has("lab")
+	var infrastructure = not lab and show_belts and pipe_filter in ["All", "Services and VPN"]
+	var show_egress = not lab and (infrastructure or (show_belts and pipe_filter == "Internet Output"))
+	var exits = _update_vpn_signs([] if lab else pods, show_egress)
 	if show_belts:
 		for i in svcs.size():
 			if not infrastructure:
@@ -1373,25 +1677,43 @@ func _update_services(st: Dictionary, pods: Array) -> void:
 		var shown = {}
 		for p in pods:
 			shown[p["uid"]] = true
+		var endpoints = machines.duplicate() if lab else machines
+		if lab:
+			for id in lab_fixtures:
+				endpoints["lab:" + id] = lab_fixtures[id]
+				shown["lab:" + id] = true
 		var ports = {}
-		for link in st.get("links", []):
+		var links: Array = st.get("links", []).duplicate()
+		if lab:
+			# Mounts take the lowest lanes so their drops stay legible beside storage.
+			links.sort_custom(func(a, b): return a["kind"] == "Mounts" and b["kind"] != "Mounts")
+		for link in links:
 			if not shown.has(link["from"]) or not shown.has(link["to"]):
 				continue
-			var from = machines.get(link["from"])
-			var to = machines.get(link["to"])
+			var from = endpoints.get(link["from"])
+			var to = endpoints.get(link["to"])
 			if from == null or to == null:
 				continue
-			var a = _app_pipe_port(from, ports)
-			var b = _app_pipe_port(to, ports)
-			var height = 12.0 + (svcs.size() + lane_index) * 0.7
+			var a = _app_pipe_port(from, ports, link["to"])
+			var b = _app_pipe_port(to, ports, link["from"])
+			var height = (6.8 + lane_index * 0.33) if lab else (12.0 + (svcs.size() + lane_index) * 0.7)
 			lane_index += 1
 			# Reserve the same ports and height even when this kind is hidden.
 			if pipe_filter != "All" and pipe_filter != link["kind"]:
 				continue
 			var pts = _aisle_route(from, to, a, b, height)
-			var color: Color = Topology.COLORS[link["kind"]]
-			paths.append({"pts": pts, "color": color, "valve": false, "flow": link["ready"], "kind": link["kind"]})
-			bsig += str(pts) + str(color) + str(link["ready"])
+			var color: Color = (MediaLab.COLORS if lab else Topology.COLORS)[link["kind"]]
+			var traced = [link["from"], link["to"], link["kind"]] == lab_trace or lab_trace.has([link["from"], link["to"], link["kind"]])
+			var flow: bool = link.get("flow", link["ready"])
+			if lab and not traced:
+				if not lab_trace.is_empty():
+					color = color.darkened(0.35)
+					flow = false
+				elif not link["ready"]:
+					color = color.darkened(0.42)
+			paths.append({"pts": pts, "color": color, "valve": false, "flow": flow, "kind": link["kind"],
+				"link": [link["from"], link["to"], link["kind"]]})
+			bsig += str(pts) + str(color) + str(flow) + str([link["from"], link["to"], link["kind"]])
 	if bsig != _belt_sig:
 		_belt_sig = bsig
 		_rebuild_belts(paths)
@@ -1432,9 +1754,21 @@ func _aisle_route(from: Node3D, to: Node3D, a: Vector3, b: Vector3, height: floa
 	pts.append_array([Vector3(b_lane.x, height, b.z), Vector3(b.x, height, b.z), b])
 	return pts
 
-func _app_pipe_port(m: Node3D, ports: Dictionary) -> Vector3:
-	var index = int(ports.get(m.uid, 0))
-	ports[m.uid] = index + 1
+func _app_pipe_port(m: Node3D, ports: Dictionary, peer: String = "") -> Vector3:
+	var id = m.get_instance_id()
+	var index = int(ports.get(id, 0))
+	ports[id] = index + 1
+	var gateway_port = m.get_meta("gateway_ports", {}).get(peer)
+	if gateway_port != null:
+		return to_local(m.to_global(gateway_port))
+	if m.has_meta("pipe_y"):
+		var offset = Vector3(-0.79 + 0.32 * (index % 6), m.get_meta("pipe_y"), -0.46 + 0.36 * floori(index / 6.0))
+		var socket_name = "StoragePort%d" % index
+		if m.has_node("StorageContainer") and not m.has_node(socket_name):
+			var socket = _cyl(0.15, 0.20, Tex.shared("steel"), offset - Vector3.UP * 0.10, m)
+			socket.name = socket_name
+			_cyl(0.19, 0.06, Tex.shared("dark"), Vector3(0, -0.06, 0), socket)
+		return to_local(m.to_global(offset))
 	# Leave the forward strip of the roof for Service drops and their fittings.
 	return _machine_port(m, Vector2(-0.92 + 0.38 * floori(index / 6.0), -0.87 + 0.27 * (index % 6)))
 

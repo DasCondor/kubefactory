@@ -306,7 +306,7 @@ func _ready() -> void:
 		elif a == "--demo":
 			source = "simulation"
 		elif a.begins_with("--demo="):
-			# a demo world by name: kubernetes, home-assistant, dev-containers or media
+			# a demo world by ID from the demo picker
 			source = "simulation"
 			ctx = Demo.demo_flavor(a.trim_prefix("--demo="))
 		elif a == "--kubectl":
@@ -771,7 +771,7 @@ func _process(delta: float) -> void:
 	var type = meta.get("type", "")
 	# the screen is for reading and opening: no tool acts through it, whatever is in hand
 	var hold = {} if _on_screen(meta) else _hold_action(type, meta)
-	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc", "bob", "gauge", "krew", "foreman"] else null,
+	world.select(h.get("collider") if type in ["pod", "node", "service", "hub", "cluster", "logs", "npc", "bob", "gauge", "krew", "foreman", "lab_fixture", "plan_block", "plan_socket"] else null,
 		K.tier_color(hud.TOOLS[mode]["mk"]) if not hold.is_empty() else Color(0.98, 0.584, 0.286))
 	if mode == 2 and blueprint != null and type == "platform":
 		world.show_hologram(h["pos"])
@@ -825,6 +825,8 @@ func _tool_readout(type: String, meta: Dictionary, hold: Dictionary) -> String:
 			target = "node %s" % meta["name"]
 		"service":
 			target = "service %s" % str(meta.get("name", ""))
+		"lab_fixture":
+			target = meta["name"]
 	if mode == 2 and blueprint != null:
 		return head + "\nPLAN  " + hud.bp_text(blueprint) + ("\n" + target if target != "" else "")
 	if target == "":
@@ -845,6 +847,8 @@ func touch_action_label() -> String:
 	var hold = _hold_action(type, meta)
 	if not hold.is_empty():
 		return "HOLD\n" + str(hold["label"]).left(18).to_upper()
+	if type == "lab_fixture":
+		return "SYNC\nLEVER" if meta["id"] == "sync-switch" else "INSPECT"
 	if mode == 0 and type in ["pod", "node", "service", "hub", "logs", "npc", "bob", "gauge", "krew", "foreman", "cluster"]:
 		return "INSPECT"
 	if mode == 1:
@@ -920,7 +924,11 @@ func _tooltip(type: String, meta: Dictionary, hold: Dictionary) -> String:
 		"service":
 			return "Service %s / %s\n%s\n[E] details" % [meta["ns"], meta["name"], meta.get("pillars", "Routes traffic to selected pods")]
 		"hub":
-			return "THE HUB\n[E] cluster codex"
+			return "THE HUB\n[E] Docker media lab" if cluster.state.has("lab") else "THE HUB\n[E] cluster codex"
+		"lab_fixture":
+			if meta.has("port"):
+				return "%s\n[E] visual ports and connections" % meta["name"]
+			return "%s\n%s" % [meta["name"], "[E] pause or resume file sync" if meta["id"] == "sync-switch" else "[E] inspect"]
 		"bob":
 			return "BOB  ·  repair stand\n[E] fix list: what is broken, why, and what to do about it"
 		"gauge":
@@ -1036,7 +1044,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 			return
 		if mode <= 2:
 			player.tool_kick(0.55)
-		if mode == 0:
+		if mode == 0 or meta.get("type") == "lab_fixture":
 			_interact()
 		elif mode == 1:
 			if meta.get("type", "") == "pod":
@@ -1049,6 +1057,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 func _interact() -> void:
 	var meta = player.hit.get("meta", {})
 	match meta.get("type", ""):
+		"plan_block", "plan_socket":
+			hud.open_blueprint_graph(str(meta["id"]))
 		"pod":
 			hud.open_pod(meta["uid"])
 		"node":
@@ -1056,7 +1066,18 @@ func _interact() -> void:
 		"service":
 			hud.open_service(meta["ns"], meta["name"])
 		"hub":
-			hud.open_codex()
+			if cluster.state.has("lab"):
+				hud.open_media_lab()
+			else:
+				hud.open_codex()
+		"lab_fixture":
+			var id: String = meta["id"]
+			if id == "sync-switch":
+				hud.use_lab_lever()
+			elif id in ["connections", "lan", "www", "discord"]:
+				hud.open_connections(str(meta.get("uid", "")) if id == "connections" else str(meta.get("uid", "lab:" + id)), hud.open_media_lab)
+			else:
+				hud.open_shared_disks("", hud.open_media_lab, id)
 		"logs":
 			hud.open_logs()
 		"npc":

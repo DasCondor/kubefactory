@@ -152,7 +152,7 @@ func _handle(id: int, d: Dictionary) -> void:
 		c["tier"] = clampi(int(who.get("tier", ROLE_TIER.get(c["role"], 1))), 1, 5)
 		cluster.audit("server: %s joined as %s" % [c["name"], c["role"]])
 		_send(id, {"type": "hello", "ok": true, "protocol": PROTOCOL, "name": c["name"], "role": c["role"], "tier": c["tier"],
-			"read_only": cluster.read_only, "source": cluster.state.get("source", ""), "context": cluster.state.get("context", "")})
+			"read_only": cluster.read_only, "source": cluster.state.get("source", ""), "context": cluster.state.get("context", ""), "file_write": cluster.cap("file_write")})
 		_send(id, {"type": "state", "state": cluster.state})
 		return
 	match op:
@@ -172,9 +172,10 @@ func _act(id: int, d: Dictionary) -> void:
 		_send(id, {"type": "result", "id": rid, "result": {"ok": false, "msg": "not an action"}})
 		return
 	var tier = K.tier_of(a, cluster.state)
-	if tier > c["tier"]:
-		cluster.audit("server: REFUSED %s for %s (%s, up to MK.%d)" % [cluster.describe(a), c["name"], c["role"], c["tier"]])
-		_send(id, {"type": "result", "id": rid, "result": {"ok": false, "msg": "Your role on this server (%s) allows up to MK.%d; this is MK.%d." % [c["role"], c["tier"], tier]}})
+	var limit = mini(c["tier"], cluster.max_tier(str(a.get("ns", ""))))
+	if tier > limit:
+		cluster.audit("server: REFUSED %s for %s (%s, up to MK.%d here)" % [cluster.describe(a), c["name"], c["role"], limit])
+		_send(id, {"type": "result", "id": rid, "result": {"ok": false, "msg": "Your role and this namespace's policy allow up to MK.%d here (%s); this is MK.%d." % [limit, c["role"], tier]}})
 		return
 	if tier > 1 and cluster.read_only:
 		cluster.audit("server: BLOCKED (read-only) %s for %s" % [cluster.describe(a), c["name"]])
@@ -202,9 +203,12 @@ func _on_state(st: Dictionary) -> void:
 			_send(id, {"type": "state", "state": st})
 
 func _on_action_finished(a: Dictionary, r: Dictionary) -> void:
+	var public_action = a.duplicate()
+	public_action.erase("text")
+	public_action.erase("expected")
 	for id in _clients:
 		if _clients[id]["authed"]:
-			_send(id, {"type": "feed", "action": a, "ok": bool(r.get("ok", false))})
+			_send(id, {"type": "feed", "action": public_action, "ok": bool(r.get("ok", false))})
 
 func clients() -> Array:
 	return _clients.values().filter(func(c): return c["authed"]).map(func(c): return {"name": c["name"], "role": c["role"]})

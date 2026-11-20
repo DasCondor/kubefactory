@@ -26,3 +26,7 @@ anti_aliasing/quality/msaa_3d=2
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
 ; Godot 4.3's single-threaded Web build skips scene culling above the default threshold (godotengine/godot#88192).
 limits/spatial_indexer/threaded_cull_minimum_instances.web=2147483647
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/configuration_export/plugin.cfg")

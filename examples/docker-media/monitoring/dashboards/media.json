@@ -1,0 +1,57 @@
+{
+  "uid": "kf-media-demo",
+  "title": "Media server overview",
+  "tags": ["kubefactory", "media"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Internal HTTP availability",
+      "description": "1 = reachable from the Blackbox container. Check off-host access separately.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "kf-media-prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "decimals": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "probe_success{job=\"media-http\"} or (up{job=\"media-http\"} == 0)", "legendFormat": "{{app}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Successful HTTP probe duration",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "kf-media-prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "refId": "A", "expr": "probe_duration_seconds{job=\"media-http\"} and on (job, instance) (probe_success{job=\"media-http\"} == 1)", "legendFormat": "{{app}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Active Plex streams",
+      "description": "Requires the Plex playback overlay and a connected Tautulli. No data means no telemetry.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "kf-media-prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "min": 0, "decimals": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "tautulli_session_count", "legendFormat": "Active streams" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Plex playback bandwidth",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "kf-media-prometheus" },
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        { "refId": "A", "expr": "tautulli_total_bandwidth_kbps * 125", "legendFormat": "Estimated playback bandwidth" }
+      ]
+    }
+  ]
+}

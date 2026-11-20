@@ -334,7 +334,7 @@ static func shared_disks(state: Dictionary) -> Array:
 			disk["containers"][[p["uid"], container]] = true
 			disk["mounts"].append({"uid": p["uid"], "pod": p["name"], "container": container,
 				"path": path, "read_only": bool(m.get("read_only", false))})
-	var shared = disks.values().filter(func(d): return d["containers"].size() > 1)
+	var shared = disks.values() if state.has("lab") else disks.values().filter(func(d): return d["containers"].size() > 1)
 	shared.sort_custom(func(a, b): return a["label"] < b["label"])
 	return shared
 
@@ -813,6 +813,30 @@ static func selects(selector: Dictionary, labels: Dictionary) -> bool:
 	return true
 
 # Port exposure is configuration. Readiness comes from the state we already have.
+const PORT_GROUPS = ["External and host bindings", "Loopback bindings", "Internal ports"]
+
+static func container_ports(inspect: Dictionary) -> Array:
+	var host: Dictionary = inspect.get("HostConfig", {})
+	var configured: Dictionary = host.get("PortBindings") if host.get("PortBindings") is Dictionary else {}
+	var settings: Dictionary = inspect.get("NetworkSettings", {})
+	var active: Dictionary = settings.get("Ports") if settings.get("Ports") is Dictionary else {}
+	var declared = inspect.get("Config", {}).get("ExposedPorts")
+	var exposed: Dictionary = declared if declared is Dictionary else {}
+	var ports = exposed.duplicate()
+	ports.merge(configured)
+	ports.merge(active)
+	var rows = []
+	for target in ports:
+		var bindings = active.get(target)
+		if not bindings is Array or bindings.is_empty():
+			bindings = configured.get(target)
+		if bindings is Array and not bindings.is_empty():
+			for mapping in bindings:
+				rows.append({"target": target, "ip": str(mapping.get("HostIp", "")), "published": str(mapping.get("HostPort", ""))})
+		else:
+			rows.append({"target": target, "host_network": host.get("NetworkMode") == "host"})
+	return rows
+
 static func port_rows(state: Dictionary) -> Array:
 	var pods: Array = state.get("pods", [])
 	var rows = []
@@ -829,20 +853,51 @@ static func port_rows(state: Dictionary) -> Array:
 		for port in str(svc.get("ports", "")).split(",", false):
 			var node_port = svc.get("node_ports", {}).get(port)
 			rows.append({"name": "%s/%s" % [svc["ns"], svc["name"]], "port": "%s → %s" % [node_port, port] if node_port != null else port,
-				"scope": scope, "status": status, "health": health, "pods": targets.map(func(p): return p["uid"])})
+				"scope": scope, "group": 0 if scope in ["Node port", "Load balancer"] else 2,
+				"status": status, "health": health, "pods": targets.map(func(p): return p["uid"])})
 	for pod in pods:
-		var bindings = str(pod.get("ip", "")).split(",", false) if state.get("source") == "docker" else PackedStringArray()
 		var ready: bool = pod.get("ready", false)
 		var healthy: bool = ready and pod.get("health", "ok") == "ok"
 		var status = "Container running" if healthy else ("Container unhealthy" if ready else "Container offline")
 		var health = "ok" if healthy else "bad"
-		for binding in bindings:
-			rows.append({"name": str(pod["name"]), "port": binding.strip_edges(), "scope": "Published host port" if "->" in binding else "Container only",
-				"status": status, "health": health, "pods": [pod["uid"]]})
-		if bindings.is_empty():
-			for port in pod.get("sec", {}).get("host_ports", []):
-				rows.append({"name": str(pod["name"]), "port": str(port), "scope": "Host port",
-					"status": "Pod ready" if healthy else "Pod not ready", "health": health, "pods": [pod["uid"]]})
+		if state.get("source") == "docker" or pod.has("docker_ports"):
+			var mappings = pod.get("docker_ports")
+			if mappings is Array:
+				for binding in mappings:
+					var port: String = binding["target"]
+					var group = 2
+					var binding_scope = "Container only"
+					if binding.has("published"):
+						var ip: String = binding["ip"]
+						var address = ("[" + ip + "]") if ":" in ip else ip
+						port = "%s:%s → %s" % [address if address != "" else "*", binding["published"] if binding["published"] != "" else "auto", port]
+						var vlan = vlan_id(pod.get("labels", {}).get("kubefactory.io/vlan-id", ""))
+						group = 0
+						if ip.begins_with("127.") or ip == "::1":
+							binding_scope = "Loopback"
+							group = 1
+						elif ip in ["", "0.0.0.0", "::"]:
+							binding_scope = "All interfaces"
+						elif binding.get("lan", false):
+							binding_scope = "Media LAN"
+						else:
+							binding_scope = "VLAN %d (declared)" % vlan if vlan > 0 else "Bound host IP"
+					elif binding.get("host_network", false):
+						binding_scope = "Host network · listener unverified"
+						group = 0
+					rows.append({"name": str(pod["name"]), "port": port, "scope": binding_scope,
+						"group": group, "status": status, "health": health, "pods": [pod["uid"]]})
+				continue
+			var fallback = str(pod.get("ip", "")).split(",", false)
+			if not fallback.is_empty():
+				for binding in fallback:
+					var published = "->" in binding
+					rows.append({"name": str(pod["name"]), "port": binding.strip_edges(), "scope": "Published host port" if published else "Container only",
+						"group": 0 if published else 2, "status": status, "health": health, "pods": [pod["uid"]]})
+				continue
+		for port in pod.get("sec", {}).get("host_ports", []):
+			rows.append({"name": str(pod["name"]), "port": str(port), "scope": "Host port", "group": 0,
+				"status": "Pod ready" if healthy else "Pod not ready", "health": health, "pods": [pod["uid"]]})
 	var rank = {"bad": 0, "warn": 1, "ok": 2}
 	rows.sort_custom(func(a, b): return rank[a["health"]] < rank[b["health"]] if a["health"] != b["health"] else a["name"] + a["port"] < b["name"] + b["port"])
 	return rows
@@ -863,8 +918,10 @@ static func tier_of(a: Dictionary, state: Dictionary) -> int:
 			return 2 if w == null or int(a["replicas"]) >= int(w["replicas"]) else 3
 		"cordon":
 			return 3 if a.get("on", true) else 2
-		"restart", "demo_update_image":
+		"restart", "demo_update_image", "lab_sync", "lab_access", "lab_discord", "file_write":
 			return 3
+		"lab_import":
+			return 2
 		"delete_pod", "remove_image":
 			return 4
 	return 5

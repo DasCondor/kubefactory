@@ -15,3 +15,7 @@ agent/bin/
 # anything a program writes into the sample home folder during a screenshot run
 tests/fixtures/home/*
 !tests/fixtures/home/.kube/
+
+# written by the live workflow tests
+tests/audit-*.log
+tests/generated-config-qa/

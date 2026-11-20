@@ -1,0 +1,6 @@
+.env
+.tautulli-api-key
+/library/
+/incoming/
+/outbox/
+

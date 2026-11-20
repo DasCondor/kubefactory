@@ -1,6 +1,6 @@
 package main
 
-// Read-only inspection of a pod's mounted volumes, for the storage doors.
+// Bounded inspection and guarded text editing of a pod's mounted volumes.
 //
 // What this does and does not do:
 //   - It uses only what the user is already allowed to do: `pods/exec` on a
@@ -10,18 +10,24 @@ package main
 //     Paths are cleaned, must stay under that mount, and no directory along
 //     the way may be a symlink (so a link inside a volume cannot lead out).
 //   - Secret and service-account-token volumes can be listed but never read.
-//   - Reads are paged (64 KiB) and capped; nothing is written, ever.
+//   - Reads are paged (64 KiB). Text writes require a writable mount, an unchanged
+//     content hash, a backup and atomic replacement through the container's tools.
 //   - A container without `ls` (distroless) is reported as unavailable.
 
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"path"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,12 +46,20 @@ type fileArgs struct {
 	Namespace, Pod, Container string
 	Root, Path                string
 	Page                      int
+	Text, Expected            string
 }
+
+//go:embed storage_write.sh
+var storageWriteScript string
 
 // run executes a fixed argv in the container and returns at most `limit` bytes of stdout.
 func (s *session) run(ns, pod, container string, argv []string, limit int) (string, string, error) {
+	return s.runInput(ns, pod, container, argv, limit, nil)
+}
+
+func (s *session) runInput(ns, pod, container string, argv []string, limit int, input io.Reader) (string, string, error) {
 	req := s.cs.CoreV1().RESTClient().Post().Resource("pods").Namespace(ns).Name(pod).SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{Container: container, Command: argv, Stdout: true, Stderr: true}, scheme.ParameterCodec)
+		VersionedParams(&corev1.PodExecOptions{Container: container, Command: argv, Stdout: true, Stderr: true, Stdin: input != nil}, scheme.ParameterCodec)
 	ex, err := remotecommand.NewSPDYExecutor(s.cfg, "POST", req.URL())
 	if err != nil {
 		return "", "", err
@@ -54,7 +68,7 @@ func (s *session) run(ns, pod, container string, argv []string, limit int) (stri
 	stdout.limit, stderr.limit = limit, 4096
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	err = ex.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr})
+	err = ex.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr, Stdin: input})
 	return stdout.buf.String(), stderr.buf.String(), err
 }
 
@@ -132,7 +146,7 @@ func (s *session) mounts(ns, pod string) ([]mountInfo, error) {
 	for _, c := range p.Spec.Containers {
 		for _, vm := range c.VolumeMounts {
 			typ, claim := volumeType(vols[vm.Name])
-			mi := mountInfo{Container: c.Name, Path: path.Clean(vm.MountPath), ReadOnly: vm.ReadOnly, Volume: vm.Name, Type: typ, Claim: claim,
+			mi := mountInfo{Container: c.Name, Path: path.Clean(vm.MountPath), ReadOnly: vm.ReadOnly || typ == "configmap" || typ == "secret" || typ == "projected" || typ == "downward", Volume: vm.Name, Type: typ, Claim: claim,
 				Readable: typ != "secret" && typ != "projected", Running: running[c.Name]}
 			if claim != "" {
 				if pvc, e := s.cs.CoreV1().PersistentVolumeClaims(ns).Get(ctx, claim, metav1.GetOptions{}); e == nil {
@@ -272,6 +286,59 @@ func parseLs(text string) []entry {
 }
 
 func registerFiles() {
+	ops["files.write"] = func(raw json.RawMessage) (any, error) {
+		a, err := decode[fileArgs](raw)
+		if err != nil {
+			return nil, err
+		}
+		if err := editableText(a.Text); err != nil {
+			return nil, err
+		}
+		if hash, err := hex.DecodeString(a.Expected); err != nil || len(hash) != sha256.Size {
+			return nil, fail("invalid", "reopen the complete file before saving")
+		}
+		if strings.ContainsAny(a.Root+a.Path, "\r\n") {
+			return nil, fail("invalid", "paths containing line breaks cannot be edited")
+		}
+		s, err := getSession(a.Session)
+		if err != nil {
+			return nil, err
+		}
+		full, m, err := s.guard(a)
+		if err != nil {
+			return nil, err
+		}
+		if m.ReadOnly || !m.Readable || m.Type == "configmap" || m.Type == "downward" {
+			return nil, fail("rbac", "this volume is read-only; edit its source configuration instead")
+		}
+		stat, _, err := s.run(a.Namespace, a.Pod, a.Container, []string{"ls", "-ldn", "--", full}, 4096)
+		if err != nil {
+			return nil, noTools(err)
+		}
+		if !strings.HasPrefix(stat, "-") {
+			return nil, fail("invalid", "only existing regular files can be edited")
+		}
+		current, _, err := s.run(a.Namespace, a.Pod, a.Container, []string{"head", "-c", strconv.Itoa(pageSize + 1), "--", full}, pageSize+1)
+		if err != nil {
+			return nil, noTools(err)
+		}
+		if err := editableText(current); err != nil {
+			return nil, err
+		}
+		argv := []string{"sh", "-c", strings.ReplaceAll(storageWriteScript, "\r\n", "\n"), "kf-write", path.Clean(a.Root), full, a.Expected, strconv.Itoa(len(a.Text))}
+		out, _, err := s.runInput(a.Namespace, a.Pod, a.Container, argv, 4096, strings.NewReader(base64.StdEncoding.EncodeToString([]byte(a.Text))+"\n"))
+		if !strings.HasPrefix(out, "OK ") {
+			msg := strings.TrimSpace(strings.TrimPrefix(out, "ERROR "))
+			if msg == "" {
+				msg = "Save did not finish. Reopen the file to check its contents before retrying."
+			}
+			return nil, fail("invalid", "%s", msg)
+		}
+		if err != nil {
+			return nil, noTools(err)
+		}
+		return map[string]any{"backup": strings.TrimSpace(strings.TrimPrefix(out, "OK "))}, nil
+	}
 	ops["files.mounts"] = func(raw json.RawMessage) (any, error) {
 		a, err := decode[fileArgs](raw)
 		if err != nil {
@@ -366,4 +433,16 @@ func registerFiles() {
 		return map[string]any{"path": full, "size": size, "page": a.Page, "pages": pages,
 			"data": base64.StdEncoding.EncodeToString([]byte(data))}, nil
 	}
+}
+
+func editableText(text string) error {
+	if len(text) > pageSize || !utf8.ValidString(text) {
+		return fail("invalid", "only complete UTF-8 text files of 64 KiB or less can be edited")
+	}
+	for _, b := range []byte(text) {
+		if b == 0 || b < 9 || b > 13 && b < 32 {
+			return fail("invalid", "binary files and databases cannot be edited")
+		}
+	}
+	return nil
 }

@@ -103,6 +103,7 @@ func _identify() -> void:
 	caps["cordon"] = _can("patch", "nodes", ["-A"])
 	caps["drain"] = caps["cordon"] and _can("create", "pods/eviction", scope)
 	caps["files"] = _can("create", "pods/exec", scope)
+	caps["file_write"] = caps["files"]
 	caps["forward"] = _can("create", "pods/portforward", scope)
 
 func fetch() -> Dictionary:
@@ -142,6 +143,8 @@ func run_action(a: Dictionary) -> Dictionary:
 		var lr = LogSources.fetch(a["provider"], a, log_cfg, context)
 		return {"ok": lr.ok, "msg": "", "text": lr.text}
 	match a["op"]:
+		"export_config":
+			return _call("kube.list", {}, 20.0)
 		"scale":
 			return _res(_call("kube.scale", {"kind": a["kind"], "namespace": a["ns"], "name": a["name"], "replicas": int(a["replicas"])}))
 		"delete_pod":
@@ -261,6 +264,9 @@ func _app_action(a: Dictionary) -> Dictionary:
 		"file_read":
 			var r = _call("files.read", {"namespace": a["ns"], "pod": a["name"], "container": a["container"], "root": a["root"], "path": a["path"], "page": int(a.get("page", 0))})
 			return {"ok": r["ok"], "msg": r["msg"], "kind": r["kind"], "data": r["data"]}
+		"file_write":
+			var r = _call("files.write", {"namespace": a["ns"], "pod": a["name"], "container": a["container"], "root": a["root"], "path": a["path"], "text": a["text"], "expected": a["expected"]}, 30.0)
+			return {"ok": r["ok"], "msg": "Saved. Previous file: " + str(r["data"].get("backup", "")) if r["ok"] else r["msg"], "kind": r["kind"], "data": r["data"]}
 	return {}
 
 # A loopback port-forward to a Service, reused while it lives.
