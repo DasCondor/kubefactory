@@ -38,6 +38,7 @@ func run() -> void:
 	root.add_child(game)
 	check(await wait_until(func(): return game.cluster.state.has("lab")), "media demo is ready")
 	var hud = game.hud
+	hud.settings["board_view"] = "flat"      # these checks are about the flat board
 	var cluster = game.cluster
 	cluster.read_only = false
 	var grafana = cluster.state["pods"].filter(func(p): return p["wname"] == "grafana")[0]["uid"]
