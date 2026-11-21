@@ -19,6 +19,7 @@ const Models = preload("res://scripts/models.gd")
 const Topology = preload("res://scripts/demo_topology.gd")
 const MediaLab = preload("res://scripts/demo_media_lab.gd")
 const Machine = preload("res://scripts/machine.gd")
+const BoardView = preload("res://scripts/board_view.gd")
 const LabConnections = preload("res://scripts/lab_connections.gd")
 const Configuration = preload("res://scripts/configuration.gd")
 const ConfigurationEditor = preload("res://scripts/configuration_editor.gd")
@@ -1302,11 +1303,18 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 	var lab = cluster.state.has("lab")
 	if not _has_whiteboard():
 		return
-	var board_key = "lab_whiteboard" if lab else "whiteboard:" + str(cluster.state.get("context", "demo"))
+	# 3D by default; the flat board stays one button away. Each keeps its own layout.
+	var flat = str(settings.get("board_view", "3d")) == "flat"
+	var board_key = ("lab_whiteboard" if lab else "whiteboard:" + str(cluster.state.get("context", "demo"))) + ("" if flat else ":3d")
 	var viewport_size = get_viewport().get_visible_rect().size
 	var body = _open_modal("connections", uid, "CONNECTION WHITEBOARD", Vector2(440, 0) if touch_u > 0 else viewport_size - Vector2(32, 32), false, back if back.is_valid() else (open_media_lab if lab else func(): open_network("")))
-	body.add_child(_wrapped("SIMULATED · Select a card to trace or inspect it. Double-click an app or storage card to open its config / storage files. Drag cards or pan blank space on touch.", 13, DIM))
-	var graph = LabConnections.new()
+	if flat:
+		body.add_child(_wrapped("SIMULATED · Select a card to trace or inspect it. Double-click an app or storage card to open its config / storage files. Drag cards or pan blank space on touch.", 13, DIM))
+	elif touch_u > 0:
+		body.add_child(_wrapped("SIMULATED · Tap selects · double-tap opens files · drag turns · pinch zooms · two fingers move", 12, DIM))
+	else:
+		body.add_child(_wrapped("SIMULATED · Click a block to select it, double-click to open its config / storage files. Drag to turn, wheel to zoom, right-drag to pan, drag a block to move it.", 13, DIM))
+	var graph = LabConnections.new() if flat else BoardView.new()
 	_connection_graph = graph
 	graph.configure(settings.get(board_key, {}))
 	graph.selected_uid = uid
@@ -1329,6 +1337,9 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 		graph.layout.clear()
 		graph.arrange_spider()
 		graph.fit_routes.call_deferred()))
+	controls.add_child(_btn("Flat view" if not flat else "3D view", func():
+		_save_setting("board_view", "3d" if flat else "flat")
+		open_connections(graph.selected_uid, back)))
 	controls.add_child(_btn("Edit / export YAML", open_map_yaml))
 	controls.add_child(_btn("Config / storage files", func():
 		var selected = graph.selected_uid
@@ -1347,9 +1358,9 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 	controls.add_child(_btn("Save whiteboard", func():
 		var config = {"category": graph.category, "layout_style": "spider", "layout": graph.layout.duplicate(true)}
 		_save_setting(board_key, config)
-		if lab and is_instance_valid(world._lab_board):      # the lab's whiteboard in the world follows it
-			world._lab_board.get_meta("graph").configure(config)
-			world._update_lab_board(cluster.state)
+
+		if not flat:
+			world.board_table_configure(config)
 		var saved = K.load_settings().get(board_key, {}) == config
 		notify("Whiteboard layout saved on this device." if saved else "Whiteboard updated for this session. Device settings could not be saved.", "info" if saved else "warn")))
 	controls.add_child(_btn("Trace selected", func():
@@ -1381,7 +1392,7 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 			continue
 		legend.add_child(_lbl(("Storage mounts" if kind == "Mounts" else kind) + "  ", 13, MediaLab.COLORS[kind]))
 	body.add_child(legend)
-	graph.custom_minimum_size.y = 400 if touch_u > 0 else maxf(240, viewport_size.y - 250)
+	graph.custom_minimum_size.y = (400 if flat else 620) if touch_u > 0 else maxf(240, viewport_size.y - 250)
 	graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(graph)
 	graph.refresh(cluster.state)
@@ -1405,6 +1416,33 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 		graph.select_endpoint(selected)
 		graph.focus_selected())
 	controls.add_child(find_card)
+	if touch_u > 0 and not flat:
+		_compact_board_controls(controls, find_card)
+
+# Phones: the 3D board gets the screen. The filter, Find, Fit, Trace and Inspect
+# stay as buttons; everything else goes in a "More..." list; pinch replaces + and -.
+func _compact_board_controls(controls: HFlowContainer, find_card: OptionButton) -> void:
+	var keep = ["Fit board", "Trace selected", "Inspect selected"]
+	var more = OptionButton.new()
+	more.add_item("More...")
+	var actions = [Callable()]
+	for child in controls.get_children():
+		if child is OptionButton:
+			continue
+		if child is Button:
+			if child.text in ["+", "-"]:
+				child.queue_free()
+			elif child.text not in keep:
+				more.add_item(child.text)
+				actions.append(child.pressed.emit)
+				controls.remove_child(child)
+				child.queue_free.call_deferred()
+	more.item_selected.connect(func(index):
+		more.select(0)
+		if index > 0:
+			actions[index].call())
+	controls.add_child(more)
+	controls.move_child(find_card, 1)
 
 func open_connection_files(uid: String, back: Callable = Callable()) -> void:
 	if not uid.begins_with("lab:"):

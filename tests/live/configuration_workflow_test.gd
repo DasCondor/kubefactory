@@ -38,6 +38,7 @@ func _run() -> void:
 		quit(1)
 		return
 	var hud = game.hud
+	hud.settings["board_view"] = "flat"      # these checks are about the flat board
 	var count = game.cluster.state["pods"].size()
 	hud.open_connections()
 	await _settle()

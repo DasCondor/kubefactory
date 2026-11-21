@@ -16,6 +16,7 @@ const Topology = preload("res://scripts/demo_topology.gd")
 const MediaLab = preload("res://scripts/demo_media_lab.gd")
 const Pipes = preload("res://scripts/pipes.gd")
 const LabConnections = preload("res://scripts/lab_connections.gd")
+const BoardScene = preload("res://scripts/board_scene.gd")
 const PlanBlocks = preload("res://scripts/plan_blocks.gd")
 const BuildPlan = preload("res://scripts/build_plan.gd")
 
@@ -1146,7 +1147,10 @@ func show_build_plan(plan: Dictionary) -> bool:
 func _node_rank(n: Dictionary) -> String:
 	return ("0" if str(n["roles"]).contains("control-plane") or str(n["roles"]).contains("master") else "1") + n["name"]
 
+var _last_state = {}        # the last state applied, for redrawing the board table
+
 func apply_state(st: Dictionary) -> void:
+	_last_state = st
 	var quiet = _first or (st["source"] + "|" + st["context"]) != _source
 	if quiet:
 		vpn_selection.clear()
@@ -1260,54 +1264,66 @@ func apply_state(st: Dictionary) -> void:
 	_update_lab_board(st)
 	_update_hub(st)
 
+# The connection board in the world, for every demo world with routes: a table
+# carrying the 3D board scene, scaled to fit. [E] opens the full board.
+func _board_key(st: Dictionary) -> String:
+	return ("lab_whiteboard" if st.has("lab") else "whiteboard:" + str(st.get("context", "demo"))) + ":3d"
+
 func _update_lab_board(st: Dictionary) -> void:
-	if not st.has("lab"):
+	var shown = st.get("source") == "simulation" and (st.has("lab") or not st.get("links", []).is_empty())
+	if not shown or (is_instance_valid(_lab_board) and _lab_board.get_meta("key", "") != _board_key(st)):
 		if is_instance_valid(_lab_board):
 			_lab_board.queue_free()
 			_lab_board = null
-		return
+		if not shown:
+			return
 	if not is_instance_valid(_lab_board):
 		_lab_board = Node3D.new()
 		_lab_board.position = Vector3(-34, 0, FRONT_Z + 16)
+		_lab_board.set_meta("key", _board_key(st))
 		add_child(_lab_board)
-		_box(Vector3(18.5, 12.2, 0.35), Tex.shared("board"), Vector3(0, 6.6, 0), _lab_board)
-		for y in [0.4, 12.8]:
-			_box(Vector3(18.8, 0.18, 0.45), Tex.shared("orange"), Vector3(0, y, 0), _lab_board)
-		for x in [-7.5, 7.5]:
-			_box(Vector3(0.4, 0.5, 1.8), Tex.shared("steel"), Vector3(x, 0.25, 0), _lab_board)
-		_solid(Vector3(18.8, 12.8, 0.45), Vector3(0, 6.4, 0),
-			{"type": "lab_fixture", "id": "connections", "name": "ALL CONNECTIONS · apps, ports and storage"}, _lab_board)
+		_box(Vector3(19.0, 0.5, 13.0), Tex.shared("dark"), Vector3(0, 1.1, 0), _lab_board)
+		for z in [-6.6, 6.6]:
+			_box(Vector3(19.4, 0.2, 0.3), Tex.shared("orange"), Vector3(0, 1.4, z), _lab_board)
+		for x in [-8.6, 8.6]:
+			for z in [-5.6, 5.6]:
+				_box(Vector3(0.4, 0.9, 0.4), Tex.shared("steel"), Vector3(x, 0.45, z), _lab_board)
+		_solid(Vector3(19.4, 1.4, 13.4), Vector3(0, 0.7, 0),
+			{"type": "lab_fixture", "id": "connections", "name": "CONNECTION BOARD · every container and connection"}, _lab_board)
 		var title = Label3D.new()
-		title.text = "CONNECTION WHITEBOARD · [E] configure"
-		title.position = Vector3(0, 12.4, 0.20)
-		title.outline_size = 0
-		title.font_size = 48
-		K.fit_label(title, 17.8, 0.45)
+		title.text = "CONNECTION BOARD · [E] open"
+		title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		title.font_size = 56
+		title.pixel_size = 0.012
+		title.outline_size = 12
+		title.position = Vector3(0, 5.6, 0)
+		title.visibility_range_end = 90.0
 		_lab_board.add_child(title)
-		var viewport = SubViewport.new()
-		viewport.size = Vector2i(2048, 1536)
-		viewport.disable_3d = true
-		_lab_board.add_child(viewport)
-		var graph = LabConnections.new()
-		viewport.add_child(graph)
-		graph.configure(K.load_settings().get("lab_whiteboard", {}))
-		graph.size = Vector2(viewport.size)
-		var face = MeshInstance3D.new()
-		var quad = QuadMesh.new()
-		quad.size = Vector2(18.0, 11.3)
-		face.mesh = quad
-		var material = StandardMaterial3D.new()
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		material.albedo_texture = viewport.get_texture()
-		face.material_override = material
-		face.position = Vector3(0, 6.35, 0.20)
-		_lab_board.add_child(face)
-		_lab_board.set_meta("graph", graph)
-		_lab_board.set_meta("viewport", viewport)
-	var graph = _lab_board.get_meta("graph")
-	if graph.refresh(st):
-		graph.fit_routes.call_deferred()
-		_lab_board.get_meta("viewport").render_target_update_mode = SubViewport.UPDATE_ONCE
+		var scene = BoardScene.new()
+		scene.labels_visible = false
+		scene.position.y = 1.36
+		scene.configure(K.load_settings().get(_board_key(st), {}))
+		_lab_board.add_child(scene)
+		_lab_board.set_meta("graph", scene)
+	var board = _lab_board.get_meta("graph")
+	if board.refresh(st):
+		_fit_board_table(board)
+
+func _fit_board_table(board: Node3D) -> void:
+	var box: AABB = board.card_bounds()
+	var k = minf(minf(18.0 / maxf(box.size.x, 1.0), 12.0 / maxf(box.size.z, 1.0)), 0.25)
+	board.scale = Vector3.ONE * k
+	var c = box.get_center()
+	board.position = Vector3(-c.x * k, 1.36, -c.z * k)
+
+# The panel's "Save whiteboard" (3D): the table in the world takes the same layout.
+func board_table_configure(config: Dictionary) -> void:
+	if is_instance_valid(_lab_board):
+		var board = _lab_board.get_meta("graph")
+		board.configure(config)
+		board._signature = ""
+		if not _last_state.is_empty():
+			_update_lab_board(_last_state)
 
 func _update_hub(st: Dictionary) -> void:
 	var ready = 0

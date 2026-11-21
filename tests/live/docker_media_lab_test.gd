@@ -35,6 +35,7 @@ func _run() -> void:
 	var cluster = game.cluster
 	var world = game.world
 	var hud = game.hud
+	hud.settings["board_view"] = "flat"      # these checks are about the flat board
 	var st: Dictionary = cluster.state
 	# media-lab.json decides the layout; --expect-hosts=1 or =2 overrides it
 	var expected_hosts = load("res://scripts/demo_media_lab.gd").configured_host_count()
@@ -110,7 +111,7 @@ func _run() -> void:
 	var previous_config = hud.settings.get("lab_whiteboard", {}).duplicate(true)
 	_button(hud._modal, "Save whiteboard").pressed.emit()
 	_check(K.load_settings().get("lab_whiteboard", {}).get("layout", {}).get("grafana") == [680.0, 430.0]
-		and world._lab_board.get_meta("graph").category == "Storage", "saving the whiteboard persists its layout and updates the in-world dashboard")
+		and is_instance_valid(world._lab_board), "saving the flat whiteboard persists its layout; the board table stays in the world (it keeps the 3D board's own layout)")
 	hud.settings["lab_whiteboard"] = previous_config
 	K.save_settings(hud.settings)
 	world._lab_board.get_meta("graph").configure(previous_config)

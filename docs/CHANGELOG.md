@@ -47,6 +47,18 @@
   look changes: IDs, panels and dashboards stay the same. LiveView pages show
   on an app block's glass; blocks have no door, interior or container list
   display.
+- **The connection board is 3D.** Every container (and in the media lab every
+  volume and outside destination) is a role block on a floor, every route an
+  arcing pipe in its kind's colour with an arrow and a moving dot while it
+  carries traffic. Selecting a block brightens its own pipes. Mouse: drag to
+  turn, wheel to zoom, right-drag to pan, drag a block to move it. Phones: one
+  finger turns, pinch zooms, two fingers move, tap selects, double-tap opens
+  the block's files, and the less used buttons sit under **More...** so the
+  board gets the screen. **Flat view** keeps the 2D board; each view saves its
+  own layout.
+- Every demo world has a **connection board table** in the factory with the
+  same board in miniature ([E] opens it); it follows the 3D board's saved
+  layout. It replaces the media lab's flat board on a wall.
 
 ### Fixed
 
