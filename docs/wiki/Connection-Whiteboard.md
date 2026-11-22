@@ -8,8 +8,8 @@ shared data**. Demo data is SIMULATED.
 ![The whiteboard in every demo world: Kubernetes cluster, Home Assistant, Dev containers, Media suite, Docker media lab and the lab with its gatherer, each with its busiest tile selected, then a closer look and the same board in 2D](media/board-tour.gif)
 
 The tour visits every demo world's whiteboard: Kubernetes cluster, Home
-Assistant, Dev containers, Media suite, Docker media lab, and Docker media lab
-+ gatherer. [Watch it as an MP4](media/board-tour.mp4).
+Assistant, Dev containers, Media suite, Docker media lab, and the Docker media
+lab with its gatherer. [Watch it as an MP4](media/board-tour.mp4).
 
 ## Views
 
