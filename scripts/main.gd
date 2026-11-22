@@ -1075,7 +1075,7 @@ func _interact() -> void:
 			if id == "sync-switch":
 				hud.use_lab_lever()
 			elif id in ["connections", "lan", "www", "discord"]:
-				hud.open_connections(str(meta.get("uid", "")) if id == "connections" else str(meta.get("uid", "lab:" + id)), hud.open_media_lab)
+				hud.open_connections(str(meta.get("uid", "")) if id == "connections" else str(meta.get("uid", "lab:" + id)), hud.open_media_lab if cluster.state.has("lab") else Callable())
 			else:
 				hud.open_shared_disks("", hud.open_media_lab, id)
 		"logs":
