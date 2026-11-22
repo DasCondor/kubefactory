@@ -8,7 +8,8 @@
 #   sudo sh install-kubefactory.sh                      a Docker host: Docker Engine
 #   sudo sh install-kubefactory.sh --target k3s         a k3s cluster on this machine
 #   sudo sh install-kubefactory.sh --target kind        Docker Engine and a kind cluster named kubefactory
-#   add --host-service to also install the KubeFactory host service (docs/HOST_SERVICE.md)
+#   add --host-service to also install the KubeFactory host service (docs/HOST_SERVICE.md);
+#   --host-binary FILE and --host-image IMAGE use local builds instead of the release's
 #
 # Each step runs only if it is missing. The plan is shown first and you are asked
 # before anything changes. What it may change:
@@ -23,7 +24,8 @@
 set -eu
 repo="DasCondor/kubefactory"
 target=docker host_service=false cluster=kubefactory version=latest plan=false yes=false
-kind_version=v0.27.0
+kind_version=v0.33.0
+host_binary="" host_image=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -31,6 +33,8 @@ while [ $# -gt 0 ]; do
     --host-service) host_service=true ;;
     --cluster-name) cluster="$2"; shift ;;
     --version) version="$2"; shift ;;
+    --host-binary) host_binary="$2"; shift ;;
+    --host-image) host_image="$2"; shift ;;
     --plan) plan=true ;;
     --yes) yes=true ;;
     *) echo "unknown option $1 (see the top of this script)" >&2; exit 2 ;;
@@ -78,7 +82,7 @@ companion() {
 }
 save_kubeconfig() {  # file-with-config destination
   mkdir -p "$home/.kube"
-  install -m 600 -o "$user" "$1" "$2"
+  install -m 600 -o "$user" -g "$(id -gn "$user")" "$1" "$2"
   chown "$user" "$home/.kube"
   say "  Saved $2 (readable by $user only). In KubeFactory: Switch cluster > Add or manage kubeconfigs."
 }
@@ -133,13 +137,16 @@ do_kind_conf() {
 }
 do_host() {
   installer="$(companion install-host.sh)"
+  set -- --version "$version"
+  if [ -n "$host_binary" ]; then set -- "$@" --binary "$host_binary"; fi
+  if [ -n "$host_image" ]; then set -- "$@" --image "$host_image" --no-pull; fi
   case "$target" in
-    docker) sh "$installer" --version "$version" --source docker ;;
-    k3s) sh "$installer" --version "$version" --source k3s ;;
+    docker) sh "$installer" "$@" --source docker ;;
+    k3s) sh "$installer" "$@" --source k3s ;;
     kind)
       # the host service runs on the host network, so 127.0.0.1 reaches kind's API server
       kind get kubeconfig --name "$cluster" > "$tmp/kind-host.yaml"
-      sh "$installer" --version "$version" --source kube --kubeconfig "$tmp/kind-host.yaml"
+      sh "$installer" "$@" --source kube --kubeconfig "$tmp/kind-host.yaml"
       rm -f "$tmp/kind-host.yaml" ;;
   esac
 }

@@ -185,10 +185,13 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
   container. When the container is stopped or removed, a signed-in game stays
   connected, is told the server is restarting, has its actions refused, and gets
   live data again after kf-host brings the server back.
-- **Not tested:** restarting Docker Desktop or a Kubernetes node (simulated by
-  stopping and removing the container), installing the Windows service or the
-  systemd unit on a real machine (the Linux installer was run in a throw-away
-  container with stubs), the Docker, kubeconfig and k3s sources inside the
+- **Verified with real installs** on a throw-away Ubuntu machine (a privileged
+  container running systemd): the systemd unit with the k3s source served the
+  cluster to a client, and the server answered again within seconds after
+  Docker and k3s were restarted. On Windows, the kubeconfig source over kind's
+  Docker network served a kind cluster (kf-host in the foreground).
+- **Not tested:** restarting Docker Desktop itself, installing the Windows
+  service (needs an administrator PowerShell), the Docker source inside the
   container, `wss://` on the access point, arm64, and the release workflow's
   image push.
 - **Docker Desktop** runs only while someone is signed in to Windows, so the
@@ -201,18 +204,30 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
 ## Clean slate
 
 - **Verified live** on Windows: the machine check, the wizard at desktop and
-  phone sizes, and the Windows script's plan for every target (`-Plan`, which
-  changes nothing). A real run of `-Target kind` made a kind cluster on Docker
-  Desktop in a normal PowerShell, a second run found everything in place, and
-  the game found the new context in Switch cluster, connected (read only) and
-  built its factory (`tests/live/clean_slate_kind_test.gd`). The Linux script was run in a throw-away container: plan,
-  refusal without root, a stubbed run with the host service, a failed
-  download and answering no.
-- **Not tested:** installing WSL 2, Docker Desktop, Docker Engine, kubectl,
-  kind or k3s (they were already here, or are Linux only), and
-  the host service step with a Kubernetes target. Reaching Docker Desktop's
-  Kubernetes from the host service container (`kubernetes.docker.internal`)
-  is not tested.
+  phone sizes, and the Windows script's plan for every target (`-Plan`). A
+  real run of `-Target kind` made a kind cluster on Docker Desktop in a normal
+  PowerShell, a second run found everything in place, and the game found the
+  new context, connected (read only) and built its factory
+  (`tests/live/clean_slate_kind_test.gd`). The winget packages the script
+  installs (Docker.DockerDesktop, Kubernetes.kubectl, Kubernetes.kind) exist.
+- **Verified with real installs** on a throw-away Ubuntu 24.04 machine
+  (a privileged container running systemd): the Linux script installed Docker
+  Engine from get.docker.com, kubectl and kind with their checksums checked,
+  a kind cluster, and k3s from get.k3s.io, then the host service as a real
+  systemd unit with the k3s source. A client signed in through the access
+  point and saw the k3s cluster, and again after Docker and k3s were
+  restarted.
+- **Verified live, Windows host service with kind:** kf-host (in the
+  foreground, with the settings `install-host.ps1 -Source kube -Network kind`
+  writes) ran the server on kind's Docker network with kind's internal
+  kubeconfig, and a client saw the kind cluster through the access point.
+- **Not tested:** installing WSL 2 or Docker Desktop (already on the test
+  machine; uninstalling them would break it, and Windows Home has no sandbox),
+  winget installing kubectl or kind, k3s inside a WSL distribution (all WSL
+  distributions share one network with Docker Desktop, so it was not tried on
+  this machine), Docker Desktop's Kubernetes (turning it on changes Docker
+  Desktop's settings), and the Windows service install itself (needs an
+  administrator PowerShell).
 - **Docker Desktop's Kubernetes and systemd in WSL** are switched on by you;
   the script waits or tells you how.
 - **macOS** is not covered. The game offers the Windows and Linux scripts there.

@@ -55,7 +55,9 @@ sh install-kubefactory.sh --plan --target k3s      # the plan only; no sudo need
 sudo sh install-kubefactory.sh --target k3s --host-service
 ```
 
-`--target` is `docker` (default), `k3s` or `kind`.
+`--target` is `docker` (default), `k3s` or `kind`. Before the first release
+with kf-host, `--host-binary <file>` and `--host-image <image>` let the host
+service step use your own builds.
 
 How the scripts behave:
 
