@@ -198,6 +198,22 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
   failover between nodes. Tokens can be shared by copying `server-tokens.json`.
 - **Kubeconfigs with exec auth helpers** do not work inside the container.
 
+## Clean slate
+
+- **Verified live** on Windows: the machine check, the wizard at desktop and
+  phone sizes, and the Windows script's plan for every target (`-Plan`, which
+  changes nothing). The Linux script was run in a throw-away container: plan,
+  refusal without root, a stubbed run with the host service, a failed
+  download and answering no.
+- **Not tested:** a real install by either script (WSL 2, Docker Desktop,
+  Docker Engine, kubectl, kind, a kind cluster, k3s in WSL or on Linux), and
+  the host service step with a Kubernetes target. Reaching Docker Desktop's
+  Kubernetes from the host service container (`kubernetes.docker.internal`)
+  is not tested.
+- **Docker Desktop's Kubernetes and systemd in WSL** are switched on by you;
+  the script waits or tells you how.
+- **macOS** is not covered. The game offers the Windows and Linux scripts there.
+
 ## By design, for now
 
 - **Docker still uses the `docker` command.** Only Kubernetes is native.

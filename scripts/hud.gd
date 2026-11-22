@@ -2329,6 +2329,10 @@ func open_clusters() -> void:
 	body.add_child(_table_head("clusters", [["provider", "PROVIDER", 220], ["source", "SOURCE", 100], ["context", "CONTEXT", 300], ["profile", "KUBECONFIG", 140]], cl_fill, cluster.targets.size()))
 	body.move_child(body.get_child(body.get_child_count() - 1), sc.get_index())
 	cl_fill.call()
+	var cs = _row(8)
+	cs.add_child(_lbl("No Docker or cluster yet? Set one up together:", 13, DIM))
+	cs.add_child(_btn("Clean slate...", open_clean_slate))
+	body.add_child(cs)
 
 func _cluster_row(t: Dictionary) -> Control:
 	if true:
@@ -2350,6 +2354,157 @@ func _cluster_row(t: Dictionary) -> Control:
 		pc.add_child(r)
 		return pc
 	return null
+
+# ----- Clean slate (clean_slate.gd, docs/CLEAN_SLATE.md): set up Docker or Kubernetes from nothing.
+# KubeFactory looks (read only) and hands over the script; the player runs it as admin.
+
+const CleanSlate = preload("res://scripts/clean_slate.gd")
+var _cs = {"os": "", "target": "docker", "host": false, "det": {}, "checking": false, "saved": {}}
+
+func open_clean_slate() -> void:
+	var here = CleanSlate.platform()
+	if _cs["os"] == "":
+		_cs["os"] = here if here in ["windows", "linux"] else "windows"
+		_clean_slate_check()
+	var mobile = touch_u > 0.0
+	var os: String = _cs["os"]
+	if not CleanSlate.available(_cs["target"], os):
+		_cs["target"] = "docker"
+	var id: String = _cs["target"]
+	var det: Dictionary = _cs["det"]
+	var host_ok = CleanSlate.host_service_allowed(os, id)
+	var host: bool = _cs["host"] and host_ok
+	var body = _open_modal("clean_slate", null, "CLEAN SLATE", Vector2(440, 0) if mobile else Vector2(1000, 680), false, open_pause)
+	var list = _menu_list(body, 10, 600)
+	list.add_child(_wrapped("Set up a Docker host or a Kubernetes cluster from nothing, together. KubeFactory looks at this machine, you pick what to build, and you run its install script yourself as administrator. KubeFactory never runs anything with admin rights on its own.", 14, DIM))
+
+	var mr = _row(8)
+	mr.add_child(_lbl("THIS MACHINE", 13, ORANGE))
+	mr.add_child(_spacer())
+	if here in ["windows", "linux"]:
+		mr.add_child(_btn("Checking..." if _cs["checking"] else "Check again", _clean_slate_check, "normal", not _cs["checking"]))
+	list.add_child(mr)
+	if here == "web":
+		list.add_child(_wrapped("This is the browser demo, so KubeFactory can't look at your machine. Pick what to build, save the script, and run it on the machine you want to set up.", 13, DIM))
+	elif not det.get("checked", false):
+		list.add_child(_wrapped("Looking at this machine..." if _cs["checking"] else "KubeFactory can only check Windows and Linux machines. Pick the script for the machine you want to set up.", 13, DIM))
+	else:
+		for f in CleanSlate.facts(det):
+			var fr = _row(8)
+			fr.add_child(_lbl("■", 14, K.health_color("ok") if f[1] else DIM))
+			var fl = _wrapped(f[0], 14)    # wraps on a phone rather than cutting the name off
+			fl.size_flags_horizontal = Control.SIZE_FILL
+			fl.custom_minimum_size.x = 150 if mobile else 230
+			fr.add_child(fl)
+			fr.add_child(_wrapped(f[2], 13, TXT if f[1] else DIM))
+			list.add_child(fr)
+
+	var osr = _row(8)
+	osr.add_child(_lbl("SCRIPT FOR", 13, ORANGE))
+	osr.add_child(_spacer())
+	for o in [["windows", "Windows"], ["linux", "Linux"]]:
+		osr.add_child(_touch_size(_btn(o[1], func():
+			_cs["os"] = o[0]
+			open_clean_slate(), "primary" if os == o[0] else "normal")))
+	list.add_child(osr)
+
+	list.add_child(_lbl("WHAT TO BUILD", 13, ORANGE))
+	var tg = GridContainer.new()
+	tg.columns = 1 if mobile else 4
+	tg.add_theme_constant_override("h_separation", 8)
+	tg.add_theme_constant_override("v_separation", 8)
+	for t in CleanSlate.TARGETS:
+		var can = CleanSlate.available(t["id"], os)
+		var b = _touch_size(_btn(t["name"] + ("" if can else "  (Windows only)"), func():
+			_cs["target"] = t["id"]
+			open_clean_slate(), "primary" if id == t["id"] else "normal", can))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tg.add_child(b)
+	list.add_child(tg)
+	list.add_child(_wrapped(CleanSlate.target(id)["desc"], 14))
+	var hr = _row(8)
+	hr.add_child(_touch_size(_btn("Also install the host service:  %s" % ("YES" if host else "NO"), func():
+		_cs["host"] = not _cs["host"]
+		open_clean_slate(), "primary" if host else "normal", host_ok)))
+	list.add_child(hr)
+	list.add_child(_wrapped("Keeps a KubeFactory server running for your team, checked every 30 seconds (docs/HOST_SERVICE.md)." if host_ok else "With k3s on Windows, install the host service inside the Linux distribution instead.", 12, DIM))
+
+	var same = det.get("checked", false) and det.get("os", "") == os
+	list.add_child(_lbl("WHAT THE SCRIPT WILL DO" + (" HERE" if same else ""), 13, ORANGE))
+	for s in CleanSlate.steps(id, det, host, os):
+		var sr = _row(8)
+		var tag = "IF MISSING" if s[1] == null else ("DONE" if s[1] else "TO DO")
+		sr.add_child(_fixed(_lbl(tag, 12, DIM if s[1] == null else (K.health_color("ok") if s[1] else ORANGE)), 90))
+		sr.add_child(_wrapped(s[0], 14))
+		list.add_child(sr)
+	list.add_child(_wrapped("It shows this plan and asks before changing anything. Steps already done are skipped, so you can run it again after a restart.", 12, DIM))
+
+	list.add_child(_lbl("RUN IT YOURSELF", 13, ORANGE))
+	if os == "windows":
+		list.add_child(_wrapped("1. Save the script, or download it from the release.\n2. Open PowerShell as administrator: right-click Start > Terminal (Admin).\n3. Go to the script's folder (cd) and run:", 14))
+	else:
+		list.add_child(_wrapped("1. Save the script, or download it from the release.\n2. In a terminal, go to its folder and run:", 14))
+	var distro = ""
+	if same and det.get("distros", []).size() > 0:
+		distro = str(det["distros"][0])
+	_cmd_row(list, CleanSlate.command(os, id, host, distro))
+	list.add_child(_wrapped("To see its plan first, without admin:", 12, DIM))
+	_cmd_row(list, CleanSlate.plan_command(os, id))
+	var br = _row(8)
+	br.add_child(_touch_size(_btn("Save the script", func():
+		_cs["saved"] = CleanSlate.save(os)
+		open_clean_slate(), "primary")))
+	var saved: Dictionary = _cs["saved"]
+	if saved.get("ok", false) and str(saved.get("dir", "")) != "":
+		br.add_child(_touch_size(_btn("Open folder", func(): OS.shell_open(str(saved["dir"])))))
+	br.add_child(_touch_size(_btn("Release page", func(): OS.shell_open(CleanSlate.RELEASES))))
+	list.add_child(br)
+	if not saved.is_empty():
+		var where = (" to " + K.tidy_path(str(saved["dir"]))) if str(saved.get("dir", "")) != "" else ""
+		list.add_child(_wrapped(str(saved["msg"]) + where, 13, K.health_color("ok") if saved.get("ok", false) else RED))
+	list.add_child(_wrapped("Or download it in that terminal. The script checks everything else it downloads against published checksums.", 12, DIM))
+	_cmd_row(list, CleanSlate.download_command(os))
+
+	list.add_child(_lbl("WHEN IT IS DONE", 13, ORANGE))
+	var hint = CleanSlate.ready_hint(id, det) if same else ""
+	list.add_child(_wrapped(hint if hint != "" else "Check again here, then find the new Docker engine or cluster in Switch cluster.", 14, K.health_color("ok") if hint != "" else TXT))
+	var dr = _row(8)
+	if here in ["windows", "linux"]:
+		dr.add_child(_touch_size(_btn("Check again", _clean_slate_check, "normal", not _cs["checking"])))
+	if here != "web" and cluster.edition != "demo":
+		dr.add_child(_touch_size(_btn("Switch cluster", func():
+			cluster.discover_targets()
+			open_clusters(), "primary" if hint != "" else "normal")))
+	list.add_child(dr)
+
+func _cmd_row(parent: Control, text: String) -> void:
+	var r = _row(8)
+	var le = LineEdit.new()
+	le.text = text
+	le.editable = false
+	le.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	le.add_theme_font_size_override("font_size", 13)
+	if touch_u > 0.0:
+		le.custom_minimum_size.y = 46
+	r.add_child(le)
+	r.add_child(_touch_size(_btn("Copy", func(): DisplayServer.clipboard_set(text))))
+	parent.add_child(r)
+
+func _clean_slate_check() -> void:
+	if _cs["checking"] or not (CleanSlate.platform() in ["windows", "linux"]):
+		return
+	_cs["checking"] = true
+	WorkerThreadPool.add_task(func():
+		var d = CleanSlate.detect()
+		_clean_slate_checked.call_deferred(d))
+	if _modal_kind == "clean_slate":
+		open_clean_slate()
+
+func _clean_slate_checked(d: Dictionary) -> void:
+	_cs["det"] = d
+	_cs["checking"] = false
+	if _modal_kind == "clean_slate":
+		open_clean_slate()
 
 # ----- Backend plugins (docs/PLUGINS.md): nothing runs until trusted, nothing acts until allowed
 
@@ -4602,12 +4757,13 @@ func _save_setting(key: String, value) -> void:
 	K.save_settings(settings)
 
 func open_startup() -> void:
-	var body = _open_modal("startup", null, "KUBEFACTORY  %s" % version, Vector2(490, 330))
+	var body = _open_modal("startup", null, "KUBEFACTORY  %s" % version, Vector2(490, 380))
 	if cluster.edition == "demo":
 		body.add_child(_btn("Choose a demo", open_demos, "primary"))
 	else:
 		body.add_child(_btn("Enter factory", close_modal, "primary"))
 		body.add_child(_btn("Demo worlds", open_demos))
+	body.add_child(_btn("Clean slate: set up Docker or Kubernetes", open_clean_slate))
 	body.add_child(_btn("Settings", open_settings))
 	body.add_child(_btn("How to play", open_welcome))
 	body.add_child(_btn("Quit to desktop", func(): get_tree().quit()))
@@ -4791,6 +4947,7 @@ func open_pause() -> void:
 			th.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			body.add_child(th)
 	body.add_child(_btn("Switch cluster", open_clusters))
+	body.add_child(_btn("Clean slate: set up Docker or Kubernetes", open_clean_slate))
 	body.add_child(_btn("Minimap:  %s   (N)" % ("ON" if bool(settings.get("minimap", true)) else "OFF"), func():
 		toggle_minimap()
 		open_pause()))
@@ -4870,7 +5027,7 @@ func _open_touch_pause() -> void:
 	body.add_child(_wrapped(str(cluster.state.get("context", "")), 13, DIM))
 	body.add_child(_lbl("CLUSTER TOOLS", 13, ORANGE))
 	for entry in [["VPN tunnels", open_vpn], ["Cluster codex", open_codex], ["Logging station", open_logs],
-		["Krew operations", open_krew], ["Foreman", open_foreman], ["Resource desk", open_gauge], ["Switch cluster", open_clusters],
+		["Krew operations", open_krew], ["Foreman", open_foreman], ["Resource desk", open_gauge], ["Switch cluster", open_clusters], ["Clean slate setup", open_clean_slate],
 		["How to play", open_welcome]]:
 		body.add_child(_btn(entry[0], entry[1]))
 	if not Gfx.web():

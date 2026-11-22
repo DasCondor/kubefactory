@@ -45,6 +45,7 @@ Invoke-WebRequest https://github.com/DasCondor/kubefactory/releases/latest/downl
 .\install-host.ps1                     # demo server
 .\install-host.ps1 -Source docker      # this machine's Docker engine
 .\install-host.ps1 -Source kube -Kubeconfig C:\kf\viewer.yaml
+.\install-host.ps1 -Source kube -Kubeconfig C:\kf\kind-internal.yaml -Network kind
 ```
 
 Linux (systemd), with sudo:
@@ -56,6 +57,9 @@ sudo sh install-host.sh --source docker        # this machine's Docker engine
 sudo sh install-host.sh --source k3s           # the k3s cluster on this node
 sudo sh install-host.sh --source kube --kubeconfig /root/kf-viewer.yaml
 ```
+
+No Docker yet? [Clean slate](CLEAN_SLATE.md) installs Docker or a cluster
+first and can finish with the host service.
 
 Both download `kf-host` from the same release and check it against the
 release's `SHA256SUMS` before installing it. The service needs Docker on the

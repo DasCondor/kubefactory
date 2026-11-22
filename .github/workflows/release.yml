@@ -167,7 +167,7 @@ jobs:
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ../dist/kf-host-linux-arm64 ./host
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ../dist/kf-host-windows-amd64.exe ./host
           cd ..
-          cp deploy/host/install-host.sh deploy/host/install-host.ps1 dist/
+          cp deploy/host/install-host.sh deploy/host/install-host.ps1 setup/install-kubefactory.sh setup/install-kubefactory.ps1 dist/
           stage="$(ls -d dist/KubeFactory-*-linux-x86_64 | head -1)"
           cp "$stage/KubeFactory.x86_64" "$stage/kf-agent" deploy/server-image/Dockerfile server-image/
 
@@ -177,6 +177,7 @@ jobs:
             dist/*.tar.gz
             dist/kf-host-*
             dist/install-host.*
+            dist/install-kubefactory.*
 
       - uses: actions/upload-artifact@v4
         with:
@@ -186,6 +187,7 @@ jobs:
             dist/*.sha256
             dist/kf-host-*
             dist/install-host.*
+            dist/install-kubefactory.*
 
       - uses: actions/upload-artifact@v4
         with:
@@ -276,7 +278,7 @@ jobs:
       - name: One checksum file for everything
         run: |
           cd out
-          sha256sum *.zip *.tar.gz kf-host-* install-host.* > SHA256SUMS
+          sha256sum *.zip *.tar.gz kf-host-* install-host.* install-kubefactory.* > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publish GitHub Release
@@ -285,4 +287,4 @@ jobs:
         run: |
           pre=""
           case "$GITHUB_REF_NAME" in *-*) pre="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" out/*.zip out/*.tar.gz out/*.sha256 out/kf-host-* out/install-host.* out/SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes --title "KubeFactory ${GITHUB_REF_NAME#v}" $pre
+          gh release create "$GITHUB_REF_NAME" out/*.zip out/*.tar.gz out/*.sha256 out/kf-host-* out/install-host.* out/install-kubefactory.* out/SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes --title "KubeFactory ${GITHUB_REF_NAME#v}" $pre
