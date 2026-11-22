@@ -5,7 +5,7 @@
 #
 #   .\install-host.ps1                                  demo server, access point on 127.0.0.1:7666
 #   .\install-host.ps1 -Source docker                   this machine's Docker engine
-#   .\install-host.ps1 -Source kube -Kubeconfig C:\kf\viewer.yaml [-Context prod]
+#   .\install-host.ps1 -Source kube -Kubeconfig C:\kf\viewer.yaml [-Context prod] [-Network kind]
 #   .\install-host.ps1 -Listen 0.0.0.0:7666 -TlsCert C:\kf\cert.pem -TlsKey C:\kf\key.pem
 #   .\install-host.ps1 -Binary .\kf-host.exe -Image kubefactory-server:dev -NoPull   a local build
 #   .\install-host.ps1 -Uninstall [-RemoveContainer]
@@ -23,6 +23,7 @@ param(
     [ValidateSet("demo", "docker", "kube")][string]$Source = "demo",
     [string]$Kubeconfig = "",
     [string]$Context = "",
+    [string]$Network = "",
     [string]$Listen = "127.0.0.1:7666",
     [string]$TlsCert = "",
     [string]$TlsKey = "",
@@ -99,6 +100,7 @@ if ((Test-Path $config) -and -not $Force) {
         read_only = [bool]$ReadOnly; volume = "kubefactory-server-data"; mounts = @(); env = @()
         internal_port = 17666; listen = $Listen; tls_cert = $TlsCert; tls_key = $TlsKey; interval_seconds = 30
     }
+    if ($Network) { $cfg.network = $Network }   # e.g. kind: the server reaches the cluster on kind's Docker network
     switch ($Source) {
         "docker" {
             Say "A Docker source gives the server container this machine's Docker socket: it can do anything Docker can. Players still act only through their token's role." Yellow

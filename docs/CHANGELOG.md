@@ -6,6 +6,17 @@
 
 ### Added
 
+- **Clean slate**: set up a Docker host or a Kubernetes cluster from nothing.
+  It opens from the start menu, the game menu and Switch cluster. The game
+  checks what is on the machine (read only), you pick a Docker host, Docker
+  Desktop's Kubernetes, kind or k3s, and it lists the steps still to do. It
+  saves its install script (`install-kubefactory.ps1` for Windows,
+  `install-kubefactory.sh` for Linux) and gives you the command to run as
+  administrator. The scripts show their plan and ask first, skip what is
+  already there, never elevate themselves, and can finish with the host
+  service. Releases publish both scripts. The wizard fits phone screens. See
+  docs/CLEAN_SLATE.md.
+
 - **Host service (high availability)**, a new deployment type beside desktop,
   server mode and the browser demo. kf-host installs as a Windows service or a
   systemd unit. Every 30 seconds it checks that the KubeFactory server container

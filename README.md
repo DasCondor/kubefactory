@@ -27,6 +27,7 @@ Docker containers and stacks. Built for personal and homelab use.
 
 - **Try it safely:** the [browser demo](https://dascondor.github.io/kubefactory/) uses simulated worlds and connects to nothing.
 - **Manage real infrastructure:** download a desktop build from [Releases](https://github.com/DasCondor/kubefactory/releases), then follow the [installation](https://github.com/DasCondor/kubefactory/wiki/Getting-Started) and [connection](https://github.com/DasCondor/kubefactory/wiki/Connections) guides.
+- **Start from nothing:** [Clean slate](docs/CLEAN_SLATE.md) sets up a Docker host or a Kubernetes cluster (Docker Desktop, kind or k3s) with you. The game checks your machine and gives you an install script to run as administrator.
 - **Keep it running for a team:** install the [host service](docs/HOST_SERVICE.md) on a Docker host or cluster node. It keeps the KubeFactory server running and players connected while Docker or Kubernetes restart.
 - **Learn the game:** visit the [wiki](https://github.com/DasCondor/kubefactory/wiki) for controls, tools, connections, the Krew, server mode and more.
 
