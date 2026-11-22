@@ -30,6 +30,9 @@ var _state = {}
 var _results = {}
 var _seq = 0
 var feed = []           # what other players did, newest last
+# A kf-host access point (docs/HOST_SERVICE.md) keeps this connection open while
+# the server restarts and says so with a notice; the last state stays on screen.
+var restarting = false
 
 func probe() -> Dictionary:
 	if not (url.begins_with("ws://") or url.begins_with("wss://")):
@@ -80,6 +83,8 @@ func _pump() -> void:
 					_state = d["state"]
 			"result":
 				_results[int(d.get("id", 0))] = d.get("result", {})
+			"notice":
+				restarting = str(d.get("level", "")) == "warn"
 			"feed":
 				feed.append(d)
 				if feed.size() > 50:
@@ -100,6 +105,8 @@ func fetch() -> Dictionary:
 		return {"source": server_source if server_source != "" else label, "context": context, "error": "", "nodes": [], "pods": [], "workloads": [], "services": []}
 	st["context"] = context
 	st["provider"] = "via KubeFactory server (%s)" % role
+	if restarting:
+		st["provider"] += " · server restarting, last known state"
 	return st
 
 func run_action(a: Dictionary) -> Dictionary:

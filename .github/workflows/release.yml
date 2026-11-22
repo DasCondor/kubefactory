@@ -158,9 +158,25 @@ jobs:
       - name: Test, export and package
         run: GODOT="$HOME/godot/Godot_v4.3-stable_linux.x86_64" bash tools/package.sh linux
 
+      # the high-availability host service (docs/HOST_SERVICE.md): one file per platform, plus its installers
+      - name: Build kf-host and stage the server image
+        run: |
+          mkdir -p server-image
+          cd agent
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ../dist/kf-host-linux-amd64 ./host
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ../dist/kf-host-linux-arm64 ./host
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ../dist/kf-host-windows-amd64.exe ./host
+          cd ..
+          cp deploy/host/install-host.sh deploy/host/install-host.ps1 dist/
+          stage="$(ls -d dist/KubeFactory-*-linux-x86_64 | head -1)"
+          cp "$stage/KubeFactory.x86_64" "$stage/kf-agent" deploy/server-image/Dockerfile server-image/
+
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: dist/*.tar.gz
+          subject-path: |
+            dist/*.tar.gz
+            dist/kf-host-*
+            dist/install-host.*
 
       - uses: actions/upload-artifact@v4
         with:
@@ -168,6 +184,42 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.sha256
+            dist/kf-host-*
+            dist/install-host.*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-image-context
+          path: server-image/
+
+  # The server container image kf-host runs. Built on every run; pushed to
+  # ghcr.io only for a tag (":latest" only for a release that is not a pre-release).
+  server-image:
+    needs: [linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-image-context
+          path: ctx
+      - name: Build, and push for a tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          img="ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr 'A-Z' 'a-z')/kubefactory-server"
+          docker build -t kubefactory-server:ci ctx
+          case "$GITHUB_REF" in
+            refs/tags/v*)
+              v="${GITHUB_REF_NAME#v}"
+              echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+              docker tag kubefactory-server:ci "$img:$v" && docker push "$img:$v"
+              case "$v" in *-*) ;; *) docker tag kubefactory-server:ci "$img:latest" && docker push "$img:latest" ;; esac
+              ;;
+            *) echo "not a tag: built only" ;;
+          esac
 
   macos:
     runs-on: macos-latest
@@ -211,7 +263,7 @@ jobs:
 
   publish:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [windows, linux, macos]
+    needs: [windows, linux, macos, server-image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -224,7 +276,7 @@ jobs:
       - name: One checksum file for everything
         run: |
           cd out
-          sha256sum *.zip *.tar.gz > SHA256SUMS
+          sha256sum *.zip *.tar.gz kf-host-* install-host.* > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publish GitHub Release
@@ -233,4 +285,4 @@ jobs:
         run: |
           pre=""
           case "$GITHUB_REF_NAME" in *-*) pre="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" out/*.zip out/*.tar.gz out/*.sha256 out/SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes --title "KubeFactory ${GITHUB_REF_NAME#v}" $pre
+          gh release create "$GITHUB_REF_NAME" out/*.zip out/*.tar.gz out/*.sha256 out/kf-host-* out/install-host.* out/SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes --title "KubeFactory ${GITHUB_REF_NAME#v}" $pre

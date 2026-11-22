@@ -6,6 +6,16 @@
 
 ### Added
 
+- **Host service (high availability)**, a new deployment type beside desktop,
+  server mode and the browser demo. kf-host installs as a Windows service or a
+  systemd unit. Every 30 seconds it checks that the KubeFactory server container
+  is running and accepting connections, and creates, starts or restarts it. Its
+  access point keeps players connected while the container, Docker or
+  Kubernetes restart: the game shows the last state and says the server is
+  restarting, and actions are refused until it is back. It comes with a server
+  container image, installers for Windows and Linux (demo, Docker, kubeconfig or
+  k3s source) and release builds. See docs/HOST_SERVICE.md.
+
 - The Connection Whiteboard is in every demo world, not only the Docker media
   lab: the Kubernetes cluster, Home Assistant, Dev containers and Media suite
   demos open it from the pause menu (Connection whiteboard; Whiteboard on

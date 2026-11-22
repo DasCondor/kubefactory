@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/chromedp/cdproto v0.0.0-20241022234722-4d5d5faf59fb
 	github.com/chromedp/chromedp v0.11.2
+	github.com/gorilla/websocket v1.5.3
 	golang.org/x/sys v0.45.0
 	k8s.io/api v0.32.3
 	k8s.io/apimachinery v0.32.3
@@ -29,7 +30,6 @@ require (
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
