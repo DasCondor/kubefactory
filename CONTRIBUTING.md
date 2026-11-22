@@ -131,7 +131,10 @@ requests are checked against them:
 3. Push your branch to your fork or this repository and open a pull request
    against `main`. Follow the pull request template: explain what and why,
    report the exact tests and platforms used, and clearly say what was not
-   tested. Include simulation screenshots for visible changes.
+   tested. Include simulation screenshots for visible changes. A major
+   visible change also refreshes its tour video and GIF: re-run
+   `tools\record-tour.ps1 <tour>` (add a tour in `scripts/main.gd` for a new
+   feature) and commit the new `docs/wiki/media` files.
 4. Respond to review feedback and push follow-up commits to the same branch.
    Do not publish release tags as part of a contribution.
 

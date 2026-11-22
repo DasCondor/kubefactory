@@ -376,6 +376,9 @@ func _ready() -> void:
 		elif a == "--trailer":
 			shots = "-"
 			_run_trailer()
+		elif a == "--board-tour" or a.begins_with("--board-tour="):
+			shots = "-"
+			_run_board_tour(a.trim_prefix("--board-tour").trim_prefix("="))
 		elif a.begins_with("--toolshots="):
 			shots = "-"
 			_run_toolshots(a.trim_prefix("--toolshots="))
@@ -1984,6 +1987,113 @@ func _run_flyby() -> void:
 			var k = smoothstep(0.0, 1.0, t)
 			player.teleport(path[i - 1][0].lerp(path[i][0], k), path[i - 1][1].lerp(path[i][1], k))
 			await get_tree().process_frame
+	get_tree().quit()
+
+# ---- dev: a tour of the connection whiteboard in every demo world, for its
+# video and GIF (tools/record-tour.ps1 board): each world's board with its
+# busiest tile selected and its callouts, then in the last one a closer look
+# and the same board in 2D.
+#   Godot --path . --write-movie out.avi --fixed-fps 30 --resolution 1280x720 -- --demo --board-tour
+# --board-tour=<demo id> tours one world only (start it with --demo=<that id>),
+# with the closer look and the 2D view at its end.
+
+const DemoTypes = preload("res://scripts/backend_demo.gd")
+
+func _board_pick(graph, title: String) -> String:
+	for uid in graph.cards:
+		if graph.cards[uid].title == title:
+			return uid
+	return ""
+
+# the tile with the most routes: the one whose callouts say the most
+func _board_busiest(graph) -> String:
+	var best = ""
+	for uid in graph.cards:
+		if best == "" or graph.scene.related(uid).size() > graph.scene.related(best).size():
+			best = uid
+	return best
+
+func _board_glide(graph, to_target: Vector3, to_ortho: float, secs: float) -> void:
+	var a = graph.target
+	var o = graph.ortho
+	var t = 0.0
+	while t < 1.0:
+		t += get_process_delta_time() / secs
+		var k = smoothstep(0.0, 1.0, minf(t, 1.0))
+		graph.target = a.lerp(to_target, k)
+		graph.ortho = lerpf(o, to_ortho, k)
+		graph._place_camera()
+		await get_tree().process_frame
+
+func _board_view(view: String) -> void:
+	for b in hud._modal.find_children("*", "OptionButton", true, false):
+		for i in b.item_count:
+			if b.get_item_text(i) == "View: " + view:
+				b.select(i)
+				b.item_selected.emit(i)
+				return
+
+func _run_board_tour(only: String = "") -> void:
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	sfx.set_muted(true)
+	# a caption naming the world, bottom left
+	var layer = CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+	var caption = Label.new()
+	caption.add_theme_font_size_override("font_size", 26)
+	caption.add_theme_color_override("font_color", Color(1, 1, 1))
+	caption.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	caption.add_theme_constant_override("outline_size", 10)
+	caption.position = Vector2(40, get_viewport().get_visible_rect().size.y - 70)
+	layer.add_child(caption)
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	hud.settings["board_view"] = "iso"
+	var demos = DemoTypes.DEMO_TYPES.filter(func(d): return only == "" or d["id"] == only)
+	for n in demos.size():
+		var d = demos[n]
+		hud.close_modal(false)
+		if cluster.backend == null or cluster.backend.context != d["flavor"]:
+			hud.target_requested.emit({"source": "simulation", "context": d["flavor"], "provider": DemoTypes.flavor_info(d["flavor"])["provider"]})
+			var deadline = Time.get_ticks_msec() + 30000
+			while (cluster.backend == null or cluster.backend.context != d["flavor"] or world.machines.is_empty()) and Time.get_ticks_msec() < deadline:
+				await get_tree().process_frame
+			await get_tree().create_timer(1.0).timeout
+		# a freshly started world boots its containers first: wait until most are ready
+		var ready_by = Time.get_ticks_msec() + 25000
+		while Time.get_ticks_msec() < ready_by:
+			var pods: Array = cluster.state.get("pods", [])
+			if pods.size() > 0 and pods.filter(func(p): return p.get("ready", true)).size() >= pods.size() * 0.85:
+				break
+			await get_tree().create_timer(0.5).timeout
+		var still = cluster.state.get("pods", []).filter(func(p): return not p.get("ready", true)).size()
+		print("tour: %s ready, %d of %d still starting" % [d["id"], still, cluster.state.get("pods", []).size()])
+		caption.text = "%s  ·  SIMULATED" % d["name"]
+		hud.close_modal(false)
+		hud.open_connections()
+		await get_tree().create_timer(1.6).timeout
+		var graph = hud._connection_graph
+		if graph == null or not is_instance_valid(graph):
+			continue
+		graph._select(_board_busiest(graph))
+		await get_tree().create_timer(2.4).timeout
+		if n == demos.size() - 1:
+			# the last world: a closer look, then the same board in 2D
+			var fit_target = graph.target
+			var fit_ortho = graph.ortho
+			var focus = _board_pick(graph, "plex") if only == "" else _board_busiest(graph)
+			if focus == "":
+				focus = _board_busiest(graph)
+			graph._select(focus)
+			await _board_glide(graph, graph.cards[focus].position * Vector3(1, 0, 1), fit_ortho * 0.45, 1.6)
+			await get_tree().create_timer(1.6).timeout
+			await _board_glide(graph, fit_target, fit_ortho, 1.2)
+			_board_view("2D")
+			await get_tree().create_timer(2.6).timeout
+			_board_view("Isometric")
+	await get_tree().create_timer(1.0).timeout
 	get_tree().quit()
 
 # ---- dev: a ~35 s scripted tour for a video. Record it with Godot's movie writer:

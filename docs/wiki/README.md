@@ -8,6 +8,7 @@ KubeFactory turns Kubernetes pods and Docker containers into machines you can in
 | --- | --- |
 | [Media demo](Media-Demo.md) | Plex and Jellyfin, app dashboards, failed ports, downloads, and libraries |
 | [VPN gateways](VPN-Gateways.md) | One VPN per app or a shared gateway, from the first pipe to the WWW outlet |
+| [Connection whiteboard](Connection-Whiteboard.md) | Every app and route as an isometric diagram or in 2D, with what each route carries |
 | [Ports and shared disks](Ports-and-Shared-Disks.md) | Configured ports, backend readiness, and every container on a shared volume |
 | [Mobile demo](Mobile-Demo.md) | Touch controls and switching between portrait and landscape |
 

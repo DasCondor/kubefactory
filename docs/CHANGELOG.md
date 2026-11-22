@@ -6,6 +6,19 @@
 
 ### Added
 
+- **The connection board is an isometric diagram.** The whiteboard panel
+  draws every endpoint as a rounded pastel tile with its app icon and name on
+  grid paper, and every route as a line along the grid with one right-angle
+  turn, an arrowhead and a dot moving while it carries traffic. Selecting a
+  tile lifts it, fades what is unrelated, and puts a callout on each of its
+  routes saying what it carries (HTTPS, Metrics, Storage mount, LAN · down).
+  **View: 2D** shows the same board from straight above, with the same layout
+  and selection; **View: Cards** keeps the card board. Drag the paper to pan,
+  wheel or pinch to zoom, drag a tile to move it. On phones Fit board keeps
+  tiles readable and the board fits the screen. The table in the factory keeps
+  its machine look. A tour video and GIF are in the wiki
+  (docs/wiki/Connection-Whiteboard.md); `tools/record-tour.ps1` records them.
+
 - **Clean slate**: set up a Docker host or a Kubernetes cluster from nothing.
   It opens from the start menu, the game menu and Switch cluster. The game
   checks what is on the machine (read only), you pick a Docker host, Docker
@@ -76,12 +89,16 @@
   finger turns, pinch zooms, two fingers move, tap selects, double-tap opens
   the block's files, and the less used buttons sit under **More...** so the
   board gets the screen. **Flat view** keeps the 2D board; each view saves its
-  own layout.
+  own layout. (Now the isometric diagram, above.)
 - Every demo world has a **connection board table** in the factory with the
   same board in miniature ([E] opens it); it follows the 3D board's saved
   layout. It replaces the media lab's flat board on a wall.
 
 ### Fixed
+
+- On phones, the whiteboard's **More...** list (Save whiteboard, Spider
+  layout, Edit / export YAML, ...) did nothing: it called buttons that had
+  already been removed. It now runs their actions.
 
 - The Krew hold their tools properly. Gauge's, Blueprint's and every Foreman's
   tablet floated 18 cm in front of the hand on a small bracket; it now sits in

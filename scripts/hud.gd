@@ -1303,18 +1303,22 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 	var lab = cluster.state.has("lab")
 	if not _has_whiteboard():
 		return
-	# 3D by default; the flat board stays one button away. Each keeps its own layout.
-	var flat = str(settings.get("board_view", "3d")) == "flat"
+	# Isometric by default; the same board from straight above is the 2D view,
+	# and the card board (flat) is still there. Isometric and 2D share a layout.
+	var view = str(settings.get("board_view", "iso"))
+	if view not in ["iso", "2d", "flat"]:
+		view = "iso"
+	var flat = view == "flat"
 	var board_key = ("lab_whiteboard" if lab else "whiteboard:" + str(cluster.state.get("context", "demo"))) + ("" if flat else ":3d")
 	var viewport_size = get_viewport().get_visible_rect().size
 	var body = _open_modal("connections", uid, "CONNECTION WHITEBOARD", Vector2(440, 0) if touch_u > 0 else viewport_size - Vector2(32, 32), false, back if back.is_valid() else (open_media_lab if lab else func(): open_network("")))
 	if flat:
 		body.add_child(_wrapped("SIMULATED · Select a card to trace or inspect it. Double-click an app or storage card to open its config / storage files. Drag cards or pan blank space on touch.", 13, DIM))
 	elif touch_u > 0:
-		body.add_child(_wrapped("SIMULATED · Tap selects · double-tap opens files · drag turns · pinch zooms · two fingers move", 12, DIM))
+		body.add_child(_wrapped("SIMULATED · Tap selects · double-tap opens files · drag moves the paper · pinch zooms · drag a selected block to move it", 12, DIM))
 	else:
-		body.add_child(_wrapped("SIMULATED · Click a block to select it, double-click to open its config / storage files. Drag to turn, wheel to zoom, right-drag to pan, drag a block to move it.", 13, DIM))
-	var graph = LabConnections.new() if flat else BoardView.new()
+		body.add_child(_wrapped("SIMULATED · Click a block to select it and see what its routes carry, double-click to open its config / storage files. Drag the paper to pan, wheel to zoom, drag a block to move it.", 13, DIM))
+	var graph = LabConnections.new() if flat else BoardView.new(view)
 	_connection_graph = graph
 	graph.configure(settings.get(board_key, {}))
 	graph.selected_uid = uid
@@ -1337,9 +1341,23 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 		graph.layout.clear()
 		graph.arrange_spider()
 		graph.fit_routes.call_deferred()))
-	controls.add_child(_btn("Flat view" if not flat else "3D view", func():
-		_save_setting("board_view", "3d" if flat else "flat")
-		open_connections(graph.selected_uid, back)))
+	var views = [["iso", "Isometric"], ["2d", "2D"], ["flat", "Cards"]]
+	var view_pick = OptionButton.new()
+	for v in views:
+		view_pick.add_item("View: " + v[1])
+	view_pick.select(views.map(func(v): return v[0]).find(view))
+	if touch_u > 0:
+		view_pick.custom_minimum_size.y = 46
+	view_pick.item_selected.connect(func(index):
+		var next = views[index][0]
+		_save_setting("board_view", next)
+		if not flat and next != "flat":
+			# same board, other camera: keep the selection and the place
+			graph.set_view(next)
+			graph.fit_routes.call_deferred()
+		else:
+			open_connections(graph.selected_uid, back))
+	controls.add_child(view_pick)
 	controls.add_child(_btn("Edit / export YAML", open_map_yaml))
 	controls.add_child(_btn("Config / storage files", func():
 		var selected = graph.selected_uid
@@ -1392,7 +1410,7 @@ func open_connections(uid: String = "", back: Callable = Callable()) -> void:
 			continue
 		legend.add_child(_lbl(("Storage mounts" if kind == "Mounts" else kind) + "  ", 13, MediaLab.COLORS[kind]))
 	body.add_child(legend)
-	graph.custom_minimum_size.y = (400 if flat else 620) if touch_u > 0 else maxf(240, viewport_size.y - 250)
+	graph.custom_minimum_size.y = (400 if flat else clampf(viewport_size.y * 0.56, 320, 620)) if touch_u > 0 else maxf(240, viewport_size.y - 250)
 	graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(graph)
 	graph.refresh(cluster.state)
@@ -1434,13 +1452,15 @@ func _compact_board_controls(controls: HFlowContainer, find_card: OptionButton) 
 				child.queue_free()
 			elif child.text not in keep:
 				more.add_item(child.text)
-				actions.append(child.pressed.emit)
+				# keep what the button does, not the button: it is freed below
+				actions.append(child.pressed.get_connections().map(func(c): return c["callable"]))
 				controls.remove_child(child)
 				child.queue_free.call_deferred()
 	more.item_selected.connect(func(index):
 		more.select(0)
 		if index > 0:
-			actions[index].call())
+			for action in actions[index]:
+				action.call())
 	controls.add_child(more)
 	controls.move_child(find_card, 1)
 
