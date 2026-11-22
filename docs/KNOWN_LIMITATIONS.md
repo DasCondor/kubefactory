@@ -179,6 +179,25 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
   cannot draw their own models or screens; their machines use the standard
   ones. Plugins are not available in the browser build.
 
+## Host service
+
+- **Verified live** on Windows with Docker Desktop: kf-host creates the server
+  container. When the container is stopped or removed, a signed-in game stays
+  connected, is told the server is restarting, has its actions refused, and gets
+  live data again after kf-host brings the server back.
+- **Not tested:** restarting Docker Desktop or a Kubernetes node (simulated by
+  stopping and removing the container), installing the Windows service or the
+  systemd unit on a real machine (the Linux installer was run in a throw-away
+  container with stubs), the Docker, kubeconfig and k3s sources inside the
+  container, `wss://` on the access point, arm64, and the release workflow's
+  image push.
+- **Docker Desktop** runs only while someone is signed in to Windows, so the
+  server is down until then. The access point is still up, and the server
+  starts when Docker does.
+- **Each node is its own server:** there is no shared state or automatic
+  failover between nodes. Tokens can be shared by copying `server-tokens.json`.
+- **Kubeconfigs with exec auth helpers** do not work inside the container.
+
 ## By design, for now
 
 - **Docker still uses the `docker` command.** Only Kubernetes is native.
