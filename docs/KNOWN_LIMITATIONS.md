@@ -202,11 +202,14 @@ What still has to happen before 2.0.0 is in [GO_LIVE_2.0.md](GO_LIVE_2.0.md).
 
 - **Verified live** on Windows: the machine check, the wizard at desktop and
   phone sizes, and the Windows script's plan for every target (`-Plan`, which
-  changes nothing). The Linux script was run in a throw-away container: plan,
+  changes nothing). A real run of `-Target kind` made a kind cluster on Docker
+  Desktop in a normal PowerShell, a second run found everything in place, and
+  the game found the new context in Switch cluster, connected (read only) and
+  built its factory (`tests/live/clean_slate_kind_test.gd`). The Linux script was run in a throw-away container: plan,
   refusal without root, a stubbed run with the host service, a failed
   download and answering no.
-- **Not tested:** a real install by either script (WSL 2, Docker Desktop,
-  Docker Engine, kubectl, kind, a kind cluster, k3s in WSL or on Linux), and
+- **Not tested:** installing WSL 2, Docker Desktop, Docker Engine, kubectl,
+  kind or k3s (they were already here, or are Linux only), and
   the host service step with a Kubernetes target. Reaching Docker Desktop's
   Kubernetes from the host service container (`kubernetes.docker.internal`)
   is not tested.

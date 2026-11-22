@@ -1,7 +1,9 @@
 # KubeFactory Clean slate: sets up a Docker host or a Kubernetes cluster on this
 # Windows machine, from nothing, ready for KubeFactory. See docs/CLEAN_SLATE.md.
 #
-# Read it, then run it from an administrator PowerShell. It does not elevate itself.
+# Read it, then run it from an administrator PowerShell. It does not elevate
+# itself. When every step left to do works without admin (making a kind cluster,
+# waiting for Docker, k3s in WSL), it also runs in a normal PowerShell.
 #
 #   .\install-kubefactory.ps1 -Plan                            what it would do here; changes nothing, no admin needed
 #   .\install-kubefactory.ps1                                  a Docker host: WSL 2 and Docker Desktop
@@ -43,6 +45,11 @@ function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 function Quiet([scriptblock]$b) {
     $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     try { & $b 2>$null } finally { $ErrorActionPreference = $old }
+}
+# run a native command that shows its own progress: its stderr is not an error, its exit code is
+function Native([scriptblock]$b) {
+    $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try { & $b } finally { $ErrorActionPreference = $old }   # not redirected: winget's own questions stay visible
 }
 function Refresh-Path {
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
@@ -95,11 +102,6 @@ function Host-Service { [bool](Get-Service KubeFactoryHost -ErrorAction Silently
 $k3sConfig = Join-Path $env:USERPROFILE ".kube\kubefactory-k3s.yaml"
 
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $Plan -and -not $admin) {
-    Say "Run this from an administrator PowerShell (right-click PowerShell > Run as administrator). It does not elevate itself." Red
-    Say "To see what it would do first, without admin: .\install-kubefactory.ps1 -Plan -Target $Target" Gray
-    exit 1
-}
 $build = [Environment]::OSVersion.Version.Build
 if ($build -lt 19041) { Say "Windows 10 2004 (build 19041) or later is needed for WSL 2; this is build $build." Red; exit 1 }
 if ($Target -eq "k3s" -and -not $WslDistro) {
@@ -117,7 +119,7 @@ $steps = New-Object System.Collections.ArrayList
 function Step($name, [bool]$done, [scriptblock]$run, $note = "") { [void]$steps.Add([pscustomobject]@{ Name = $name; Done = $done; Run = $run; Note = $note }) }
 
 Step "WSL 2" (Wsl-Ready) {
-    wsl --install --no-distribution
+    Native { wsl --install --no-distribution }
     if ($LASTEXITCODE -ne 0) { throw "wsl --install failed (exit $LASTEXITCODE)" }
     Say "WSL 2 is installed. Restart Windows, then run this script again to carry on." Yellow
     exit 0
@@ -126,7 +128,7 @@ if ($needDocker) {
     Step "Docker Desktop" ([bool](Docker-Exe)) {
         if (-not (Have winget)) { throw "winget is not available. Install Docker Desktop from https://www.docker.com/products/docker-desktop/ and run this again." }
         # no --accept flags: winget and Docker Desktop show you their terms
-        winget install -e --id Docker.DockerDesktop
+        Native { winget install -e --id Docker.DockerDesktop }
         if ($LASTEXITCODE -ne 0) { throw "winget could not install Docker Desktop (exit $LASTEXITCODE)" }
         Refresh-Path
     } "winget install Docker.DockerDesktop"
@@ -149,17 +151,17 @@ switch ($Target) {
     }
     "kind" {
         Step "kubectl" ([bool](Kubectl-Exe)) {
-            winget install -e --id Kubernetes.kubectl
+            Native { winget install -e --id Kubernetes.kubectl }
             if ($LASTEXITCODE -ne 0) { throw "winget could not install kubectl (exit $LASTEXITCODE)" }
             Refresh-Path
         } "winget install Kubernetes.kubectl"
         Step "kind" (Have kind) {
-            winget install -e --id Kubernetes.kind
+            Native { winget install -e --id Kubernetes.kind }
             if ($LASTEXITCODE -ne 0) { throw "winget could not install kind (exit $LASTEXITCODE)" }
             Refresh-Path
         } "winget install Kubernetes.kind"
         Step "kind cluster $ClusterName" (Kind-Cluster) {
-            kind create cluster --name $ClusterName --wait 180s
+            Native { kind create cluster --name $ClusterName --wait 180s }
             if ($LASTEXITCODE -ne 0) { throw "kind could not create the cluster (exit $LASTEXITCODE)" }
         } "context kind-$ClusterName in your kubeconfig"
     }
@@ -176,7 +178,7 @@ switch ($Target) {
             $sh = Get-Companion "install-kubefactory.sh"
             $full = (Resolve-Path $sh).Path
             $linux = "/mnt/" + $full.Substring(0, 1).ToLower() + $full.Substring(2).Replace("\", "/")
-            wsl -d $WslDistro -u root -- sh $linux --target k3s --yes
+            Native { wsl -d $WslDistro -u root -- sh $linux --target k3s --yes }
             if ($LASTEXITCODE -ne 0) { throw "k3s did not install in $WslDistro (exit $LASTEXITCODE)" }
         } "install-kubefactory.sh --target k3s"
         Step "k3s kubeconfig for Windows" (Test-Path $k3sConfig) {
@@ -225,12 +227,20 @@ Say "KubeFactory Clean slate  -  target: $Target$(if ($HostService) { ' + host s
 foreach ($s in $steps) {
     if ($s.Done) { Say ("  [done]  " + $s.Name) Green } else { Say ("  [todo]  " + $s.Name + $(if ($s.Note) { "   ($($s.Note))" } else { "" })) Yellow }
 }
+# steps that work without admin; every other step needs an administrator PowerShell
+$userSteps = @("Docker engine answering", "Docker Desktop's Kubernetes", "kind cluster *", "a WSL distribution*", "k3s in *", "k3s kubeconfig*")
+foreach ($s in $steps) { $s | Add-Member NeedsAdmin (-not ($userSteps | Where-Object { $s.Name -like $_ })) }
 $todo = @($steps | Where-Object { -not $_.Done })
+$adminTodo = @($todo | Where-Object { $_.NeedsAdmin })
 if ($todo.Count -eq 0) {
     Say "Everything is already in place." Green
 } elseif ($Plan) {
-    Say "Plan only: nothing was changed. Run it without -Plan, as administrator, to do the steps marked todo." Gray
+    Say ("Plan only: nothing was changed. Run it without -Plan" + $(if ($adminTodo.Count -gt 0) { ", as administrator," } else { "" }) + " to do the steps marked todo.") Gray
     exit 0
+} elseif ($adminTodo.Count -gt 0 -and -not $admin) {
+    Say ("These steps need an administrator PowerShell: " + (($adminTodo | ForEach-Object { $_.Name }) -join ", ") + ".") Red
+    Say "Right-click PowerShell > Run as administrator, then run this again. It does not elevate itself. Nothing was changed." Red
+    exit 1
 } else {
     if (-not $Yes) {
         $answer = Read-Host "Do the $($todo.Count) step(s) marked todo? (y/N)"

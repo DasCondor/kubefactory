@@ -62,8 +62,12 @@ How the scripts behave:
 - **They show the plan first and ask.** Each step is marked done or to do. Only
   the steps marked to do run, so you can run the script again after a restart
   and it carries on from where it stopped.
-- **They never elevate themselves.** Without admin or root they stop and say
-  how to see the plan instead.
+- **They never elevate themselves.** On Windows the script asks for an
+  administrator PowerShell only when a step left to do needs one (WSL,
+  Docker Desktop, winget installs, the host service). Making a kind cluster,
+  waiting for Docker and setting up k3s in WSL work in a normal PowerShell.
+  It names the steps that need admin and changes nothing. On Linux it needs
+  sudo.
 - **You accept the terms.** winget and Docker Desktop show you their own
   license terms; the script does not accept them for you.
 - **Some steps need you.** The script never changes Docker Desktop's settings
@@ -102,5 +106,7 @@ instead (`install-host.sh --source k3s`, which needs Docker there).
   scripts. The game includes them, and each release publishes them with
   `SHA256SUMS`.
 - `scripts/clean_slate.gd`: the machine check, the plan and the commands.
-- Tests: `tests/clean_slate_test.gd` (headless) and
-  `tests/live/clean_slate_ui_test.gd` (the wizard at desktop and phone sizes).
+- Tests: `tests/clean_slate_test.gd` (headless),
+  `tests/live/clean_slate_ui_test.gd` (the wizard at desktop and phone sizes)
+  and `tests/live/clean_slate_kind_test.gd` (after a real kind install: the
+  game finds and connects to it).
