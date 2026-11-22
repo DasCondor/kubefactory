@@ -23,6 +23,47 @@ Select a tile to lift it and fade everything unrelated. Each of its routes gets
 a callout saying what it carries: HTTPS, Metrics, Storage mount, LAN · down.
 Double-click or double-tap a tile to open its config and storage files.
 
+## Each demo world
+
+One short tour per world: its board, its busiest tile with callouts, a closer
+look, then the same board in 2D.
+
+### Kubernetes cluster
+
+![The Kubernetes cluster demo's whiteboard: an online shop: frontend, cart, catalog, checkout and the cluster's own services](media/board-kubernetes.gif)
+
+[Watch as MP4](media/board-kubernetes.mp4)
+
+### Home Assistant
+
+![The Home Assistant demo's whiteboard: Home Assistant with MQTT, Z-Wave, Matter, Frigate, voice and the recorder](media/board-home-assistant.gif)
+
+[Watch as MP4](media/board-home-assistant.mp4)
+
+### Dev containers
+
+![The Dev containers demo's whiteboard: dev containers with Git, CI, BuildKit, a registry, caches and artifacts](media/board-dev-containers.gif)
+
+[Watch as MP4](media/board-dev-containers.mp4)
+
+### Media suite
+
+![The Media suite demo's whiteboard: the media apps on Kubernetes with their metrics](media/board-media.gif)
+
+[Watch as MP4](media/board-media.mp4)
+
+### Docker media lab
+
+![The Docker media lab demo's whiteboard: the Docker media lab: apps, volumes, the LAN and the outside](media/board-docker-media.gif)
+
+[Watch as MP4](media/board-docker-media.mp4)
+
+### Docker media lab + gatherer
+
+![The Docker media lab + gatherer demo's whiteboard: the lab with its gathering node and VPN](media/board-docker-media-gatherer.gif)
+
+[Watch as MP4](media/board-docker-media-gatherer.mp4)
+
 ## Controls
 
 | | Mouse | Touch |
@@ -40,4 +81,6 @@ this device, and the board table in the factory uses it too.
 ## Re-recording this page's media
 
 `powershell -ExecutionPolicy Bypass -File tools\record-tour.ps1 board` records
-the tour again and replaces `media/board-tour.mp4` and `media/board-tour.gif`.
+the all-worlds tour again (`media/board-tour.mp4` and `.gif`). Use `boards`
+instead of `board` to record each world's own tour
+(`media/board-<world>.mp4` and `.gif`).

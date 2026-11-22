@@ -376,9 +376,9 @@ func _ready() -> void:
 		elif a == "--trailer":
 			shots = "-"
 			_run_trailer()
-		elif a == "--board-tour":
+		elif a == "--board-tour" or a.begins_with("--board-tour="):
 			shots = "-"
-			_run_board_tour()
+			_run_board_tour(a.trim_prefix("--board-tour").trim_prefix("="))
 		elif a.begins_with("--toolshots="):
 			shots = "-"
 			_run_toolshots(a.trim_prefix("--toolshots="))
@@ -1994,6 +1994,8 @@ func _run_flyby() -> void:
 # busiest tile selected and its callouts, then in the last one a closer look
 # and the same board in 2D.
 #   Godot --path . --write-movie out.avi --fixed-fps 30 --resolution 1280x720 -- --demo --board-tour
+# --board-tour=<demo id> tours one world only (start it with --demo=<that id>),
+# with the closer look and the 2D view at its end.
 
 const DemoTypes = preload("res://scripts/backend_demo.gd")
 
@@ -2031,7 +2033,7 @@ func _board_view(view: String) -> void:
 				b.item_selected.emit(i)
 				return
 
-func _run_board_tour() -> void:
+func _run_board_tour(only: String = "") -> void:
 	_shots_running = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	sfx.set_muted(true)
@@ -2049,7 +2051,7 @@ func _run_board_tour() -> void:
 	while world.machines.is_empty():
 		await get_tree().process_frame
 	hud.settings["board_view"] = "iso"
-	var demos = DemoTypes.DEMO_TYPES
+	var demos = DemoTypes.DEMO_TYPES.filter(func(d): return only == "" or d["id"] == only)
 	for n in demos.size():
 		var d = demos[n]
 		hud.close_modal(false)
@@ -2059,6 +2061,15 @@ func _run_board_tour() -> void:
 			while (cluster.backend == null or cluster.backend.context != d["flavor"] or world.machines.is_empty()) and Time.get_ticks_msec() < deadline:
 				await get_tree().process_frame
 			await get_tree().create_timer(1.0).timeout
+		# a freshly started world boots its containers first: wait until most are ready
+		var ready_by = Time.get_ticks_msec() + 25000
+		while Time.get_ticks_msec() < ready_by:
+			var pods: Array = cluster.state.get("pods", [])
+			if pods.size() > 0 and pods.filter(func(p): return p.get("ready", true)).size() >= pods.size() * 0.85:
+				break
+			await get_tree().create_timer(0.5).timeout
+		var still = cluster.state.get("pods", []).filter(func(p): return not p.get("ready", true)).size()
+		print("tour: %s ready, %d of %d still starting" % [d["id"], still, cluster.state.get("pods", []).size()])
 		caption.text = "%s  ·  SIMULATED" % d["name"]
 		hud.close_modal(false)
 		hud.open_connections()
@@ -2072,9 +2083,11 @@ func _run_board_tour() -> void:
 			# the last world: a closer look, then the same board in 2D
 			var fit_target = graph.target
 			var fit_ortho = graph.ortho
-			var plex = _board_pick(graph, "plex")
-			graph._select(plex)
-			await _board_glide(graph, graph.cards[plex].position * Vector3(1, 0, 1), fit_ortho * 0.45, 1.6)
+			var focus = _board_pick(graph, "plex") if only == "" else _board_busiest(graph)
+			if focus == "":
+				focus = _board_busiest(graph)
+			graph._select(focus)
+			await _board_glide(graph, graph.cards[focus].position * Vector3(1, 0, 1), fit_ortho * 0.45, 1.6)
 			await get_tree().create_timer(1.6).timeout
 			await _board_glide(graph, fit_target, fit_ortho, 1.2)
 			_board_view("2D")

@@ -5,12 +5,13 @@
 #
 # Tours (each is a dev mode in scripts/main.gd):
 #   board     the whiteboard in every demo world, then 2D          -> docs/wiki/media/board-tour.mp4 / .gif
+#   boards    one tour per demo world (close-up and 2D in each)    -> docs/wiki/media/board-<demo>.mp4 / .gif
 #   trailer   the factory tour                                     -> docs/wiki/media/trailer.mp4 / .gif
 #
 # The game's settings.json is backed up first and restored afterwards (a tour
 # may switch views). The MP4 uses Windows' own encoder (tools\to_mp4.ps1); the
 # GIF comes from a second, smaller recording (tools\make_gif.py, needs Pillow).
-param([Parameter(Mandatory)][ValidateSet("board", "trailer")][string]$Tour)
+param([Parameter(Mandatory)][ValidateSet("board", "boards", "trailer")][string]$Tour)
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
 $godot = Join-Path $root "engine\Godot_v4.3-stable_win64_console.exe"
@@ -18,8 +19,19 @@ $tours = @{
     board   = @{ Args = @("--demo", "--board-tour"); Name = "board-tour" }
     trailer = @{ Args = @("--demo", "--trailer"); Name = "trailer" }
 }
-$t = $tours[$Tour]
 $media = Join-Path $root "docs\wiki\media"
+# "boards" records each demo world on its own, one after another
+if ($Tour -eq "boards") {
+    foreach ($demo in "kubernetes", "home-assistant", "dev-containers", "media", "docker-media", "docker-media-gatherer") {
+        $tours["board-$demo"] = @{ Args = @("--demo=$demo", "--board-tour=$demo"); Name = "board-$demo" }
+    }
+    $list = @($tours.Keys | Where-Object { $_ -like "board-*" } | Sort-Object)
+} else {
+    $list = @($Tour)
+}
+foreach ($key in $list) {
+$t = $tours[$key]
+Write-Host "== $($t.Name)"
 $work = Join-Path ([IO.Path]::GetTempPath()) ("kf-tour-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Force "$work\frames" | Out-Null
 $settings = Join-Path $env:APPDATA "Godot\app_userdata\KubeFactory\settings.json"
@@ -40,3 +52,4 @@ try {
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 Get-Item (Join-Path $media "$($t.Name).*") | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+}
