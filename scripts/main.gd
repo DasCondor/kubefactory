@@ -376,6 +376,9 @@ func _ready() -> void:
 		elif a == "--trailer":
 			shots = "-"
 			_run_trailer()
+		elif a == "--board-tour":
+			shots = "-"
+			_run_board_tour()
 		elif a.begins_with("--toolshots="):
 			shots = "-"
 			_run_toolshots(a.trim_prefix("--toolshots="))
@@ -1984,6 +1987,69 @@ func _run_flyby() -> void:
 			var k = smoothstep(0.0, 1.0, t)
 			player.teleport(path[i - 1][0].lerp(path[i][0], k), path[i - 1][1].lerp(path[i][1], k))
 			await get_tree().process_frame
+	get_tree().quit()
+
+# ---- dev: a ~22 s tour of the connection whiteboard for its video and GIF
+# (tools/record-tour.ps1 board): the isometric diagram, a selected tile's
+# callouts, a closer look, then the same board in 2D.
+#   Godot --path . --write-movie out.avi --fixed-fps 30 --resolution 1280x720 -- --demo=docker-media-gatherer --board-tour
+
+func _board_pick(graph, title: String) -> String:
+	for uid in graph.cards:
+		if graph.cards[uid].title == title:
+			return uid
+	return ""
+
+func _board_glide(graph, to_target: Vector3, to_ortho: float, secs: float) -> void:
+	var a = graph.target
+	var o = graph.ortho
+	var t = 0.0
+	while t < 1.0:
+		t += get_process_delta_time() / secs
+		var k = smoothstep(0.0, 1.0, minf(t, 1.0))
+		graph.target = a.lerp(to_target, k)
+		graph.ortho = lerpf(o, to_ortho, k)
+		graph._place_camera()
+		await get_tree().process_frame
+
+func _board_view(view: String) -> void:
+	for b in hud._modal.find_children("*", "OptionButton", true, false):
+		for i in b.item_count:
+			if b.get_item_text(i) == "View: " + view:
+				b.select(i)
+				b.item_selected.emit(i)
+				return
+
+func _run_board_tour() -> void:
+	_shots_running = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	sfx.set_muted(true)
+	while world.machines.is_empty():
+		await get_tree().process_frame
+	await get_tree().create_timer(1.5).timeout
+	hud.settings["board_view"] = "iso"
+	hud.open_connections()
+	await get_tree().create_timer(2.5).timeout
+	var graph = hud._connection_graph
+	var plex = _board_pick(graph, "plex")
+	graph._select(plex)
+	await get_tree().create_timer(2.5).timeout
+	var fit_target = graph.target
+	var fit_ortho = graph.ortho
+	await _board_glide(graph, graph.cards[plex].position * Vector3(1, 0, 1), fit_ortho * 0.45, 1.8)
+	await get_tree().create_timer(1.5).timeout
+	graph._select(_board_pick(graph, "library"))
+	await get_tree().create_timer(2.0).timeout
+	await _board_glide(graph, fit_target, fit_ortho, 1.5)
+	graph._select(_board_pick(graph, "prometheus"))
+	await get_tree().create_timer(2.5).timeout
+	_board_view("2D")
+	await get_tree().create_timer(2.5).timeout
+	graph._select(_board_pick(graph, "sonarr"))
+	await get_tree().create_timer(2.5).timeout
+	_board_view("Isometric")
+	graph._select("")
+	await get_tree().create_timer(2.0).timeout
 	get_tree().quit()
 
 # ---- dev: a ~35 s scripted tour for a video. Record it with Godot's movie writer:

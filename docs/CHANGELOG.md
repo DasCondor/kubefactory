@@ -16,7 +16,8 @@
   and selection; **View: Cards** keeps the card board. Drag the paper to pan,
   wheel or pinch to zoom, drag a tile to move it. On phones Fit board keeps
   tiles readable and the board fits the screen. The table in the factory keeps
-  its machine look.
+  its machine look. A tour video and GIF are in the wiki
+  (docs/wiki/Connection-Whiteboard.md); `tools/record-tour.ps1` records them.
 
 - **Clean slate**: set up a Docker host or a Kubernetes cluster from nothing.
   It opens from the start menu, the game menu and Switch cluster. The game
