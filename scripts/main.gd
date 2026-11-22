@@ -1989,16 +1989,27 @@ func _run_flyby() -> void:
 			await get_tree().process_frame
 	get_tree().quit()
 
-# ---- dev: a ~22 s tour of the connection whiteboard for its video and GIF
-# (tools/record-tour.ps1 board): the isometric diagram, a selected tile's
-# callouts, a closer look, then the same board in 2D.
-#   Godot --path . --write-movie out.avi --fixed-fps 30 --resolution 1280x720 -- --demo=docker-media-gatherer --board-tour
+# ---- dev: a tour of the connection whiteboard in every demo world, for its
+# video and GIF (tools/record-tour.ps1 board): each world's board with its
+# busiest tile selected and its callouts, then in the last one a closer look
+# and the same board in 2D.
+#   Godot --path . --write-movie out.avi --fixed-fps 30 --resolution 1280x720 -- --demo --board-tour
+
+const DemoTypes = preload("res://scripts/backend_demo.gd")
 
 func _board_pick(graph, title: String) -> String:
 	for uid in graph.cards:
 		if graph.cards[uid].title == title:
 			return uid
 	return ""
+
+# the tile with the most routes: the one whose callouts say the most
+func _board_busiest(graph) -> String:
+	var best = ""
+	for uid in graph.cards:
+		if best == "" or graph.scene.related(uid).size() > graph.scene.related(best).size():
+			best = uid
+	return best
 
 func _board_glide(graph, to_target: Vector3, to_ortho: float, secs: float) -> void:
 	var a = graph.target
@@ -2024,32 +2035,52 @@ func _run_board_tour() -> void:
 	_shots_running = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	sfx.set_muted(true)
+	# a caption naming the world, bottom left
+	var layer = CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+	var caption = Label.new()
+	caption.add_theme_font_size_override("font_size", 26)
+	caption.add_theme_color_override("font_color", Color(1, 1, 1))
+	caption.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	caption.add_theme_constant_override("outline_size", 10)
+	caption.position = Vector2(40, get_viewport().get_visible_rect().size.y - 70)
+	layer.add_child(caption)
 	while world.machines.is_empty():
 		await get_tree().process_frame
-	await get_tree().create_timer(1.5).timeout
 	hud.settings["board_view"] = "iso"
-	hud.open_connections()
-	await get_tree().create_timer(2.5).timeout
-	var graph = hud._connection_graph
-	var plex = _board_pick(graph, "plex")
-	graph._select(plex)
-	await get_tree().create_timer(2.5).timeout
-	var fit_target = graph.target
-	var fit_ortho = graph.ortho
-	await _board_glide(graph, graph.cards[plex].position * Vector3(1, 0, 1), fit_ortho * 0.45, 1.8)
-	await get_tree().create_timer(1.5).timeout
-	graph._select(_board_pick(graph, "library"))
-	await get_tree().create_timer(2.0).timeout
-	await _board_glide(graph, fit_target, fit_ortho, 1.5)
-	graph._select(_board_pick(graph, "prometheus"))
-	await get_tree().create_timer(2.5).timeout
-	_board_view("2D")
-	await get_tree().create_timer(2.5).timeout
-	graph._select(_board_pick(graph, "sonarr"))
-	await get_tree().create_timer(2.5).timeout
-	_board_view("Isometric")
-	graph._select("")
-	await get_tree().create_timer(2.0).timeout
+	var demos = DemoTypes.DEMO_TYPES
+	for n in demos.size():
+		var d = demos[n]
+		hud.close_modal(false)
+		if cluster.backend == null or cluster.backend.context != d["flavor"]:
+			hud.target_requested.emit({"source": "simulation", "context": d["flavor"], "provider": DemoTypes.flavor_info(d["flavor"])["provider"]})
+			var deadline = Time.get_ticks_msec() + 30000
+			while (cluster.backend == null or cluster.backend.context != d["flavor"] or world.machines.is_empty()) and Time.get_ticks_msec() < deadline:
+				await get_tree().process_frame
+			await get_tree().create_timer(1.0).timeout
+		caption.text = "%s  ·  SIMULATED" % d["name"]
+		hud.close_modal(false)
+		hud.open_connections()
+		await get_tree().create_timer(1.6).timeout
+		var graph = hud._connection_graph
+		if graph == null or not is_instance_valid(graph):
+			continue
+		graph._select(_board_busiest(graph))
+		await get_tree().create_timer(2.4).timeout
+		if n == demos.size() - 1:
+			# the last world: a closer look, then the same board in 2D
+			var fit_target = graph.target
+			var fit_ortho = graph.ortho
+			var plex = _board_pick(graph, "plex")
+			graph._select(plex)
+			await _board_glide(graph, graph.cards[plex].position * Vector3(1, 0, 1), fit_ortho * 0.45, 1.6)
+			await get_tree().create_timer(1.6).timeout
+			await _board_glide(graph, fit_target, fit_ortho, 1.2)
+			_board_view("2D")
+			await get_tree().create_timer(2.6).timeout
+			_board_view("Isometric")
+	await get_tree().create_timer(1.0).timeout
 	get_tree().quit()
 
 # ---- dev: a ~35 s scripted tour for a video. Record it with Godot's movie writer:

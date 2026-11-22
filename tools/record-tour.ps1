@@ -4,7 +4,7 @@
 #   powershell -ExecutionPolicy Bypass -File tools\record-tour.ps1 board
 #
 # Tours (each is a dev mode in scripts/main.gd):
-#   board     the connection whiteboard: isometric, callouts, 2D  -> docs/wiki/media/board-tour.mp4 / .gif
+#   board     the whiteboard in every demo world, then 2D          -> docs/wiki/media/board-tour.mp4 / .gif
 #   trailer   the factory tour                                     -> docs/wiki/media/trailer.mp4 / .gif
 #
 # The game's settings.json is backed up first and restored afterwards (a tour
@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
 $godot = Join-Path $root "engine\Godot_v4.3-stable_win64_console.exe"
 $tours = @{
-    board   = @{ Args = @("--demo=docker-media-gatherer", "--board-tour"); Name = "board-tour" }
+    board   = @{ Args = @("--demo", "--board-tour"); Name = "board-tour" }
     trailer = @{ Args = @("--demo", "--trailer"); Name = "trailer" }
 }
 $t = $tours[$Tour]
@@ -30,11 +30,11 @@ try {
     Write-Host "Recording the video..."
     & $godot --path $root --write-movie "$work\tour.avi" --fixed-fps 30 --resolution 1280x720 -- @($t.Args) *> "$work\video.log"
     Write-Host "Recording the GIF frames..."
-    & $godot --path $root --write-movie "$work\frames\f.png" --fixed-fps 8 --resolution 800x450 -- @($t.Args) *> "$work\frames.log"
+    & $godot --path $root --write-movie "$work\frames\f.png" --fixed-fps 6 --resolution 800x450 -- @($t.Args) *> "$work\frames.log"
     $ErrorActionPreference = "Stop"
     if (-not (Test-Path "$work\tour.avi")) { throw "the video was not recorded; see $work\video.log" }
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "to_mp4.ps1") "$work\tour.avi" (Join-Path $media "$($t.Name).mp4") -Quality HD720p -Mbps 2.5 -Fps 30 -NoAudio
-    & python (Join-Path $PSScriptRoot "make_gif.py") "$work\frames" (Join-Path $media "$($t.Name).gif") 125
+    & python (Join-Path $PSScriptRoot "make_gif.py") "$work\frames" (Join-Path $media "$($t.Name).gif") 167
 } finally {
     if (Test-Path $backup) { Copy-Item $backup $settings -Force }
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
