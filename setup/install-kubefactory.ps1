@@ -65,19 +65,27 @@ function Wait-Until($what, $seconds, [scriptblock]$cond) {
     Say " not yet (gave up after $seconds s)" Yellow
     return $false
 }
-# a companion script: beside this one, else from the release, checked against its SHA256SUMS
+# a companion script: beside this one, else from the release. Either way it is
+# copied into a private temp folder and must match the release's SHA256SUMS
+# before it runs: this folder may be Downloads, where any same-named file could
+# be waiting, and the companion runs as administrator (or root in WSL).
 function Get-Companion($name) {
-    $here = Join-Path $PSScriptRoot $name
-    if ($PSScriptRoot -and (Test-Path $here)) { return $here }
+    $here = if ($PSScriptRoot) { Join-Path $PSScriptRoot $name } else { "" }
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ("kf-setup-" + [guid]::NewGuid())
     New-Item -ItemType Directory $tmp | Out-Null
+    $file = Join-Path $tmp $name
     $ProgressPreference = "SilentlyContinue"
-    Invoke-WebRequest "$base/$name" -OutFile (Join-Path $tmp $name) -UseBasicParsing
+    $local = $here -and (Test-Path -LiteralPath $here -PathType Leaf)
+    if ($local) { Copy-Item -LiteralPath $here $file } else { Invoke-WebRequest "$base/$name" -OutFile $file -UseBasicParsing }
     Invoke-WebRequest "$base/SHA256SUMS" -OutFile (Join-Path $tmp "SHA256SUMS") -UseBasicParsing
-    $want = (Get-Content (Join-Path $tmp "SHA256SUMS") | Where-Object { $_ -match ("\s" + [regex]::Escape($name) + "$") }) -replace "\s.*$", ""
-    $got = (Get-FileHash (Join-Path $tmp $name) -Algorithm SHA256).Hash.ToLower()
-    if (-not $want -or $want -ne $got) { throw "checksum mismatch for $name; nothing was run" }
-    return (Join-Path $tmp $name)
+    $pattern = "^([0-9a-f]{64})\s+\*?" + [regex]::Escape($name) + "$"
+    $want = Get-Content (Join-Path $tmp "SHA256SUMS") | ForEach-Object { if ($_ -match $pattern) { $Matches[1] } } | Select-Object -First 1
+    $got = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+    if (-not $want -or $want -ne $got) {
+        if ($local) { throw "$here does not match release $Version's SHA256SUMS; nothing was run. Delete it, or pass -Version for the release it came from." }
+        throw "checksum mismatch for $name; nothing was run"
+    }
+    return $file
 }
 
 # ----- what is on this machine (read only)

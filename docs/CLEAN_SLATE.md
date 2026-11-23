@@ -75,10 +75,15 @@ How the scripts behave:
 - **Some steps need you.** The script never changes Docker Desktop's settings
   or a WSL distribution's settings. It shows where the switch is and waits, or
   stops and tells you what to do.
-- **Downloads are checked.** On Windows, the script checks the companion
-  scripts it downloads against the release's `SHA256SUMS`. On Linux it also
-  checks kubectl and kind against their published checksums. Docker's and
-  k3s's installers come from get.docker.com and get.k3s.io.
+- **Downloads are checked.** The script runs a companion script (the host
+  service installer, or the Linux script inside WSL) only after copying it
+  into a private temp folder and checking it against the release's
+  `SHA256SUMS`. This applies even when a copy sits next to the script, since
+  that folder is often Downloads. A copy that doesn't match stops the script
+  before anything runs. Delete it, or pass `-Version` / `--version` for the
+  release it came from. On Linux the script also checks kubectl and kind
+  against their published checksums. Docker's and k3s's installers come from
+  get.docker.com and get.k3s.io.
 - **Kubeconfigs stay yours.** kind adds its context to your kubeconfig. For
   k3s the script saves `~/.kube/kubefactory-k3s.yaml` (on Windows
   `%USERPROFILE%\.kube\kubefactory-k3s.yaml`), and on Linux kind's as

@@ -96,6 +96,13 @@
 
 ### Fixed
 
+- **Security:** the Clean slate install scripts ran a companion script
+  (`install-host.*` or `install-kubefactory.sh`) found next to them, as
+  administrator or root, without checking it. That folder is often Downloads,
+  where a planted file of the same name could be waiting. Now every
+  companion, local or downloaded, is copied into a private temp folder and
+  must match the release's `SHA256SUMS`. Otherwise nothing runs. Reported by
+  code scanning on PR #62.
 - On phones, the whiteboard's **More...** list (Save whiteboard, Spider
   layout, Edit / export YAML, ...) did nothing: it called buttons that had
   already been removed. It now runs their actions.

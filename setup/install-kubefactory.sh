@@ -71,13 +71,20 @@ wait_until() {  # what seconds command...
   done
   say " not yet (gave up after ${secs}s)"; return 1
 }
-# a companion script: beside this one, else from the release, checked against its SHA256SUMS
+# a companion script: beside this one, else from the release. Either way it is
+# copied into our private $tmp and must match the release's SHA256SUMS before it
+# runs: this folder may be Downloads, where any same-named file could be waiting.
 companion() {
   here="$(dirname "$0")/$1"
-  if [ -f "$here" ]; then printf '%s' "$here"; return; fi
-  curl -fsSL -o "$tmp/$1" "$base/$1"
+  if [ -f "$here" ]; then cp "$here" "$tmp/$1"; else curl -fsSL -o "$tmp/$1" "$base/$1"; fi
   curl -fsSL -o "$tmp/SHA256SUMS" "$base/SHA256SUMS"
-  (cd "$tmp" && grep " $1\$" SHA256SUMS | sha256sum -c - >/dev/null) || { echo "checksum mismatch for $1; nothing was run" >&2; exit 1; }
+  want="$(awk -v f="$1" '$2 == f || $2 == "*" f { print $1; exit }' "$tmp/SHA256SUMS")"
+  got="$(sha256sum "$tmp/$1" | awk '{ print $1 }')"
+  if [ -z "$want" ] || [ "$want" != "$got" ]; then
+    if [ -f "$here" ]; then echo "$here does not match release $version's SHA256SUMS; nothing was run. Delete it, or pass --version for the release it came from." >&2
+    else echo "checksum mismatch for $1; nothing was run" >&2; fi
+    exit 1
+  fi
   printf '%s' "$tmp/$1"
 }
 save_kubeconfig() {  # file-with-config destination
